@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "nn_version": "0.5.0",
+  "platform": "linux",
+  "architecture": "x86_64",
+  "cuda_compatibility": "replace-with-exact-supported-CUDA-range",
+  "components": {
+    "cublas": {
+      "version": "replace-with-exact-version",
+      "artifact": "replace-with-immutable-artifact-identity",
+      "files": [
+        "lib/libcublas.so.13",
+        "lib/libcublasLt.so.13"
+      ]
+    },
+    "cudnn": {
+      "version": "replace-with-exact-version",
+      "artifact": "replace-with-immutable-artifact-identity",
+      "files": [
+        "lib/libcudnn.so.9"
+      ]
+    },
+    "nccl": {
+      "version": "replace-with-exact-version",
+      "artifact": "replace-with-immutable-artifact-identity",
+      "files": [
+        "lib/libnccl.so.2"
+      ]
+    }
+  }
+}

@@ -1,0 +1,296 @@
+import math
+import native = "./native.qui"
+
+// Private implementation helpers for nn.main.qui.
+// This module is imported without `public`, so these functions are not part
+// of the source-visible nn package API.
+
+// Compiler-selected last-use target. Core proves ownership/liveness only;
+// NN owns the ReLU semantics and the actual in-place package-native mutation.
+// CPU uses the native loop; CUDA uses NN's exact package-owned PTX epilogue.
+// Other devices and tracked values stay compositional.
+tensor<float32> relu_reuse(tensor<float32> value)
+    if value.is_tracked() or not value.is_contiguous()
+        return (value + math.abs(value)) / 2.0
+    if native.is_cpu_f32(&value) == int32(1)
+        int32 status = native.relu_reuse_f32(&value)
+        if status != int32(0)
+            error("nn compiler memory-reuse target failed")
+        return value
+    if native.cuda_device_f32(&value) >= int32(0)
+        int32 status = native.cuda_activation_inplace_f32(&value, 1)
+        if status == int32(0)
+            return value
+    return (value + math.abs(value)) / 2.0
+
+// Compiler-selected training target for statically-known tracked contiguous
+// CPU float32 tensors. NN owns the activation and custom-autograd semantics;
+// Core only proves the generic replacement constraints.
+tensor<float32> relu_training(tensor<float32> value)
+    tensor<float32> input = value
+    if not input.is_tracked() or not input.is_contiguous() or native.is_cpu_f32(&input) != int32(1)
+        return (input + math.abs(input)) / 2.0
+    tensor<float32> output = tensor.zeros<float32>(input.shape())
+    int32 status = native.relu_training_f32(&input, &output)
+    if status != int32(0)
+        error("nn compiler training ReLU target failed")
+    return output
+
+tensor<float32> mean_all(tensor<float32> value)
+    int[] shape = value.shape()
+    int count = 1
+    for dimension in shape
+        if dimension < 0
+            error("nn internal mean received an invalid tensor shape")
+        if dimension != 0 and count > 9223372036854775807 / dimension
+            error("nn internal mean element count overflows int")
+        count = count * dimension
+    if count == 0
+        error("nn internal mean is undefined for an empty tensor")
+
+    // Numerical reduction semantics belong to Math; NN owns only the
+    // surrounding model/loss meaning.
+    return math.mean(value)
+
+class StateChecksum
+    int first
+    int second
+
+    construct()
+        first = 1
+        second = 0
+
+    void update(string text)
+        uint8[] bytes = uint8[](text.utf8())
+        for byte in bytes
+            first = (first + int(byte)) % 65521
+            second = (second + first) % 65521
+        first = (first + 10) % 65521
+        second = (second + first) % 65521
+
+    string value()
+        return second.string() + ":" + first.string()
+
+void | error write_checked_line(
+    file.Handle &output,
+    StateChecksum &checksum,
+    string text
+)
+    checksum.update(text)
+    try output.write_line(text)
+    return
+
+string | error read_required_line(file.Handle &input, string context)
+    string | none | error line = input.read_line()
+    match line
+        string
+            return line
+        none
+            return error("nn.load encountered unexpected end of state file while reading " + context)
+        error problem
+            return problem
+
+string | error read_checked_line(
+    file.Handle &input,
+    StateChecksum &checksum,
+    string context
+)
+    string text = try read_required_line(&input, context)
+    checksum.update(text)
+    return text
+
+int | error parse_nonnegative_state_int(string text, string context)
+    int value = try int.parse(text)
+    if value < 0
+        return error("nn.load encountered a negative " + context)
+    return value
+
+void | error write_state_entry<T: floating>(
+    file.Handle &output,
+    StateChecksum &checksum,
+    string kind,
+    string dtype,
+    string path,
+    tensor<T> value
+)
+    tensor<T> raw = value
+    if raw.is_tracked()
+        raw = raw.untrack()
+    int[] shape = raw.shape()
+    try write_checked_line(&output, &checksum, kind)
+    try write_checked_line(
+        &output,
+        &checksum,
+        kind + "<" + dtype + ">"
+    )
+    try write_checked_line(&output, &checksum, dtype)
+    try write_checked_line(&output, &checksum, path)
+    try write_checked_line(&output, &checksum, len(shape).string())
+
+    int count = 1
+    for dimension in shape
+        if dimension < 0
+            return error("nn.save encountered an invalid tensor shape")
+        if dimension > 0 and count > 9223372036854775807 / dimension
+            return error("nn.save tensor element count overflows int")
+        try write_checked_line(&output, &checksum, dimension.string())
+        count = count * dimension
+
+    tensor<T> flat = raw.contiguous().reshape([count])
+    try write_checked_line(&output, &checksum, count.string())
+    for index in range(count)
+        try write_checked_line(
+            &output,
+            &checksum,
+            flat[index].item().string()
+        )
+    return
+
+tensor<float32> | error read_state_entry32(
+    file.Handle &input,
+    StateChecksum &checksum,
+    string expected_kind,
+    string expected_path,
+    int[] expected_shape
+)
+    string kind = try read_checked_line(&input, &checksum, "field kind")
+    string field_type = try read_checked_line(
+        &input,
+        &checksum,
+        "field type"
+    )
+    string dtype = try read_checked_line(&input, &checksum, "field dtype")
+    string path = try read_checked_line(&input, &checksum, "field path")
+    if kind != expected_kind
+        return error("nn.load state field kind does not match target schema")
+    if field_type != expected_kind + "<float32>"
+        return error("nn.load state field type does not match target schema")
+    if dtype != "float32"
+        return error("nn.load state field dtype does not match target schema")
+    if path != expected_path
+        return error("nn.load state field path does not match target schema")
+
+    int rank = try parse_nonnegative_state_int(
+        try read_checked_line(&input, &checksum, "tensor rank"),
+        "tensor rank"
+    )
+    if rank != len(expected_shape)
+        return error("nn.load tensor rank does not match target schema")
+    int expected_count = 1
+    for axis in range(rank)
+        int dimension = try parse_nonnegative_state_int(
+            try read_checked_line(&input, &checksum, "tensor dimension"),
+            "tensor dimension"
+        )
+        if dimension != expected_shape[axis]
+            return error("nn.load tensor shape does not match target schema")
+        if dimension > 0 and expected_count > 9223372036854775807 / dimension
+            return error("nn.load tensor element count overflows int")
+        expected_count = expected_count * dimension
+
+    int count = try parse_nonnegative_state_int(
+        try read_checked_line(&input, &checksum, "tensor element count"),
+        "tensor element count"
+    )
+    if count != expected_count
+        return error("nn.load tensor element count does not match its shape")
+
+    tensor<float32> value = tensor.zeros<float32>(expected_shape)
+    tensor<float32> flat = value.reshape([count])
+    for index in range(count)
+        string value_text = try read_checked_line(
+            &input,
+            &checksum,
+            "tensor value"
+        )
+        flat[index] = try float32.parse(value_text)
+    return flat.reshape(expected_shape)
+
+tensor<float> | error read_state_entry64(
+    file.Handle &input,
+    StateChecksum &checksum,
+    string expected_kind,
+    string expected_path,
+    int[] expected_shape
+)
+    string kind = try read_checked_line(&input, &checksum, "field kind")
+    string field_type = try read_checked_line(
+        &input,
+        &checksum,
+        "field type"
+    )
+    string dtype = try read_checked_line(&input, &checksum, "field dtype")
+    string path = try read_checked_line(&input, &checksum, "field path")
+    if kind != expected_kind
+        return error("nn.load state field kind does not match target schema")
+    if field_type != expected_kind + "<float>"
+        return error("nn.load state field type does not match target schema")
+    if dtype != "float"
+        return error("nn.load state field dtype does not match target schema")
+    if path != expected_path
+        return error("nn.load state field path does not match target schema")
+
+    int rank = try parse_nonnegative_state_int(
+        try read_checked_line(&input, &checksum, "tensor rank"),
+        "tensor rank"
+    )
+    if rank != len(expected_shape)
+        return error("nn.load tensor rank does not match target schema")
+    int expected_count = 1
+    for axis in range(rank)
+        int dimension = try parse_nonnegative_state_int(
+            try read_checked_line(&input, &checksum, "tensor dimension"),
+            "tensor dimension"
+        )
+        if dimension != expected_shape[axis]
+            return error("nn.load tensor shape does not match target schema")
+        if dimension > 0 and expected_count > 9223372036854775807 / dimension
+            return error("nn.load tensor element count overflows int")
+        expected_count = expected_count * dimension
+
+    int count = try parse_nonnegative_state_int(
+        try read_checked_line(&input, &checksum, "tensor element count"),
+        "tensor element count"
+    )
+    if count != expected_count
+        return error("nn.load tensor element count does not match its shape")
+
+    tensor<float> value = tensor.zeros<float>(expected_shape)
+    tensor<float> flat = value.reshape([count])
+    for index in range(count)
+        string value_text = try read_checked_line(
+            &input,
+            &checksum,
+            "tensor value"
+        )
+        flat[index] = try float.parse(value_text)
+    return flat.reshape(expected_shape)
+
+void | error finish_state_write(
+    file.Handle &output,
+    StateChecksum checksum
+)
+    try output.write_line("ADLER65521-V1")
+    try output.write_line(checksum.value())
+    try output.flush()
+    return
+
+void | error verify_state_checksum(
+    file.Handle &input,
+    StateChecksum checksum
+)
+    string algorithm = try read_required_line(&input, "checksum algorithm")
+    if algorithm != "ADLER65521-V1"
+        return error("nn.load state file uses an unsupported checksum algorithm")
+    string expected = try read_required_line(&input, "checksum")
+    if expected != checksum.value()
+        return error("nn.load state checksum does not match payload")
+
+    string | none | error trailing = input.read_line()
+    match trailing
+        string
+            return error("nn.load state file contains trailing data")
+        none
+            return
+        error problem
+            return problem

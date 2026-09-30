@@ -1,0 +1,9 @@
+name = nn
+version = 0.5.0
+repository = https://github.com/quidra-lang/nn
+asset.linux-x86_64 = https://github.com/quidra-lang/nn/releases/download/v0.5.0/nn-nvidia-linux-x86_64.tar.xz
+asset.windows-x86_64 = https://github.com/quidra-lang/nn/releases/download/v0.5.0/nn-nvidia-windows-x86_64.zip
+native.source.cpu = native/nn_native.cpp
+native.source.cuda_driver = native/nn_cuda.cpp
+requires.quidra = >=0.5.0 <0.6.0
+requires.math = >=0.5.0 <0.6.0

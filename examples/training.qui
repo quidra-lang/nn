@@ -1,0 +1,44 @@
+import nn
+
+class Model
+    nn.FC hidden
+    nn.FC output
+
+void train()
+    Model model
+    model.hidden = nn.FC(features_in = 2, features_out = 4)
+    model.output = nn.FC(features_in = 4, features_out = 1, seed = 2)
+    nn.SGD optimizer = nn.SGD(rate = 0.1)
+
+    tensor<float32> samples = tensor.ones([1, 2])
+    tensor<float32> targets = tensor.ones([1, 1])
+
+    tensor<float32> first = nn.mse(
+        model.output.forward(
+            nn.relu(model.hidden.forward(samples.track()))
+        ),
+        targets
+    )
+    print(first.item())
+    print(NL)
+
+    float32 latest = first.item()
+    for iteration in range(100)
+        tensor<float32> activated = nn.relu(
+            model.hidden.forward(samples.track())
+        )
+        tensor<float32> loss = nn.mse(model.output.forward(activated), targets)
+
+        optimizer.zero_grad(&model)
+        loss.backward(&model)
+        optimizer.step(&model)
+
+        latest = loss.item()
+
+    print(latest)
+    print(NL)
+    print(latest < first.item())
+    print(NL)
+
+if main
+    train()

@@ -1,0 +1,3 @@
+// Generic process-wide execution policy bridge. NN owns the meaning of the
+// selected policy for its algorithms; Core only stores the domain-neutral mode.
+extern void set(int32 policy) = "qcore_execution_policy_set"

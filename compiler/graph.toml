@@ -1,0 +1,402 @@
+# Quidra NN compiler policy descriptor.
+# This file is package-owned. Core may validate, snapshot, analyze and schedule
+# generic tensor regions, but it must not embed these NN semantic patterns.
+
+[extension]
+version = 1
+phase = "tensor-region"
+
+[policy]
+kind = "tensor-region-policy"
+owner = "nn"
+
+[analysis]
+shape = "required"
+dtype = "required"
+layout = "required"
+device = "required"
+autograd = "required"
+training = "required"
+
+[execution_policy.fast]
+function = "mode.fast"
+
+[execution_policy.deterministic]
+function = "mode.deterministic"
+
+# Functions and methods are package-owned semantic entry points. Core treats
+# these IDs as opaque strings and only relates calls through the generic typed
+# tensor graph. Backend/fusion meaning remains defined here.
+[operation.fc]
+function = "$method.nn.FC.forward"
+semantic = "nn.linear.bias"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive"
+
+# Compiler-private linear+bias+ReLU fusion target. It remains package-owned;
+# Core only validates the generic call/replacement contract.
+[operation.fc_relu]
+function = "$method.nn.FC.forward_relu"
+semantic = "nn.linear.bias.relu"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,fusion-target"
+
+[operation.fc_gelu]
+function = "$method.nn.FC.forward_gelu"
+semantic = "nn.linear.bias.gelu"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,fusion-target"
+
+[operation.conv2d]
+function = "$method.nn.Conv2D.forward"
+semantic = "nn.conv2d.bias"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive"
+
+[operation.batchnorm_forward]
+function = "$method.nn.BatchNorm.forward"
+semantic = "nn.batchnorm.training"
+traits = "tensor,differentiable,stateful,training"
+
+[operation.batchnorm_infer]
+function = "$method.nn.BatchNorm.infer"
+semantic = "nn.batchnorm.inference"
+traits = "tensor,pure,differentiable,higher-order,inference"
+
+[operation.conv_batchnorm]
+function = "$method.nn.BatchNorm.infer_conv"
+semantic = "nn.conv2d.batchnorm.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,fusion-target"
+
+[operation.conv_batchnorm_relu]
+function = "$method.nn.BatchNorm.infer_conv_relu"
+semantic = "nn.conv2d.batchnorm.relu.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,fusion-target"
+
+[operation.conv_batchnorm_gelu]
+function = "$method.nn.BatchNorm.infer_conv_gelu"
+semantic = "nn.conv2d.batchnorm.gelu.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,fusion-target"
+
+[operation.dropout_forward]
+function = "$method.nn.Dropout.forward"
+semantic = "nn.dropout.training"
+traits = "tensor,differentiable,stateful,training"
+
+[operation.dropout_infer]
+function = "$method.nn.Dropout.infer"
+semantic = "nn.dropout.inference"
+traits = "tensor,pure,differentiable,inference"
+
+[operation.relu]
+function = "relu"
+semantic = "nn.relu"
+traits = "tensor,pure,differentiable,higher-order,activation"
+
+# Compiler-private fusion target. It is a normal package function with the same
+# signature as Conv2D.forward; Core only sees an opaque operation ID.
+[operation.conv_relu]
+function = "$method.nn.Conv2D.forward_relu"
+semantic = "nn.conv2d.bias.relu"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,fusion-target"
+
+[operation.conv_gelu]
+function = "$method.nn.Conv2D.forward_gelu"
+semantic = "nn.conv2d.bias.gelu"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,fusion-target"
+
+[operation.gelu]
+function = "gelu"
+semantic = "nn.gelu"
+traits = "tensor,pure,differentiable,higher-order,activation"
+
+[operation.sigmoid]
+function = "sigmoid"
+semantic = "nn.sigmoid"
+traits = "tensor,pure,differentiable,higher-order,activation"
+
+[operation.tanh]
+function = "tanh"
+semantic = "nn.tanh"
+traits = "tensor,pure,differentiable,higher-order,activation"
+
+[operation.softmax]
+function = "softmax"
+semantic = "nn.softmax"
+traits = "tensor,pure,differentiable,normalization"
+
+# Compiler-private executable specialization/backend/memory targets. These are
+# ordinary package functions; Core sees only opaque IDs plus generic contracts.
+[operation.fc_relu_inference]
+function = "$method.nn.FC.forward_relu_inference"
+semantic = "nn.linear.bias.relu.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,specialization-target"
+
+[operation.fc_relu_cpu]
+function = "$method.nn.FC.forward_relu_cpu"
+semantic = "nn.linear.bias.relu.cpu-native"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.fc_relu_cuda]
+function = "$method.nn.FC.forward_relu_cuda"
+semantic = "nn.linear.bias.relu.cuda-exact-epilogue"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.fc_gelu_inference]
+function = "$method.nn.FC.forward_gelu_inference"
+semantic = "nn.linear.bias.gelu.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,specialization-target"
+
+[operation.fc_gelu_cpu]
+function = "$method.nn.FC.forward_gelu_cpu"
+semantic = "nn.linear.bias.gelu.cpu-native"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.fc_gelu_cuda]
+function = "$method.nn.FC.forward_gelu_cuda"
+semantic = "nn.linear.bias.gelu.cuda-exact-epilogue"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv2d_inference]
+function = "$method.nn.Conv2D.forward_inference"
+semantic = "nn.conv2d.bias.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,specialization-target"
+
+[operation.conv2d_cpu]
+function = "$method.nn.Conv2D.forward_cpu_inference"
+semantic = "nn.conv2d.bias.cpu-native"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv2d_cuda]
+function = "$method.nn.Conv2D.forward_cuda_inference"
+semantic = "nn.conv2d.bias.cudnn"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv2d_cuda_fast]
+function = "$method.nn.Conv2D.forward_cuda_fast_inference"
+semantic = "nn.conv2d.bias.cudnn.fast"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv2d_cuda_deterministic]
+function = "$method.nn.Conv2D.forward_cuda_deterministic_inference"
+semantic = "nn.conv2d.bias.cudnn.deterministic"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv_relu_inference]
+function = "$method.nn.Conv2D.forward_relu_inference"
+semantic = "nn.conv2d.bias.relu.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,specialization-target"
+
+[operation.conv_relu_cpu]
+function = "$method.nn.Conv2D.forward_relu_cpu_inference"
+semantic = "nn.conv2d.bias.relu.cpu-native"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv_relu_cuda]
+function = "$method.nn.Conv2D.forward_relu_cuda"
+semantic = "nn.conv2d.bias.relu.cuda-exact-epilogue"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv_gelu_inference]
+function = "$method.nn.Conv2D.forward_gelu_inference"
+semantic = "nn.conv2d.bias.gelu.inference"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,specialization-target"
+
+[operation.conv_gelu_cpu]
+function = "$method.nn.Conv2D.forward_gelu_cpu_inference"
+semantic = "nn.conv2d.bias.gelu.cpu-native"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.conv_gelu_cuda]
+function = "$method.nn.Conv2D.forward_gelu_cuda"
+semantic = "nn.conv2d.bias.gelu.cuda-exact-epilogue"
+traits = "tensor,pure,differentiable,higher-order,training-sensitive,inference,backend-target"
+
+[operation.relu_reuse]
+function = "internal.relu_reuse"
+semantic = "nn.relu.last-use-reuse"
+traits = "tensor,pure,differentiable,higher-order,activation,memory-reuse-target"
+
+[operation.relu_training]
+function = "internal.relu_training"
+semantic = "nn.relu.training.custom-autograd"
+traits = "tensor,pure,differentiable,higher-order,activation,training,training-target"
+
+# Fusion chains are declarative operation-ID sequences. Core may detect graph
+# chains generically, but only NN owns their semantic validity and lowering.
+[fusion.fc_relu]
+operations = "fc,relu"
+replacement = "fc_relu"
+semantic = "nn.linear.bias.relu"
+
+[fusion.fc_gelu]
+operations = "fc,gelu"
+replacement = "fc_gelu"
+semantic = "nn.linear.bias.gelu"
+
+[fusion.conv_relu]
+operations = "conv2d,relu"
+replacement = "conv_relu"
+semantic = "nn.conv2d.bias.relu"
+
+[fusion.conv_gelu]
+operations = "conv2d,gelu"
+replacement = "conv_gelu"
+semantic = "nn.conv2d.bias.gelu"
+
+[fusion.conv_batchnorm]
+operations = "conv2d,batchnorm_infer"
+replacement = "conv_batchnorm"
+semantic = "nn.conv2d.batchnorm.inference"
+
+[fusion.conv_batchnorm_relu]
+operations = "conv2d,batchnorm_infer,relu"
+replacement = "conv_batchnorm_relu"
+semantic = "nn.conv2d.batchnorm.relu.inference"
+
+[fusion.conv_batchnorm_gelu]
+operations = "conv2d,batchnorm_infer,gelu"
+replacement = "conv_batchnorm_gelu"
+semantic = "nn.conv2d.batchnorm.gelu.inference"
+
+# Executable package-owned rules. Core evaluates only the generic constraints
+# and rewrites to the named package operation when its call contract is exact.
+[specialization.fc_relu_inference]
+operation = "fc_relu"
+replacement = "fc_relu_inference"
+dtype = "float32"
+tracked = "false"
+
+[specialization.fc_gelu_inference]
+operation = "fc_gelu"
+replacement = "fc_gelu_inference"
+dtype = "float32"
+tracked = "false"
+
+[specialization.conv2d_inference]
+operation = "conv2d"
+replacement = "conv2d_inference"
+dtype = "float32"
+tracked = "false"
+
+[specialization.conv_relu_inference]
+operation = "conv_relu"
+replacement = "conv_relu_inference"
+dtype = "float32"
+tracked = "false"
+
+[specialization.conv_gelu_inference]
+operation = "conv_gelu"
+replacement = "conv_gelu_inference"
+dtype = "float32"
+tracked = "false"
+
+[backend.fc_relu_cpu]
+operation = "fc_relu_inference"
+replacement = "fc_relu_cpu"
+device = "cpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.fc_relu_cuda_gpu]
+operation = "fc_relu_inference"
+replacement = "fc_relu_cuda"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.fc_gelu_cpu]
+operation = "fc_gelu_inference"
+replacement = "fc_gelu_cpu"
+device = "cpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.fc_gelu_cuda_gpu]
+operation = "fc_gelu_inference"
+replacement = "fc_gelu_cuda"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.conv2d_cpu]
+operation = "conv2d_inference"
+replacement = "conv2d_cpu"
+device = "cpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.0_conv2d_cuda_fast]
+operation = "conv2d_inference"
+replacement = "conv2d_cuda_fast"
+policy = "fast"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.1_conv2d_cuda_deterministic]
+operation = "conv2d_inference"
+replacement = "conv2d_cuda_deterministic"
+policy = "deterministic"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.conv2d_cuda]
+operation = "conv2d_inference"
+replacement = "conv2d_cuda"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.conv_relu_cpu]
+operation = "conv_relu_inference"
+replacement = "conv_relu_cpu"
+device = "cpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.conv_relu_cuda]
+operation = "conv_relu_inference"
+replacement = "conv_relu_cuda"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.conv_gelu_cpu]
+operation = "conv_gelu_inference"
+replacement = "conv_gelu_cpu"
+device = "cpu"
+layout = "contiguous"
+tracked = "false"
+
+[backend.conv_gelu_cuda]
+operation = "conv_gelu_inference"
+replacement = "conv_gelu_cuda"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+
+[specialization.relu_training_cpu]
+operation = "relu"
+replacement = "relu_training"
+dtype = "float32"
+device = "cpu"
+layout = "contiguous"
+tracked = "true"
+
+[memory.relu_cpu_last_use]
+operation = "relu"
+replacement = "relu_reuse"
+dtype = "float32"
+device = "cpu"
+layout = "contiguous"
+tracked = "false"
+last_use = "true"
+owned = "true"
+
+[memory.relu_gpu_last_use]
+operation = "relu"
+replacement = "relu_reuse"
+dtype = "float32"
+device = "gpu"
+layout = "contiguous"
+tracked = "false"
+last_use = "true"
+owned = "true"

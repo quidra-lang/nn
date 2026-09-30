@@ -1,0 +1,11 @@
+// nn.mode: the process-wide execution mode of accelerated backends. The two
+// spellings are deliberate direct calls rather than a mode value: `fast`
+// permits the fastest supported algorithms, including nondeterministic ones;
+// `deterministic` restricts the backends to deterministic algorithms.
+import bridge = "./runtime.qui"
+
+void fast()
+    bridge.set(int32(0))
+
+void deterministic()
+    bridge.set(int32(1))

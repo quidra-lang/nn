@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "cuda_family": "13",
+  "platforms": {
+    "linux-x86_64": {
+      "cublas": {
+        "version": "13.8.0.4",
+        "source": "nvidia-redist",
+        "manifest": "https://developer.download.nvidia.com/compute/cuda/redist/redistrib_13.4.2.json",
+        "artifact": "libcublas/linux-x86_64/libcublas-linux-x86_64-13.8.0.4-archive.tar.xz",
+        "sha256": "bd6ffcce561672da6abb928214a6694f392741e7d1e2d7dfde0da4bd651706b6"
+      },
+      "cudnn": {
+        "version": "9.26.0.51",
+        "source": "nvidia-redist",
+        "manifest": "https://developer.download.nvidia.com/compute/cudnn/redist/redistrib_9.26.0.json",
+        "artifact": "cudnn/linux-x86_64/cudnn-linux-x86_64-9.26.0.51_cuda13-archive.tar.xz",
+        "sha256": "e62c9b4af62ea130765ea5b13244c05c9452edf1690072373d193d19766d9850"
+      },
+      "nccl": {
+        "version": "2.31.2",
+        "source": "nvidia-pypi",
+        "project": "nvidia-nccl-cu13",
+        "artifact": "nvidia_nccl_cu13-2.31.2-py3-none-manylinux_2_18_x86_64.whl",
+        "sha256": "0bcaf0308854cb55fcc35af72e2c83143f3b71e65a4e865e2c586b1cdcdb5ae0"
+      }
+    },
+    "windows-x86_64": {
+      "cublas": {
+        "version": "13.8.0.4",
+        "source": "nvidia-redist",
+        "manifest": "https://developer.download.nvidia.com/compute/cuda/redist/redistrib_13.4.2.json",
+        "artifact": "libcublas/windows-x86_64/libcublas-windows-x86_64-13.8.0.4-archive.zip",
+        "sha256": "0974318e9861a61cb9091cf7de8d4c2880e9787fe311cb4bcbd08865663c5f43"
+      },
+      "cudnn": {
+        "version": "9.26.0.51",
+        "source": "nvidia-redist",
+        "manifest": "https://developer.download.nvidia.com/compute/cudnn/redist/redistrib_9.26.0.json",
+        "artifact": "cudnn/windows-x86_64/cudnn-windows-x86_64-9.26.0.51_cuda13-archive.zip",
+        "sha256": "f8610d403685c918e690de5b1ec68da0b4b1358a6be62627591362b7eb811644"
+      }
+    }
+  }
+}

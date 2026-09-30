@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  managed-nvidia-bundle:
+    name: Managed NVIDIA bundle contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check NN-owned bundle example metadata
+        run: python3 scripts/sync_bundle_example.py --check
+      - name: Validate selected NVIDIA source artifacts
+        run: python3 tests/validate_nvidia_sources.py
+      - name: Validate bundle metadata and checksums
+        run: python3 tests/validate_nvidia_bundle.py
+      - name: Bundle validator regressions
+        run: python3 tests/nvidia_bundle_validator.py
+      - name: Bundle materializer regressions
+        run: python3 tests/nvidia_bundle_materializer.py
+
+  compatibility:
+    name: Quidra develop compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: quidra-lang/quidra
+          ref: develop
+          path: quidra
+      - uses: actions/checkout@v4
+        with:
+          repository: quidra-lang/math
+          ref: develop
+          path: math
+      - name: Expose Math as sibling package
+        run: ln -s "${GITHUB_WORKSPACE}/math" "$(dirname "$GITHUB_WORKSPACE")/math"
+      - name: Enforce synchronized first-party versions
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          versions = {
+              "nn": tomllib.loads(Path("project.toml").read_text())["package"]["version"],
+              "quidra": tomllib.loads(Path("quidra/project.toml").read_text())["project"]["version"],
+              "math": tomllib.loads(Path("math/project.toml").read_text())["package"]["version"],
+          }
+          if len(set(versions.values())) != 1:
+              raise SystemExit(f"first-party versions must match: {versions}")
+          PY
+      - name: Enforce Core native ABI boundary
+        run: python3 quidra/tests/package_native_boundary_tests.py .
+      - name: Install Quidra dependencies
+        run: sudo apt-get update && sudo apt-get install -y ccache clang llvm libcurl4-openssl-dev
+      - name: Build Quidra develop
+        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DQUIDRA_ENABLE_TEST_GPU_BACKEND=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel
+      - name: Validate package metadata
+        run: quidra/build/quidra package validate "$GITHUB_WORKSPACE"
+      - name: Integration
+        run: bash tests/integration.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+      - name: NN API contracts
+        run: bash tests/contracts.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+      - name: Compiler optimization execution
+        run: bash tests/compiler_optimization.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+      - name: Persistence failure atomicity
+        run: bash tests/persistence_failures.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+      - name: Device contracts
+        run: bash tests/device.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+      - name: Real GPU integration when available
+        run: bash tests/real_gpu_integration.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+
+  metal-real-gpu:
+    name: Metal real GPU integration
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: quidra-lang/quidra
+          ref: develop
+          path: quidra
+      - uses: actions/checkout@v4
+        with:
+          repository: quidra-lang/math
+          ref: develop
+          path: math
+      - name: Expose Math as sibling package
+        run: ln -s "${GITHUB_WORKSPACE}/math" "$(dirname "$GITHUB_WORKSPACE")/math"
+      - name: Install Quidra dependencies
+        run: brew install ccache curl
+      - name: Build Quidra develop
+        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix curl)" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel
+      - name: Real Metal GPU integration
+        env:
+          QUIDRA_REQUIRE_REAL_GPU: "1"
+          QUIDRA_REQUIRE_GPU_BACKEND: "Metal"
+        run: bash tests/real_gpu_integration.sh "$GITHUB_WORKSPACE/quidra/build/quidra"

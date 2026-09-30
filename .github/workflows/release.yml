@@ -1,0 +1,161 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check NN-owned bundle example metadata
+        run: python3 scripts/sync_bundle_example.py --check
+
+      - name: Validate managed NVIDIA source lock
+        run: python3 tests/validate_nvidia_sources.py
+
+      - name: Validate managed NVIDIA bundle tooling
+        run: |
+          python3 tests/validate_nvidia_bundle.py
+          python3 tests/nvidia_bundle_validator.py
+          python3 tests/nvidia_bundle_materializer.py
+
+      - name: Materialize managed NVIDIA bundles
+        run: |
+          python3 scripts/materialize_nvidia_bundle.py --platform linux-x86_64 --output "$RUNNER_TEMP/bundle-linux"
+          python3 scripts/materialize_nvidia_bundle.py --platform windows-x86_64 --output "$RUNNER_TEMP/bundle-windows"
+          python3 tests/validate_nvidia_bundle.py --require-populated "$RUNNER_TEMP/bundle-linux"
+          python3 tests/validate_nvidia_bundle.py --require-populated "$RUNNER_TEMP/bundle-windows"
+          tar -C "$RUNNER_TEMP/bundle-linux" -cJf "$RUNNER_TEMP/nn-nvidia-linux-x86_64.tar.xz" nvidia
+          python3 - <<'PY'
+          import os, zipfile
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "bundle-windows" / "nvidia"
+          target = Path(os.environ["RUNNER_TEMP"]) / "nn-nvidia-windows-x86_64.zip"
+          with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in sorted(root.rglob("*")):
+                  if path.is_file():
+                      archive.write(path, path.relative_to(root.parent))
+          PY
+
+      - name: Read package metadata from project.toml
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          project = tomllib.loads(Path("project.toml").read_text(encoding="utf-8"))
+          package = project["package"]
+          if package["import"] != "nn":
+              raise SystemExit("project.toml package.import must be nn")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"version={package['version']}", file=output)
+          PY
+
+      - name: Ensure release tag is new
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.package.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "release tag $tag already exists" >&2
+            exit 1
+          fi
+
+      - name: Require same-version released Core and Math
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="v${{ steps.package.outputs.version }}"
+          if ! git ls-remote --exit-code --tags https://github.com/quidra-lang/quidra.git "refs/tags/$version" >/dev/null 2>&1; then
+            echo "NN release is blocked until Core $version exists" >&2
+            exit 1
+          fi
+          if ! git ls-remote --exit-code --tags https://github.com/quidra-lang/math.git "refs/tags/$version" >/dev/null 2>&1; then
+            echo "NN release is blocked until Math $version exists" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          repository: quidra-lang/quidra
+          ref: v${{ steps.package.outputs.version }}
+          path: quidra
+      - uses: actions/checkout@v4
+        with:
+          repository: quidra-lang/math
+          ref: v${{ steps.package.outputs.version }}
+          path: math
+      - name: Expose released Math as sibling package
+        run: ln -s "$GITHUB_WORKSPACE/math" "$(dirname "$GITHUB_WORKSPACE")/math"
+      - name: Restore Quidra compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-quidra-${{ hashFiles('quidra/CMakeLists.txt', 'quidra/src/**', 'quidra/include/**') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-quidra-
+
+
+      - name: Install Quidra dependencies
+        run: sudo apt-get update && sudo apt-get install -y ccache clang llvm libcurl4-openssl-dev
+
+      - name: Enforce Core native ABI boundary
+        run: python3 quidra/tests/package_native_boundary_tests.py .
+
+      - name: Build released Quidra baseline
+        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DQUIDRA_ENABLE_TEST_GPU_BACKEND=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel
+
+      - name: Validate package metadata with released Core
+        run: quidra/build/quidra package validate "$GITHUB_WORKSPACE"
+
+      - name: Integration tests
+        run: bash tests/integration.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+
+      - name: NN API contracts
+        run: bash tests/contracts.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+
+      - name: Compiler optimization execution
+        run: bash tests/compiler_optimization.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+
+      - name: Persistence failure atomicity
+        run: bash tests/persistence_failures.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+
+      - name: Device contracts
+        run: bash tests/device.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+
+      - name: Real GPU integration when available
+        run: bash tests/real_gpu_integration.sh "$GITHUB_WORKSPACE/quidra/build/quidra"
+
+      - name: Check example
+        env:
+          QUIDRA_PACKAGE_PATH: ${{ github.workspace }}/..
+        run: quidra/build/quidra check examples/training.qui
+
+      - name: Create immutable tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.package.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" "$GITHUB_SHA" -m "nn $tag"
+          git push origin "$tag"
+          gh release create "$tag" --target "$GITHUB_SHA" --title "nn $tag" --generate-notes \
+            "$RUNNER_TEMP/nn-nvidia-linux-x86_64.tar.xz" \
+            "$RUNNER_TEMP/nn-nvidia-windows-x86_64.zip"

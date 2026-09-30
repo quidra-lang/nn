@@ -1,0 +1,138 @@
+// Private package-native bridge. Tensor arguments are explicit borrowed
+// references; native code receives opaque handles and uses Core's stable
+// qcore tensor ABI rather than private runtime structures.
+extern int32 is_cpu_f32(
+    const tensor<float32> &input
+) = "nn_native_is_cpu_f32"
+
+extern int32 relu_reuse_f32(
+    tensor<float32> &value
+) = "nn_native_relu_reuse_f32"
+
+extern int32 relu_training_f32(
+    const tensor<float32> &input,
+    tensor<float32> &output
+) = "nn_native_relu_training_f32"
+
+extern int32 cuda_device_f32(
+    const tensor<float32> &input
+) = "nn_native_cuda_device_f32"
+
+// Exact package-owned CUDA activation epilogue. The activation id is private
+// NN policy: 1 = ReLU expression, 2 = GELU expression.
+extern int32 cuda_activation_inplace_f32(
+    tensor<float32> &value,
+    int activation
+) = "nn_cuda_activation_inplace_f32"
+
+extern int32 fc_relu_inference_f32(
+    const tensor<float32> &input,
+    const tensor<float32> &weight,
+    const tensor<float32> &bias,
+    tensor<float32> &output
+) = "nn_native_fc_relu_inference_f32"
+
+extern int32 fc_gelu_inference_f32(
+    const tensor<float32> &input,
+    const tensor<float32> &weight,
+    const tensor<float32> &bias,
+    tensor<float32> &output
+) = "nn_native_fc_gelu_inference_f32"
+
+extern int32 conv2d_cuda_f32(
+    const tensor<float32> &input,
+    const tensor<float32> &weight,
+    const tensor<float32> &bias,
+    tensor<float32> &output,
+    int stride,
+    int padding,
+    int groups
+) = "nn_native_conv2d_cuda_f32"
+
+extern int32 conv2d_f32(
+    const tensor<float32> &input,
+    const tensor<float32> &weight,
+    const tensor<float32> &bias,
+    tensor<float32> &output,
+    int stride,
+    int padding,
+    int groups
+) = "nn_native_conv2d_f32"
+
+extern int32 conv2d_relu_inference_f32(
+    const tensor<float32> &input,
+    const tensor<float32> &weight,
+    const tensor<float32> &bias,
+    tensor<float32> &output,
+    int stride,
+    int padding,
+    int groups
+) = "nn_native_conv2d_relu_inference_f32"
+
+extern int32 conv2d_gelu_inference_f32(
+    const tensor<float32> &input,
+    const tensor<float32> &weight,
+    const tensor<float32> &bias,
+    tensor<float32> &output,
+    int stride,
+    int padding,
+    int groups
+) = "nn_native_conv2d_gelu_inference_f32"
+
+extern int32 im2col_f32(
+    const tensor<float32> &input,
+    tensor<float32> &output,
+    int channels,
+    int height,
+    int width,
+    int kernel_height,
+    int kernel_width,
+    int stride,
+    int output_height,
+    int output_width
+) = "nn_native_im2col_f32"
+
+
+// Package-owned NCCL bridge. Generic tensor externs keep dtype specialization
+// in Quidra while the C ABI remains one opaque tensor-handle signature.
+extern int32 nccl_begin(int count) = "nn_native_nccl_begin"
+
+extern int32 nccl_register<T: floating>(
+    const tensor<T> &value,
+    int destination,
+    int rank
+) = "nn_native_nccl_register"
+
+extern int32 nccl_commit() = "nn_native_nccl_commit"
+extern int32 nccl_cancel() = "nn_native_nccl_cancel"
+extern int32 nccl_group_start() = "nn_native_nccl_group_start"
+
+extern int32 nccl_all_reduce<T: floating>(
+    tensor<T> &value,
+    int rank
+) = "nn_native_nccl_all_reduce"
+
+extern int32 nccl_group_end() = "nn_native_nccl_group_end"
+
+
+// CPU fused Adam update. The native implementation writes only fresh output
+// tensors; Parameter/state replacement remains explicit in NN Quidra code.
+extern int32 is_cpu_floating<T: floating>(
+    const tensor<T> &value
+) = "nn_native_is_cpu_floating"
+
+extern int32 adam_step<T: floating>(
+    const tensor<T> &parameter,
+    const tensor<T> &gradient,
+    const tensor<T> &first,
+    const tensor<T> &second,
+    tensor<T> &next_parameter,
+    tensor<T> &next_first,
+    tensor<T> &next_second,
+    float beta1,
+    float beta2,
+    float one_minus_beta1,
+    float one_minus_beta2,
+    float adjusted_epsilon,
+    float step_scale
+) = "nn_native_adam_step"

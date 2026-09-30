@@ -1,0 +1,25 @@
+# Quidra NN package metadata - the single source of truth.
+# Core provides mechanisms; NN owns generic neural-network semantics.
+
+[package]
+name = "quidra-nn"
+import = "nn"
+display_name = "Quidra NN"
+version = "0.5.0"
+repository = "https://github.com/quidra-lang/nn"
+
+[requires]
+quidra = ">=0.5.0 <0.6.0"
+abi = 1
+math = ">=0.5.0 <0.6.0"
+
+[compiler.extension]
+graph = "compiler/graph.toml"
+
+[native.source]
+cpu = "native/nn_native.cpp"
+cuda_driver = "native/nn_cuda.cpp"
+
+[assets]
+linux-x86_64 = "nn-nvidia-linux-x86_64.tar.xz"
+windows-x86_64 = "nn-nvidia-windows-x86_64.zip"
