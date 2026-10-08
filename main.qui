@@ -469,9 +469,9 @@ class FC
         return output + parameter_bias.reshape(bias_broadcast_shape)
 
     // Package-owned compiler fusion target. Untracked CPU inference uses one
-    // native linear+bias+ReLU loop. Tracked execution stays compositional so
-    // first- and higher-order autograd remain expressed through Math/Core
-    // mechanisms rather than a NN semantic primitive in Core.
+    // native linear+bias+ReLU loop. Other calls run forward() and then NN's
+    // fused ReLU, whose package-owned custom autograd keeps first- and
+    // higher-order semantics without a NN semantic primitive in Core.
     private tensor<float32> forward_relu(tensor<float32> value)
         if not value.is_tracked()
             int[] input_shape = value.shape()
@@ -510,11 +510,12 @@ class FC
                     return native_output
 
         tensor<float32> output = forward(value)
-        return (output + math.abs(output)) / 2.0
+        return internal.relu_fused(output)
 
     // Package-owned compiler fusion target for linear+bias+GELU. The native
     // inference path removes the intermediate FC tensor and activation pass.
-    // Tracked execution keeps the exact package GELU formula compositional.
+    // Other calls apply NN's fused GELU, which evaluates the exact package
+    // GELU expression and carries its own first- and second-order autograd.
     private tensor<float32> forward_gelu(tensor<float32> value)
         if not value.is_tracked()
             int[] input_shape = value.shape()
@@ -553,19 +554,7 @@ class FC
                     return native_output
 
         tensor<float32> output = forward(value)
-        tensor<float32> cubic = output * output * output
-        tensor<float32> inner = (
-            output + cubic * float32(0.044715)
-        ) * float32(0.7978845608028654)
-        tensor<float32> lifted = (
-            inner - 20.0 + math.abs(inner + 20.0)
-        ) / 2.0
-        tensor<float32> limited = (
-            lifted + 20.0 - math.abs(lifted - 20.0)
-        ) / 2.0
-        tensor<float32> exponent = math.exp(limited * 2.0)
-        tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
-        return output * 0.5 * (1.0 + hyperbolic)
+        return internal.gelu_fused(output)
 
 
     // Compiler-private inference targets. They deliberately keep the same
@@ -584,7 +573,7 @@ class FC
             int32 status = native.cuda_activation_inplace_f32(&output, 1)
             if status == int32(0)
                 return output
-        return (output + math.abs(output)) / 2.0
+        return internal.relu_fused(output)
 
     private tensor<float32> forward_gelu_inference(tensor<float32> value)
         return forward_gelu(value)
@@ -598,19 +587,7 @@ class FC
             int32 status = native.cuda_activation_inplace_f32(&output, 2)
             if status == int32(0)
                 return output
-        tensor<float32> cubic = output * output * output
-        tensor<float32> inner = (
-            output + cubic * float32(0.044715)
-        ) * float32(0.7978845608028654)
-        tensor<float32> lifted = (
-            inner - 20.0 + math.abs(inner + 20.0)
-        ) / 2.0
-        tensor<float32> limited = (
-            lifted + 20.0 - math.abs(lifted - 20.0)
-        ) / 2.0
-        tensor<float32> exponent = math.exp(limited * 2.0)
-        tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
-        return output * 0.5 * (1.0 + hyperbolic)
+        return internal.gelu_fused(output)
 
 class Conv2D
     Parameter<float32> weight
@@ -966,12 +943,14 @@ class Conv2D
             if cuda_status == int32(0)
                 return cuda_output
 
-        // The CPU fast path is also differentiable. NN native code owns the
-        // forward kernel plus first- and higher-order custom-autograd callbacks.
-        // Never materialize a tracked non-contiguous tensor because that would
-        // cut its graph; the native bridge rejects it and we fall through to the
-        // portable graph. Untracked inference may explicitly densify inputs.
-        if native.is_cpu_f32(&value) == int32(1) and native.is_cpu_f32(&parameter_weight) == int32(1) and native.is_cpu_f32(&parameter_bias) == int32(1)
+        // CPU and Metal share one package-native dispatcher: NN's direct
+        // convolution plus one custom autograd node (first- and higher-order
+        // callbacks), with the result on the input's device. Never materialize
+        // a tracked non-contiguous tensor because that would cut its graph; the
+        // native bridge rejects it and we fall through to the portable graph.
+        // Untracked inference may explicitly densify inputs.
+        int32 native_device = native.fused_device_f32(&value)
+        if native_device >= int32(-1)
             tensor<float32> native_input = value
             tensor<float32> native_weight = parameter_weight
             tensor<float32> native_bias = parameter_bias
@@ -982,9 +961,16 @@ class Conv2D
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-            tensor<float32> native_output = tensor.zeros<float32>(
-                [batches, channels_out, output_height, output_width]
-            )
+            tensor<float32> native_output
+            if native_device == int32(-1)
+                native_output = tensor.zeros<float32>(
+                    [batches, channels_out, output_height, output_width]
+                )
+            else
+                native_output = tensor.zeros<float32>(
+                    [batches, channels_out, output_height, output_width],
+                    gpu = int(native_device)
+                )
             int32 native_status = native.conv2d_f32(
                 &native_input,
                 &native_weight,
@@ -995,6 +981,8 @@ class Conv2D
                 group_count
             )
             if native_status == int32(0)
+                if native_device >= int32(0)
+                    return internal.dense_device_gradient(native_output)
                 return native_output
 
         // Padding is common to every output channel. Build it once instead of
@@ -1058,11 +1046,73 @@ class Conv2D
         )
         return output + broadcast_bias
 
+    // Metal Conv2D followed by NN's fused activation in one GPU round trip,
+    // for tracked and untracked values. It produces the same tensors and
+    // autograd nodes as forward() then the activation; false leaves every
+    // other case (and any invalid shape) to that sequence.
+    private bool metal_activation(
+        tensor<float32> value,
+        int activation,
+        tensor<float32> &result
+    )
+        if native.metal_device_f32(&value) < int32(0)
+            return false
+        int[] input_shape = value.shape()
+        int[] weight_shape = weight.raw().shape()
+        if len(input_shape) != 4 or len(weight_shape) != 4
+            return false
+        if step <= 0 or border < 0
+            return false
+        int padded_height = input_shape[2] + border * 2
+        int padded_width = input_shape[3] + border * 2
+        if padded_height < weight_shape[2] or padded_width < weight_shape[3]
+            return false
+        int[] output_shape = [
+            input_shape[0],
+            weight_shape[0],
+            (padded_height - weight_shape[2]) / step + 1,
+            (padded_width - weight_shape[3]) / step + 1
+        ]
+        tensor<float32> metal_input = value
+        tensor<float32> metal_weight
+        tensor<float32> metal_bias
+        if value.is_tracked()
+            metal_weight = weight.track()
+            metal_bias = bias.track()
+        else
+            metal_weight = weight.raw()
+            metal_bias = bias.raw()
+            if not metal_input.is_contiguous()
+                metal_input = metal_input.contiguous()
+            if not metal_weight.is_contiguous()
+                metal_weight = metal_weight.contiguous()
+            if not metal_bias.is_contiguous()
+                metal_bias = metal_bias.contiguous()
+        int device_index = int(native.metal_device_f32(&value))
+        tensor<float32> convolved = tensor.zeros<float32>(output_shape, gpu = device_index)
+        tensor<float32> activated = tensor.zeros<float32>(output_shape, gpu = device_index)
+        int32 status = native.conv2d_activation_f32(
+            &metal_input,
+            &metal_weight,
+            &metal_bias,
+            &convolved,
+            &activated,
+            step,
+            border,
+            group_count,
+            activation
+        )
+        if status != int32(0)
+            return false
+        result = internal.dense_device_gradient(activated)
+        return true
+
     // Package-owned compiler fusion target. Untracked CPU inference uses a
     // single native Conv+bias+ReLU loop, eliminating the intermediate tensor
-    // and second elementwise pass. Tracked execution deliberately falls back
-    // to the compositional graph so first- and higher-order autograd semantics
-    // remain identical until the fused training callback is package-owned too.
+    // and second elementwise pass. Metal runs the convolution and the fused
+    // ReLU in one round trip; other tracked and GPU execution runs forward()
+    // and then NN's fused ReLU. Both keep package-owned custom autograd that
+    // reproduces the compositional first- and higher-order semantics.
     private tensor<float32> forward_relu(tensor<float32> value)
         if not value.is_tracked()
             tensor<float32> parameter_weight = weight.raw()
@@ -1137,14 +1187,19 @@ class Conv2D
                 if native_status == int32(0)
                     return native_output
 
+        tensor<float32> fused = value
+        if metal_activation(value, 1, &fused)
+            return fused
+
         // Rebind the by-value parameter so this fusion target has the same
         // ownership contract as forward(). Core's generic replacement pass can
         // substitute the call without inventing domain-specific lifetime rules.
         value = forward(value)
-        return (value + math.abs(value)) / 2.0
+        return internal.relu_fused(value)
 
     // Package-owned Conv+bias+GELU fusion target. CPU inference applies GELU
-    // while each convolution result is still in the native output loop.
+    // while each convolution result is still in the native output loop; Metal
+    // runs the convolution and the fused GELU in one round trip.
     private tensor<float32> forward_gelu(tensor<float32> value)
         if not value.is_tracked()
             tensor<float32> parameter_weight = weight.raw()
@@ -1214,20 +1269,12 @@ class Conv2D
                 if native_status == int32(0)
                     return native_output
 
+        tensor<float32> fused = value
+        if metal_activation(value, 2, &fused)
+            return fused
+
         value = forward(value)
-        tensor<float32> cubic = value * value * value
-        tensor<float32> inner = (
-            value + cubic * float32(0.044715)
-        ) * float32(0.7978845608028654)
-        tensor<float32> lifted = (
-            inner - 20.0 + math.abs(inner + 20.0)
-        ) / 2.0
-        tensor<float32> limited = (
-            lifted + 20.0 - math.abs(lifted - 20.0)
-        ) / 2.0
-        tensor<float32> exponent = math.exp(limited * 2.0)
-        tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
-        return value * 0.5 * (1.0 + hyperbolic)
+        return internal.gelu_fused(value)
 
 
     // Compiler-private specialization/backend targets. Static untracked calls
@@ -1261,7 +1308,7 @@ class Conv2D
             int32 status = native.cuda_activation_inplace_f32(&output, 1)
             if status == int32(0)
                 return output
-        return (output + math.abs(output)) / 2.0
+        return internal.relu_fused(output)
 
     private tensor<float32> forward_gelu_inference(tensor<float32> value)
         return forward_gelu(value)
@@ -1275,19 +1322,7 @@ class Conv2D
             int32 status = native.cuda_activation_inplace_f32(&output, 2)
             if status == int32(0)
                 return output
-        tensor<float32> cubic = output * output * output
-        tensor<float32> inner = (
-            output + cubic * float32(0.044715)
-        ) * float32(0.7978845608028654)
-        tensor<float32> lifted = (
-            inner - 20.0 + math.abs(inner + 20.0)
-        ) / 2.0
-        tensor<float32> limited = (
-            lifted + 20.0 - math.abs(lifted - 20.0)
-        ) / 2.0
-        tensor<float32> exponent = math.exp(limited * 2.0)
-        tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
-        return output * 0.5 * (1.0 + hyperbolic)
+        return internal.gelu_fused(output)
 
 FC | error normal_fc(
     int features_in,
@@ -1475,6 +1510,27 @@ tensor<float32> global_average_pool2d(tensor<float32> value)
     if batches > 9223372036854775807 / batch_count
         error("nn.global_average_pool2d input is too large")
     int total_count = batches * batch_count
+
+    // NN's pooling kernel on CPU and Metal: one pass per plane and one custom
+    // autograd node (any order) instead of the gather/sum_last graph below.
+    // Only untracked views are densified; tracked views keep the graph.
+    int32 device = native.fused_device_f32(&value)
+    if device >= int32(-1)
+        tensor<float32> input = value
+        bool dense = input.is_contiguous()
+        if not dense and not input.is_tracked()
+            input = input.contiguous()
+            dense = true
+        if dense
+            tensor<float32> pooled
+            if device == int32(-1)
+                pooled = tensor.zeros<float32>([batches, channels])
+            else
+                pooled = tensor.zeros<float32>([batches, channels], gpu = int(device))
+            if native.global_average_pool2d_f32(&input, &pooled) == int32(0)
+                if device >= int32(0)
+                    return internal.dense_device_gradient(pooled)
+                return pooled
 
     // gather() works on logical tensor indices and preserves autograd, so it
     // makes a contiguous reduction view without cutting a tracked graph.
@@ -1800,8 +1856,12 @@ class Dropout
         float32 keep = float32(1.0 - drop_rate)
         return value * keep
 
+// ReLU is the expression (x + |x|) / 2 and GELU is
+// x * 0.5 * (1 + nn.tanh(0.7978845608028654 * (x + 0.044715 * x^3))).
+// internal.qui keeps both source expressions; on CPU and Metal they run as
+// one fused package-native kernel with custom autograd.
 tensor<float32> relu(tensor<float32> value)
-    return (value + math.abs(value)) / 2.0
+    return internal.relu_fused(value)
 
 tensor<float32> tanh(tensor<float32> value)
     tensor<float32> lifted = (value - 20.0 + math.abs(value + 20.0)) / 2.0
@@ -1818,9 +1878,7 @@ tensor<float32> softmax(tensor<float32> value)
     return weights / math.sum_last(weights)
 
 tensor<float32> gelu(tensor<float32> value)
-    tensor<float32> cubic = value * value * value
-    tensor<float32> inner = (value + cubic * float32(0.044715)) * float32(0.7978845608028654)
-    return value * 0.5 * (1.0 + tanh(inner))
+    return internal.gelu_fused(value)
 
 tensor<float32> mse(tensor<float32> prediction, tensor<float32> target)
     tensor<float32> difference = prediction - target
@@ -2259,6 +2317,79 @@ class Adam
         second64 = loaded_second64
         return
 
+    // NN's element-wise Adam update of float32 Parameter `index` (the
+    // portable path for devices without a fused kernel).
+    private void element_update32(
+        int index,
+        Parameter<float32> parameter,
+        tensor<float32> gradient,
+        float32 beta1_32,
+        float32 beta2_32,
+        float32 one_minus_beta1_32,
+        float32 one_minus_beta2_32,
+        float32 adjusted_epsilon32,
+        float32 step_scale32
+    )
+        tensor<float32> raw = parameter.raw()
+        tensor<float32> first = (
+            first32[index] * beta1_32
+            + gradient * one_minus_beta1_32
+        )
+        tensor<float32> second = (
+            second32[index] * beta2_32
+            + gradient * gradient * one_minus_beta2_32
+        )
+        tensor<float32> denominator = (
+            math.sqrt(second) + adjusted_epsilon32
+        )
+        parameter.replace(
+            raw - (first / denominator) * step_scale32
+        )
+        first32[index] = first
+        second32[index] = second
+
+    // Commits Metal Adam batch `batch`, which holds one fused update per entry
+    // of `indices` (fresh next_* outputs; `gradients` keeps the encoded
+    // gradients alive), and then replaces those Parameters and moments. If
+    // the commit fails, nothing it produced is used: each of those
+    // Parameters takes the element-wise update from its unchanged state.
+    private void finish_metal_batch32(
+        Parameter<float32>[] parameters32,
+        int32 batch,
+        int[] indices,
+        tensor<float32>[] next_parameters,
+        tensor<float32>[] next_first,
+        tensor<float32>[] next_second,
+        tensor<float32>[] gradients,
+        float32 beta1_32,
+        float32 beta2_32,
+        float32 one_minus_beta1_32,
+        float32 one_minus_beta2_32,
+        float32 adjusted_epsilon32,
+        float32 step_scale32
+    )
+        int32 status = native.adam_metal_commit(int(batch), len(indices))
+        if status == int32(0)
+            for position in range(len(indices))
+                int index = indices[position]
+                parameters32[index].replace(next_parameters[position])
+                first32[index] = next_first[position]
+                second32[index] = next_second[position]
+            return
+        for position in range(len(indices))
+            int index = indices[position]
+            element_update32(
+                index,
+                parameters32[index],
+                gradients[position],
+                beta1_32,
+                beta2_32,
+                one_minus_beta1_32,
+                one_minus_beta2_32,
+                adjusted_epsilon32,
+                step_scale32
+            )
+
     void zero_grad<M>(M &model)
         Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
         for parameter in parameters32
@@ -2329,6 +2460,22 @@ class Adam
             float32 one_minus_beta2_32 = float32(1.0 - second_decay)
             float32 adjusted_epsilon32 = float32(adjusted_epsilon)
             float32 step_scale32 = float32(step_scale)
+            // Metal Parameters are updated by NN's fused kernel, batched into
+            // one command buffer per step (one GPU round trip). The batch
+            // token belongs to this call, the batch keeps every encoded
+            // tensor alive until its commit, and Parameter/moment state is
+            // replaced only after the commit of exactly the encoded updates
+            // succeeded. A Parameter reached through several fields (tied
+            // weights) is updated once per occurrence, each occurrence
+            // reading the value the previous one wrote, exactly like the
+            // sequential element-wise update: the batch is committed before
+            // such a repeat is encoded.
+            int32 batch = native.adam_metal_begin()
+            int[] batched_indices = []
+            tensor<float32>[] batched_parameters = []
+            tensor<float32>[] batched_first = []
+            tensor<float32>[] batched_second = []
+            tensor<float32>[] batched_gradients = []
             for index in range(len(parameters32))
                 Parameter<float32> parameter = parameters32[index]
                 if parameter.has_grad()
@@ -2367,24 +2514,99 @@ class Adam
                             first32[index] = next_first
                             second32[index] = next_second
                             native_updated = true
+                    elif batch > int32(0) and raw.is_contiguous() and native.metal_device_f32(&raw) >= int32(0)
+                        bool repeated = false
+                        for batched_index in batched_indices
+                            if parameters32[batched_index].same(parameter)
+                                repeated = true
+                        if repeated
+                            finish_metal_batch32(
+                                parameters32,
+                                batch,
+                                batched_indices,
+                                batched_parameters,
+                                batched_first,
+                                batched_second,
+                                batched_gradients,
+                                beta1_32,
+                                beta2_32,
+                                one_minus_beta1_32,
+                                one_minus_beta2_32,
+                                adjusted_epsilon32,
+                                step_scale32
+                            )
+                            batched_indices = []
+                            batched_parameters = []
+                            batched_first = []
+                            batched_second = []
+                            batched_gradients = []
+                            batch = native.adam_metal_begin()
+                            // The earlier occurrence replaced the value.
+                            raw = parameter.raw()
+                        if batch > int32(0)
+                            int metal_index = int(native.metal_device_f32(&raw))
+                            // A gradient can arrive as a strided view (Math's
+                            // matmul backward gives an FC weight one). The
+                            // fused kernel reads dense tensors, so copy it on
+                            // the device; the values do not change.
+                            if not gradient.is_contiguous()
+                                gradient = gradient.contiguous()
+                            tensor<float32> next_parameter = tensor.zeros<float32>(raw.shape(), gpu = metal_index)
+                            tensor<float32> next_first = tensor.zeros<float32>(raw.shape(), gpu = metal_index)
+                            tensor<float32> next_second = tensor.zeros<float32>(raw.shape(), gpu = metal_index)
+                            int32 encode_status = native.adam_metal_encode(
+                                int(batch),
+                                &raw,
+                                &gradient,
+                                &previous_first,
+                                &previous_second,
+                                &next_parameter,
+                                &next_first,
+                                &next_second,
+                                first_decay,
+                                second_decay,
+                                one_minus_beta1,
+                                one_minus_beta2,
+                                adjusted_epsilon,
+                                step_scale
+                            )
+                            if encode_status == int32(0)
+                                batched_indices = batched_indices.append(index)
+                                batched_parameters = batched_parameters.append(next_parameter)
+                                batched_first = batched_first.append(next_first)
+                                batched_second = batched_second.append(next_second)
+                                batched_gradients = batched_gradients.append(gradient)
+                                native_updated = true
 
                     if not native_updated
-                        tensor<float32> first = (
-                            previous_first * beta1_32
-                            + gradient * one_minus_beta1_32
+                        element_update32(
+                            index,
+                            parameter,
+                            gradient,
+                            beta1_32,
+                            beta2_32,
+                            one_minus_beta1_32,
+                            one_minus_beta2_32,
+                            adjusted_epsilon32,
+                            step_scale32
                         )
-                        tensor<float32> second = (
-                            previous_second * beta2_32
-                            + gradient * gradient * one_minus_beta2_32
-                        )
-                        tensor<float32> denominator = (
-                            math.sqrt(second) + adjusted_epsilon32
-                        )
-                        parameter.replace(
-                            raw - (first / denominator) * step_scale32
-                        )
-                        first32[index] = first
-                        second32[index] = second
+
+            if batch > int32(0)
+                finish_metal_batch32(
+                    parameters32,
+                    batch,
+                    batched_indices,
+                    batched_parameters,
+                    batched_first,
+                    batched_second,
+                    batched_gradients,
+                    beta1_32,
+                    beta2_32,
+                    one_minus_beta1_32,
+                    one_minus_beta2_32,
+                    adjusted_epsilon32,
+                    step_scale32
+                )
 
             for index in range(len(parameters64))
                 Parameter<float> parameter = parameters64[index]

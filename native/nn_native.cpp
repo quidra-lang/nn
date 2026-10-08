@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <limits>
 #include <mutex>
@@ -20,6 +21,55 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#endif
+
+#ifdef __APPLE__
+// NN-owned Metal kernels live in native/nn_metal.mm, which the package
+// manifest declares for macOS only. Every other platform keeps the portable
+// Quidra fallbacks for Metal-less builds.
+extern "C" long long nn_metal_device_f32(const void* tensor);
+extern "C" int nn_metal_conv2d_forward(
+    const void* input, const void* weight, const void* bias, void* output,
+    long long stride, long long padding, long long groups);
+extern "C" int nn_metal_conv2d_backward(
+    const void* input, const void* weight, const void* gradient_output,
+    void* gradient_input, void* gradient_weight, void* gradient_bias,
+    long long stride, long long padding, long long groups);
+extern "C" int nn_metal_conv2d_backward_data(
+    const void* weight, const void* gradient_output, void* gradient_input,
+    long long stride, long long padding, long long groups);
+extern "C" int nn_metal_conv2d_backward_filter(
+    const void* input, const void* gradient_output, void* gradient_weight,
+    long long stride, long long padding, long long groups);
+extern "C" int nn_metal_conv2d_bias_broadcast(
+    const void* bias_gradient, void* output);
+extern "C" int nn_metal_activation_forward(
+    const void* input, void* output, long long activation);
+extern "C" int nn_metal_activation_backward(
+    const void* input, const void* gradient_output, void* gradient_input,
+    long long activation);
+extern "C" int nn_metal_activation_backward_internal(
+    const void* input, const void* gradient_output, void* gradient_input,
+    long long activation);
+extern "C" int nn_metal_activation_second_backward(
+    const void* input, const void* first_gradient, const void* gradient_output,
+    void* gradient_input, void* gradient_first, long long activation);
+extern "C" int nn_metal_global_average_pool(const void* input, void* output);
+extern "C" int nn_metal_global_average_unpool(
+    const void* gradient, void* output);
+extern "C" int nn_metal_conv2d_activation_forward(
+    const void* input, const void* weight, const void* bias,
+    void* conv_output, void* activation_output, long long stride,
+    long long padding, long long groups, long long activation);
+extern "C" std::int32_t nn_metal_adam_begin();
+extern "C" int nn_metal_adam_encode(
+    std::int32_t batch, const void* parameter, const void* gradient, const void* first,
+    const void* second, void* next_parameter, void* next_first,
+    void* next_second, float beta1, float beta2, float one_minus_beta1,
+    float one_minus_beta2, float epsilon, float scale);
+extern "C" int nn_metal_adam_commit(
+    std::int32_t batch, std::uint64_t expected_dispatches);
+extern "C" unsigned long long nn_metal_dispatch_count(int kind);
 #endif
 
 namespace {
@@ -1359,6 +1409,477 @@ int conv2d_cuda_backward_tracked_f32(
     return 0;
 }
 
+struct CpuConvGeometry {
+    std::size_t batches{};
+    std::size_t channels_in{};
+    std::size_t channels_out{};
+    std::size_t weight_channels{};
+    std::size_t height{};
+    std::size_t width{};
+    std::size_t kernel_height{};
+    std::size_t kernel_width{};
+    std::size_t output_height{};
+    std::size_t output_width{};
+    std::size_t stride{};
+    std::size_t padding{};
+    std::size_t groups{};
+};
+
+// CPU direct-convolution kernels. They are organized around contiguous
+// output (or input) rows so the innermost loops vectorize, while every
+// gradient/output element still receives its terms in exactly the order of
+// the original per-element loops (and with the same `acc += a * b`
+// expressions), so results are bit-identical to them:
+//   output[n, oc, oy, ox]: (input channel, ky, kx), then + bias
+//   dInput[n, ic, iy, ix]: (output channel, oy, ox)
+//   dWeight[oc, ic, ky, kx]: (n, oy, ox)
+//   dBias[oc]: (n, oy, ox)
+
+// Output positions o in [first, last) whose tap `tap` reads an in-bounds
+// source index o * stride + tap - padding in [0, extent).
+void conv_tap_range(
+    std::size_t extent, std::size_t outputs, std::size_t stride,
+    std::size_t padding, std::size_t tap,
+    std::size_t& first, std::size_t& last) {
+    first = padding > tap ? (padding - tap + stride - 1) / stride : 0;
+    const std::size_t limit = extent - 1 + padding;
+    last = limit < tap ? 0 : (limit - tap) / stride + 1;
+    if (last > outputs) last = outputs;
+    if (first > last) first = last;
+}
+
+struct ConvTapRanges {
+    std::vector<std::size_t> first_y, last_y, first_x, last_x;
+
+    explicit ConvTapRanges(const CpuConvGeometry& g)
+        : first_y(g.kernel_height), last_y(g.kernel_height),
+          first_x(g.kernel_width), last_x(g.kernel_width) {
+        for (std::size_t ky = 0; ky < g.kernel_height; ++ky)
+            conv_tap_range(g.height, g.output_height, g.stride, g.padding, ky,
+                           first_y[ky], last_y[ky]);
+        for (std::size_t kx = 0; kx < g.kernel_width; ++kx)
+            conv_tap_range(g.width, g.output_width, g.stride, g.padding, kx,
+                           first_x[kx], last_x[kx]);
+    }
+};
+
+// Four channels of one group share every pass over a row: the inner loops
+// load each value once and update four independent rows (`Stride` 0 reads
+// the stride at run time; 1 and 2 let the compiler vectorize the loads).
+template <std::size_t Stride>
+void accumulate_rows4(
+    float* __restrict row0, float* __restrict row1,
+    float* __restrict row2, float* __restrict row3,
+    const float* __restrict values, std::size_t count, std::size_t stride,
+    float tap0, float tap1, float tap2, float tap3) {
+    const std::size_t step = Stride != 0 ? Stride : stride;
+    for (std::size_t index = 0; index < count; ++index) {
+        const float value = values[index * step];
+        row0[index] += value * tap0;
+        row1[index] += value * tap1;
+        row2[index] += value * tap2;
+        row3[index] += value * tap3;
+    }
+}
+
+template <std::size_t Stride>
+void scatter_rows4(
+    float* __restrict target0, float* __restrict target1,
+    float* __restrict target2, float* __restrict target3,
+    const float* __restrict gradients, std::size_t count, std::size_t stride,
+    float tap0, float tap1, float tap2, float tap3) {
+    const std::size_t step = Stride != 0 ? Stride : stride;
+    for (std::size_t index = 0; index < count; ++index) {
+        const float gradient = gradients[index];
+        target0[index * step] += gradient * tap0;
+        target1[index * step] += gradient * tap1;
+        target2[index * step] += gradient * tap2;
+        target3[index * step] += gradient * tap3;
+    }
+}
+
+// Accumulates the convolution sums (without bias) into `output`.
+void cpu_conv_forward_sums(
+    const float* input,
+    const float* weight,
+    float* output,
+    const CpuConvGeometry& g) {
+    const ConvTapRanges ranges(g);
+    const auto outputs_per_group = g.channels_out / g.groups;
+    const auto taps = g.kernel_height * g.kernel_width;
+    const auto input_plane = g.height * g.width;
+    const auto output_plane = g.output_height * g.output_width;
+    constexpr std::size_t block = 4;
+    for (std::size_t batch = 0; batch < g.batches; ++batch) {
+        for (std::size_t group = 0; group < g.groups; ++group) {
+            for (std::size_t first_local = 0; first_local < outputs_per_group;
+                 first_local += block) {
+                const auto channels = std::min(block, outputs_per_group - first_local);
+                const auto first_channel = group * outputs_per_group + first_local;
+                float* planes[block] = {};
+                for (std::size_t j = 0; j < channels; ++j) {
+                    planes[j] = output +
+                        (batch * g.channels_out + first_channel + j) * output_plane;
+                    std::fill(planes[j], planes[j] + output_plane, 0.0F);
+                }
+                for (std::size_t output_y = 0; output_y < g.output_height;
+                     ++output_y) {
+                    float* rows[block] = {};
+                    for (std::size_t j = 0; j < channels; ++j)
+                        rows[j] = planes[j] + output_y * g.output_width;
+                    for (std::size_t local_input = 0;
+                         local_input < g.weight_channels; ++local_input) {
+                        const auto input_channel =
+                            group * g.weight_channels + local_input;
+                        const float* source = input +
+                            (batch * g.channels_in + input_channel) * input_plane;
+                        const float* filters[block] = {};
+                        for (std::size_t j = 0; j < channels; ++j) {
+                            filters[j] = weight +
+                                ((first_channel + j) * g.weight_channels + local_input) * taps;
+                        }
+                        for (std::size_t kernel_y = 0;
+                             kernel_y < g.kernel_height; ++kernel_y) {
+                            if (output_y < ranges.first_y[kernel_y] ||
+                                output_y >= ranges.last_y[kernel_y])
+                                continue;
+                            const float* source_row = source +
+                                (output_y * g.stride + kernel_y - g.padding) * g.width;
+                            for (std::size_t kernel_x = 0;
+                                 kernel_x < g.kernel_width; ++kernel_x) {
+                                const auto tap = kernel_y * g.kernel_width + kernel_x;
+                                const auto first = ranges.first_x[kernel_x];
+                                const auto count = ranges.last_x[kernel_x] - first;
+                                const float* values = source_row +
+                                    (first * g.stride + kernel_x - g.padding);
+                                if (channels == block) {
+                                    float* r0 = rows[0] + first;
+                                    float* r1 = rows[1] + first;
+                                    float* r2 = rows[2] + first;
+                                    float* r3 = rows[3] + first;
+                                    const float t0 = filters[0][tap];
+                                    const float t1 = filters[1][tap];
+                                    const float t2 = filters[2][tap];
+                                    const float t3 = filters[3][tap];
+                                    if (g.stride == 1)
+                                        accumulate_rows4<1>(r0, r1, r2, r3, values, count, 1, t0, t1, t2, t3);
+                                    else if (g.stride == 2)
+                                        accumulate_rows4<2>(r0, r1, r2, r3, values, count, 2, t0, t1, t2, t3);
+                                    else
+                                        accumulate_rows4<0>(r0, r1, r2, r3, values, count, g.stride, t0, t1, t2, t3);
+                                } else {
+                                    for (std::size_t j = 0; j < channels; ++j) {
+                                        float* sums = rows[j] + first;
+                                        const float tap_value = filters[j][tap];
+                                        for (std::size_t index = 0; index < count; ++index)
+                                            sums[index] += values[index * g.stride] * tap_value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// dInput = conv_transpose(gradient_output, weight). Four input channels of
+// a group share every pass over a gradient row.
+void cpu_conv_backward_data_rows(
+    const float* weight,
+    const float* output_gradient,
+    float* input_gradient,
+    const CpuConvGeometry& g) {
+    const ConvTapRanges ranges(g);
+    const auto outputs_per_group = g.channels_out / g.groups;
+    const auto taps = g.kernel_height * g.kernel_width;
+    const auto input_plane = g.height * g.width;
+    const auto output_plane = g.output_height * g.output_width;
+    constexpr std::size_t block = 4;
+    std::fill(input_gradient,
+              input_gradient + g.batches * g.channels_in * input_plane, 0.0F);
+    for (std::size_t batch = 0; batch < g.batches; ++batch) {
+        for (std::size_t group = 0; group < g.groups; ++group) {
+            for (std::size_t first_local = 0; first_local < g.weight_channels;
+                 first_local += block) {
+                const auto channels = std::min(block, g.weight_channels - first_local);
+                float* planes[block] = {};
+                for (std::size_t j = 0; j < channels; ++j) {
+                    planes[j] = input_gradient +
+                        (batch * g.channels_in + group * g.weight_channels +
+                         first_local + j) * input_plane;
+                }
+                for (std::size_t local_output = 0;
+                     local_output < outputs_per_group; ++local_output) {
+                    const auto output_channel =
+                        group * outputs_per_group + local_output;
+                    const float* gradient = output_gradient +
+                        (batch * g.channels_out + output_channel) * output_plane;
+                    const float* filters[block] = {};
+                    for (std::size_t j = 0; j < channels; ++j) {
+                        filters[j] = weight +
+                            (output_channel * g.weight_channels + first_local + j) * taps;
+                    }
+                    // Descending taps visit each input element's output
+                    // positions in ascending (oy, ox) order.
+                    for (std::size_t kernel_y = g.kernel_height; kernel_y-- > 0;) {
+                        for (std::size_t kernel_x = g.kernel_width; kernel_x-- > 0;) {
+                            const auto tap = kernel_y * g.kernel_width + kernel_x;
+                            const auto first_x = ranges.first_x[kernel_x];
+                            const auto count = ranges.last_x[kernel_x] - first_x;
+                            const auto offset = kernel_x + first_x * g.stride - g.padding;
+                            for (std::size_t output_y = ranges.first_y[kernel_y];
+                                 output_y < ranges.last_y[kernel_y]; ++output_y) {
+                                const float* gradient_row = gradient +
+                                    output_y * g.output_width + first_x;
+                                const auto row =
+                                    (output_y * g.stride + kernel_y - g.padding) * g.width + offset;
+                                if (channels == block) {
+                                    const float t0 = filters[0][tap];
+                                    const float t1 = filters[1][tap];
+                                    const float t2 = filters[2][tap];
+                                    const float t3 = filters[3][tap];
+                                    if (g.stride == 1)
+                                        scatter_rows4<1>(planes[0] + row, planes[1] + row, planes[2] + row, planes[3] + row, gradient_row, count, 1, t0, t1, t2, t3);
+                                    else if (g.stride == 2)
+                                        scatter_rows4<2>(planes[0] + row, planes[1] + row, planes[2] + row, planes[3] + row, gradient_row, count, 2, t0, t1, t2, t3);
+                                    else
+                                        scatter_rows4<0>(planes[0] + row, planes[1] + row, planes[2] + row, planes[3] + row, gradient_row, count, g.stride, t0, t1, t2, t3);
+                                } else {
+                                    for (std::size_t j = 0; j < channels; ++j) {
+                                        float* target = planes[j] + row;
+                                        const float tap_value = filters[j][tap];
+                                        for (std::size_t index = 0; index < count; ++index)
+                                            target[index * g.stride] += gradient_row[index] * tap_value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Twelve dWeight chains at once: four output channels times the three taps
+// of kernel row `kernel_y` (kernel width 3). Each chain still runs over
+// (n, oy, ox) in ascending order: per row, the positions only some taps
+// reach come first or last for that tap. Returns false (nothing written)
+// when the taps share no position range.
+bool filter_row3x4(
+    const float* input,
+    const float* output_gradient,
+    float* weight_gradient,
+    const CpuConvGeometry& g,
+    const ConvTapRanges& ranges,
+    std::size_t first_channel,
+    std::size_t input_channel,
+    std::size_t local_input,
+    std::size_t kernel_y) {
+    constexpr std::size_t block = 4;
+    constexpr std::size_t width = 3;
+    std::size_t common_first = 0;
+    std::size_t common_last = g.output_width;
+    for (std::size_t kernel_x = 0; kernel_x < width; ++kernel_x) {
+        common_first = std::max(common_first, ranges.first_x[kernel_x]);
+        common_last = std::min(common_last, ranges.last_x[kernel_x]);
+    }
+    if (common_first >= common_last) return false;
+    const auto taps = g.kernel_height * width;
+    const auto input_plane = g.height * g.width;
+    const auto output_plane = g.output_height * g.output_width;
+    float sums[block][width] = {};
+    for (std::size_t batch = 0; batch < g.batches; ++batch) {
+        const float* source = input +
+            (batch * g.channels_in + input_channel) * input_plane;
+        for (std::size_t output_y = ranges.first_y[kernel_y];
+             output_y < ranges.last_y[kernel_y]; ++output_y) {
+            const float* gradients[block];
+            for (std::size_t j = 0; j < block; ++j) {
+                gradients[j] = output_gradient +
+                    (batch * g.channels_out + first_channel + j) * output_plane +
+                    output_y * g.output_width;
+            }
+            const float* row = source +
+                (output_y * g.stride + kernel_y - g.padding) * g.width;
+            for (std::size_t kernel_x = 0; kernel_x < width; ++kernel_x) {
+#pragma clang loop vectorize(disable) interleave(disable)
+                for (std::size_t output_x = ranges.first_x[kernel_x];
+                     output_x < common_first; ++output_x) {
+                    const float value =
+                        row[output_x * g.stride + kernel_x - g.padding];
+                    for (std::size_t j = 0; j < block; ++j)
+                        sums[j][kernel_x] += gradients[j][output_x] * value;
+                }
+            }
+            float s00 = sums[0][0], s01 = sums[0][1], s02 = sums[0][2];
+            float s10 = sums[1][0], s11 = sums[1][1], s12 = sums[1][2];
+            float s20 = sums[2][0], s21 = sums[2][1], s22 = sums[2][2];
+            float s30 = sums[3][0], s31 = sums[3][1], s32 = sums[3][2];
+            const float* g0 = gradients[0];
+            const float* g1 = gradients[1];
+            const float* g2 = gradients[2];
+            const float* g3 = gradients[3];
+#pragma clang loop vectorize(disable) interleave(disable)
+            for (std::size_t output_x = common_first; output_x < common_last;
+                 ++output_x) {
+                const float* window = row + output_x * g.stride - g.padding;
+                const float v0 = window[0];
+                const float v1 = window[1];
+                const float v2 = window[2];
+                const float a = g0[output_x];
+                const float b = g1[output_x];
+                const float c = g2[output_x];
+                const float d = g3[output_x];
+                s00 += a * v0; s01 += a * v1; s02 += a * v2;
+                s10 += b * v0; s11 += b * v1; s12 += b * v2;
+                s20 += c * v0; s21 += c * v1; s22 += c * v2;
+                s30 += d * v0; s31 += d * v1; s32 += d * v2;
+            }
+            sums[0][0] = s00; sums[0][1] = s01; sums[0][2] = s02;
+            sums[1][0] = s10; sums[1][1] = s11; sums[1][2] = s12;
+            sums[2][0] = s20; sums[2][1] = s21; sums[2][2] = s22;
+            sums[3][0] = s30; sums[3][1] = s31; sums[3][2] = s32;
+            for (std::size_t kernel_x = 0; kernel_x < width; ++kernel_x) {
+#pragma clang loop vectorize(disable) interleave(disable)
+                for (std::size_t output_x = common_last;
+                     output_x < ranges.last_x[kernel_x]; ++output_x) {
+                    const float value =
+                        row[output_x * g.stride + kernel_x - g.padding];
+                    for (std::size_t j = 0; j < block; ++j)
+                        sums[j][kernel_x] += gradients[j][output_x] * value;
+                }
+            }
+        }
+    }
+    for (std::size_t j = 0; j < block; ++j) {
+        for (std::size_t kernel_x = 0; kernel_x < width; ++kernel_x) {
+            weight_gradient[((first_channel + j) * g.weight_channels +
+                             local_input) * taps +
+                            kernel_y * width + kernel_x] = sums[j][kernel_x];
+        }
+    }
+    return true;
+}
+
+// dWeight = correlation of input with gradient_output. Each weight element
+// is one multiply-add chain over (n, oy, ox); four output channels of a
+// group advance their chains together so the latency-bound chains overlap
+// while each one keeps its own order. The chains are not vectorized: a
+// vectorized reduction would round the products separately.
+void cpu_conv_backward_filter_rows(
+    const float* input,
+    const float* output_gradient,
+    float* weight_gradient,
+    const CpuConvGeometry& g) {
+    const ConvTapRanges ranges(g);
+    const auto outputs_per_group = g.channels_out / g.groups;
+    const auto taps = g.kernel_height * g.kernel_width;
+    const auto input_plane = g.height * g.width;
+    const auto output_plane = g.output_height * g.output_width;
+    constexpr std::size_t block = 4;
+    for (std::size_t group = 0; group < g.groups; ++group) {
+        for (std::size_t first_local = 0; first_local < outputs_per_group;
+             first_local += block) {
+            const auto count_channels =
+                std::min(block, outputs_per_group - first_local);
+            const auto first_channel = group * outputs_per_group + first_local;
+            for (std::size_t local_input = 0;
+                 local_input < g.weight_channels; ++local_input) {
+                const auto input_channel =
+                    group * g.weight_channels + local_input;
+                for (std::size_t kernel_y = 0; kernel_y < g.kernel_height;
+                     ++kernel_y) {
+                    if (count_channels == block && g.kernel_width == 3 &&
+                        filter_row3x4(input, output_gradient, weight_gradient,
+                                      g, ranges, first_channel, input_channel,
+                                      local_input, kernel_y)) {
+                        continue;
+                    }
+                    for (std::size_t kernel_x = 0;
+                         kernel_x < g.kernel_width; ++kernel_x) {
+                        const auto tap = kernel_y * g.kernel_width + kernel_x;
+                        const auto first_x = ranges.first_x[kernel_x];
+                        const auto count = ranges.last_x[kernel_x] - first_x;
+                        float sums[block] = {0.0F, 0.0F, 0.0F, 0.0F};
+                        for (std::size_t batch = 0; batch < g.batches; ++batch) {
+                            const float* source = input +
+                                (batch * g.channels_in + input_channel) * input_plane;
+                            const float* gradients[block] = {};
+                            for (std::size_t j = 0; j < count_channels; ++j) {
+                                gradients[j] = output_gradient +
+                                    (batch * g.channels_out + first_channel + j) *
+                                        output_plane;
+                            }
+                            for (std::size_t output_y = ranges.first_y[kernel_y];
+                                 output_y < ranges.last_y[kernel_y]; ++output_y) {
+                                const auto row = output_y * g.output_width + first_x;
+                                const float* values = source +
+                                    (output_y * g.stride + kernel_y - g.padding) * g.width +
+                                    (first_x * g.stride + kernel_x - g.padding);
+                                if (count_channels == block) {
+                                    const float* g0 = gradients[0] + row;
+                                    const float* g1 = gradients[1] + row;
+                                    const float* g2 = gradients[2] + row;
+                                    const float* g3 = gradients[3] + row;
+                                    float s0 = sums[0];
+                                    float s1 = sums[1];
+                                    float s2 = sums[2];
+                                    float s3 = sums[3];
+#pragma clang loop vectorize(disable) interleave(disable)
+                                    for (std::size_t index = 0; index < count; ++index) {
+                                        const float value = values[index * g.stride];
+                                        s0 += g0[index] * value;
+                                        s1 += g1[index] * value;
+                                        s2 += g2[index] * value;
+                                        s3 += g3[index] * value;
+                                    }
+                                    sums[0] = s0;
+                                    sums[1] = s1;
+                                    sums[2] = s2;
+                                    sums[3] = s3;
+                                } else {
+                                    for (std::size_t j = 0; j < count_channels; ++j) {
+                                        const float* gradient_row = gradients[j] + row;
+                                        float sum = sums[j];
+#pragma clang loop vectorize(disable) interleave(disable)
+                                        for (std::size_t index = 0; index < count; ++index)
+                                            sum += gradient_row[index] * values[index * g.stride];
+                                        sums[j] = sum;
+                                    }
+                                }
+                            }
+                        }
+                        for (std::size_t j = 0; j < count_channels; ++j) {
+                            weight_gradient[((first_channel + j) * g.weight_channels +
+                                             local_input) * taps + tap] = sums[j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void cpu_conv_backward_bias_rows(
+    const float* output_gradient,
+    float* bias_gradient,
+    const CpuConvGeometry& g) {
+    const auto output_plane = g.output_height * g.output_width;
+    for (std::size_t channel = 0; channel < g.channels_out; ++channel) {
+        float sum = 0.0F;
+        for (std::size_t batch = 0; batch < g.batches; ++batch) {
+            const float* gradient = output_gradient +
+                (batch * g.channels_out + channel) * output_plane;
+            for (std::size_t index = 0; index < output_plane; ++index)
+                sum += gradient[index];
+        }
+        bias_gradient[channel] = sum;
+    }
+}
+
 int conv2d_cpu_backward_f32(
     const void* const* saved_tensors,
     std::uint64_t saved_tensor_count,
@@ -1481,95 +2002,27 @@ int conv2d_cpu_backward_f32(
         return 209;
     }
 
-    const auto input_count = qcore_tensor_element_count(input_gradient);
-    const auto weight_count = qcore_tensor_element_count(weight_gradient);
-    const auto bias_count = qcore_tensor_element_count(bias_gradient);
-    std::fill(input_grad, input_grad + input_count, 0.0F);
-    std::fill(weight_grad, weight_grad + weight_count, 0.0F);
-    std::fill(bias_grad, bias_grad + bias_count, 0.0F);
-
-    const auto batches = static_cast<std::size_t>(batches_raw);
-    const auto channels_in = static_cast<std::size_t>(channels_in_raw);
-    const auto channels_out = static_cast<std::size_t>(channels_out_raw);
-    const auto weight_channels = static_cast<std::size_t>(weight_channels_raw);
-    const auto height = static_cast<std::size_t>(height_raw);
-    const auto width = static_cast<std::size_t>(width_raw);
-    const auto kernel_height = static_cast<std::size_t>(kernel_height_raw);
-    const auto kernel_width = static_cast<std::size_t>(kernel_width_raw);
-    const auto output_height = static_cast<std::size_t>(output_height_raw);
-    const auto output_width = static_cast<std::size_t>(output_width_raw);
-    const auto stride = static_cast<std::size_t>(metadata.stride);
-    const auto padding = static_cast<std::size_t>(metadata.padding);
-    const auto groups = static_cast<std::size_t>(metadata.groups);
-    const auto outputs_per_group = channels_out / groups;
-
-    for (std::size_t batch = 0; batch < batches; ++batch) {
-        for (std::size_t group = 0; group < groups; ++group) {
-            const auto input_channel_base = group * weight_channels;
-            const auto output_channel_base = group * outputs_per_group;
-            for (std::size_t local_output = 0;
-                 local_output < outputs_per_group; ++local_output) {
-                const auto output_channel = output_channel_base + local_output;
-                for (std::size_t output_y = 0; output_y < output_height; ++output_y) {
-                    const auto window_y = output_y * stride;
-                    for (std::size_t output_x = 0; output_x < output_width; ++output_x) {
-                        const auto window_x = output_x * stride;
-                        const auto output_index =
-                            ((batch * channels_out + output_channel) * output_height +
-                             output_y) * output_width + output_x;
-                        const float gradient = output_gradient[output_index];
-                        bias_grad[output_channel] += gradient;
-                        for (std::size_t local_input = 0;
-                             local_input < weight_channels; ++local_input) {
-                            const auto input_channel = input_channel_base + local_input;
-                            for (std::size_t kernel_y = 0;
-                                 kernel_y < kernel_height; ++kernel_y) {
-                                const auto padded_y = window_y + kernel_y;
-                                if (padded_y < padding) continue;
-                                const auto source_y = padded_y - padding;
-                                if (source_y >= height) continue;
-                                for (std::size_t kernel_x = 0;
-                                     kernel_x < kernel_width; ++kernel_x) {
-                                    const auto padded_x = window_x + kernel_x;
-                                    if (padded_x < padding) continue;
-                                    const auto source_x = padded_x - padding;
-                                    if (source_x >= width) continue;
-                                    const auto source_index =
-                                        ((batch * channels_in + input_channel) * height +
-                                         source_y) * width + source_x;
-                                    const auto weight_index =
-                                        ((output_channel * weight_channels + local_input) *
-                                         kernel_height + kernel_y) * kernel_width + kernel_x;
-                                    input_grad[source_index] +=
-                                        gradient * weights[weight_index];
-                                    weight_grad[weight_index] +=
-                                        gradient * source[source_index];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    const CpuConvGeometry geometry{
+        static_cast<std::size_t>(batches_raw),
+        static_cast<std::size_t>(channels_in_raw),
+        static_cast<std::size_t>(channels_out_raw),
+        static_cast<std::size_t>(weight_channels_raw),
+        static_cast<std::size_t>(height_raw),
+        static_cast<std::size_t>(width_raw),
+        static_cast<std::size_t>(kernel_height_raw),
+        static_cast<std::size_t>(kernel_width_raw),
+        static_cast<std::size_t>(output_height_raw),
+        static_cast<std::size_t>(output_width_raw),
+        static_cast<std::size_t>(metadata.stride),
+        static_cast<std::size_t>(metadata.padding),
+        static_cast<std::size_t>(metadata.groups)
+    };
+    cpu_conv_backward_bias_rows(output_gradient, bias_grad, geometry);
+    cpu_conv_backward_filter_rows(source, output_gradient, weight_grad, geometry);
+    cpu_conv_backward_data_rows(weights, output_gradient, input_grad, geometry);
     return 0;
 }
 
-struct CpuConvGeometry {
-    std::size_t batches{};
-    std::size_t channels_in{};
-    std::size_t channels_out{};
-    std::size_t weight_channels{};
-    std::size_t height{};
-    std::size_t width{};
-    std::size_t kernel_height{};
-    std::size_t kernel_width{};
-    std::size_t output_height{};
-    std::size_t output_width{};
-    std::size_t stride{};
-    std::size_t padding{};
-    std::size_t groups{};
-};
 
 bool cpu_conv_geometry(
     const void* input,
@@ -1653,69 +2106,7 @@ void cpu_conv_forward_no_bias(
     const float* weight,
     float* output,
     const CpuConvGeometry& g) {
-    const auto outputs_per_group = g.channels_out / g.groups;
-    const auto output_count =
-        g.batches * g.channels_out * g.output_height * g.output_width;
-    std::fill(output, output + output_count, 0.0F);
-    for (std::size_t batch = 0; batch < g.batches; ++batch) {
-        for (std::size_t group = 0; group < g.groups; ++group) {
-            const auto input_channel_base = group * g.weight_channels;
-            const auto output_channel_base = group * outputs_per_group;
-            for (std::size_t local_output = 0;
-                 local_output < outputs_per_group; ++local_output) {
-                const auto output_channel = output_channel_base + local_output;
-                for (std::size_t output_y = 0;
-                     output_y < g.output_height; ++output_y) {
-                    const auto window_y = output_y * g.stride;
-                    for (std::size_t output_x = 0;
-                         output_x < g.output_width; ++output_x) {
-                        const auto window_x = output_x * g.stride;
-                        float sum = 0.0F;
-                        for (std::size_t local_input = 0;
-                             local_input < g.weight_channels; ++local_input) {
-                            const auto input_channel =
-                                input_channel_base + local_input;
-                            for (std::size_t kernel_y = 0;
-                                 kernel_y < g.kernel_height; ++kernel_y) {
-                                const auto padded_y = window_y + kernel_y;
-                                if (padded_y < g.padding) continue;
-                                const auto source_y = padded_y - g.padding;
-                                if (source_y >= g.height) continue;
-                                for (std::size_t kernel_x = 0;
-                                     kernel_x < g.kernel_width; ++kernel_x) {
-                                    const auto padded_x = window_x + kernel_x;
-                                    if (padded_x < g.padding) continue;
-                                    const auto source_x = padded_x - g.padding;
-                                    if (source_x >= g.width) continue;
-                                    const auto source_index =
-                                        ((batch * g.channels_in + input_channel) *
-                                             g.height +
-                                         source_y) *
-                                            g.width +
-                                        source_x;
-                                    const auto weight_index =
-                                        ((output_channel * g.weight_channels +
-                                          local_input) *
-                                             g.kernel_height +
-                                         kernel_y) *
-                                            g.kernel_width +
-                                        kernel_x;
-                                    sum += input[source_index] * weight[weight_index];
-                                }
-                            }
-                        }
-                        const auto output_index =
-                            ((batch * g.channels_out + output_channel) *
-                                 g.output_height +
-                             output_y) *
-                                g.output_width +
-                            output_x;
-                        output[output_index] = sum;
-                    }
-                }
-            }
-        }
-    }
+    cpu_conv_forward_sums(input, weight, output, g);
 }
 
 void cpu_conv_backward_data(
@@ -1723,69 +2114,7 @@ void cpu_conv_backward_data(
     const float* output_gradient,
     float* input_gradient,
     const CpuConvGeometry& g) {
-    const auto input_count =
-        g.batches * g.channels_in * g.height * g.width;
-    std::fill(input_gradient, input_gradient + input_count, 0.0F);
-    const auto outputs_per_group = g.channels_out / g.groups;
-    for (std::size_t batch = 0; batch < g.batches; ++batch) {
-        for (std::size_t group = 0; group < g.groups; ++group) {
-            const auto input_channel_base = group * g.weight_channels;
-            const auto output_channel_base = group * outputs_per_group;
-            for (std::size_t local_output = 0;
-                 local_output < outputs_per_group; ++local_output) {
-                const auto output_channel = output_channel_base + local_output;
-                for (std::size_t output_y = 0;
-                     output_y < g.output_height; ++output_y) {
-                    const auto window_y = output_y * g.stride;
-                    for (std::size_t output_x = 0;
-                         output_x < g.output_width; ++output_x) {
-                        const auto window_x = output_x * g.stride;
-                        const auto output_index =
-                            ((batch * g.channels_out + output_channel) *
-                                 g.output_height +
-                             output_y) *
-                                g.output_width +
-                            output_x;
-                        const float gradient = output_gradient[output_index];
-                        for (std::size_t local_input = 0;
-                             local_input < g.weight_channels; ++local_input) {
-                            const auto input_channel =
-                                input_channel_base + local_input;
-                            for (std::size_t kernel_y = 0;
-                                 kernel_y < g.kernel_height; ++kernel_y) {
-                                const auto padded_y = window_y + kernel_y;
-                                if (padded_y < g.padding) continue;
-                                const auto source_y = padded_y - g.padding;
-                                if (source_y >= g.height) continue;
-                                for (std::size_t kernel_x = 0;
-                                     kernel_x < g.kernel_width; ++kernel_x) {
-                                    const auto padded_x = window_x + kernel_x;
-                                    if (padded_x < g.padding) continue;
-                                    const auto source_x = padded_x - g.padding;
-                                    if (source_x >= g.width) continue;
-                                    const auto source_index =
-                                        ((batch * g.channels_in + input_channel) *
-                                             g.height +
-                                         source_y) *
-                                            g.width +
-                                        source_x;
-                                    const auto weight_index =
-                                        ((output_channel * g.weight_channels +
-                                          local_input) *
-                                             g.kernel_height +
-                                         kernel_y) *
-                                            g.kernel_width +
-                                        kernel_x;
-                                    input_gradient[source_index] +=
-                                        gradient * weight[weight_index];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    cpu_conv_backward_data_rows(weight, output_gradient, input_gradient, g);
 }
 
 void cpu_conv_backward_filter(
@@ -1793,70 +2122,7 @@ void cpu_conv_backward_filter(
     const float* output_gradient,
     float* weight_gradient,
     const CpuConvGeometry& g) {
-    const auto weight_count =
-        g.channels_out * g.weight_channels *
-        g.kernel_height * g.kernel_width;
-    std::fill(weight_gradient, weight_gradient + weight_count, 0.0F);
-    const auto outputs_per_group = g.channels_out / g.groups;
-    for (std::size_t batch = 0; batch < g.batches; ++batch) {
-        for (std::size_t group = 0; group < g.groups; ++group) {
-            const auto input_channel_base = group * g.weight_channels;
-            const auto output_channel_base = group * outputs_per_group;
-            for (std::size_t local_output = 0;
-                 local_output < outputs_per_group; ++local_output) {
-                const auto output_channel = output_channel_base + local_output;
-                for (std::size_t output_y = 0;
-                     output_y < g.output_height; ++output_y) {
-                    const auto window_y = output_y * g.stride;
-                    for (std::size_t output_x = 0;
-                         output_x < g.output_width; ++output_x) {
-                        const auto window_x = output_x * g.stride;
-                        const auto output_index =
-                            ((batch * g.channels_out + output_channel) *
-                                 g.output_height +
-                             output_y) *
-                                g.output_width +
-                            output_x;
-                        const float gradient = output_gradient[output_index];
-                        for (std::size_t local_input = 0;
-                             local_input < g.weight_channels; ++local_input) {
-                            const auto input_channel =
-                                input_channel_base + local_input;
-                            for (std::size_t kernel_y = 0;
-                                 kernel_y < g.kernel_height; ++kernel_y) {
-                                const auto padded_y = window_y + kernel_y;
-                                if (padded_y < g.padding) continue;
-                                const auto source_y = padded_y - g.padding;
-                                if (source_y >= g.height) continue;
-                                for (std::size_t kernel_x = 0;
-                                     kernel_x < g.kernel_width; ++kernel_x) {
-                                    const auto padded_x = window_x + kernel_x;
-                                    if (padded_x < g.padding) continue;
-                                    const auto source_x = padded_x - g.padding;
-                                    if (source_x >= g.width) continue;
-                                    const auto source_index =
-                                        ((batch * g.channels_in + input_channel) *
-                                             g.height +
-                                         source_y) *
-                                            g.width +
-                                        source_x;
-                                    const auto weight_index =
-                                        ((output_channel * g.weight_channels +
-                                          local_input) *
-                                             g.kernel_height +
-                                         kernel_y) *
-                                            g.kernel_width +
-                                        kernel_x;
-                                    weight_gradient[weight_index] +=
-                                        gradient * input[source_index];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    cpu_conv_backward_filter_rows(input, output_gradient, weight_gradient, g);
 }
 
 int conv2d_cpu_dx_backward_f32(
@@ -2051,6 +2317,163 @@ int conv2d_cpu_backward_tracked_f32(
     return 0;
 }
 
+#ifdef __APPLE__
+// Metal Conv2D autograd mirrors the CPU callbacks above: one first-order node
+// for input/weight/bias plus tracked second-order nodes whose kernels are the
+// same NN-owned Metal convolutions.
+int conv2d_metal_backward_f32(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata_raw,
+    std::uint64_t metadata_size) {
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION ||
+        !saved_tensors || saved_tensor_count != 3 ||
+        !gradient_output || !gradient_inputs || gradient_input_count != 3 ||
+        !metadata_raw || metadata_size != sizeof(Conv2dAutogradMetadata)) {
+        return 401;
+    }
+    const auto& metadata =
+        *static_cast<const Conv2dAutogradMetadata*>(metadata_raw);
+    const int status = nn_metal_conv2d_backward(
+        saved_tensors[0], saved_tensors[1], gradient_output,
+        gradient_inputs[0], gradient_inputs[1], gradient_inputs[2],
+        metadata.stride, metadata.padding, metadata.groups);
+    return status == 0 ? 0 : 400 + status;
+}
+
+int conv2d_metal_dx_backward_f32(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata_raw,
+    std::uint64_t metadata_size) {
+    if (!saved_tensors || saved_tensor_count != 2 ||
+        !gradient_output || !gradient_inputs || gradient_input_count != 2 ||
+        !metadata_raw || metadata_size != sizeof(Conv2dAutogradMetadata)) {
+        return 420;
+    }
+    const auto& metadata =
+        *static_cast<const Conv2dAutogradMetadata*>(metadata_raw);
+    const void* weight = saved_tensors[0];
+    const void* first_gradient = saved_tensors[1];
+    // dInput = conv_transpose(G, W) is bilinear: its adjoint with respect to W
+    // correlates the upstream H with G, and with respect to G convolves H.
+    int status = nn_metal_conv2d_backward_filter(
+        gradient_output, first_gradient, gradient_inputs[0],
+        metadata.stride, metadata.padding, metadata.groups);
+    if (status != 0) return 421;
+    status = nn_metal_conv2d_forward(
+        gradient_output, weight, nullptr, gradient_inputs[1],
+        metadata.stride, metadata.padding, metadata.groups);
+    return status == 0 ? 0 : 422;
+}
+
+int conv2d_metal_dw_backward_f32(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata_raw,
+    std::uint64_t metadata_size) {
+    if (!saved_tensors || saved_tensor_count != 2 ||
+        !gradient_output || !gradient_inputs || gradient_input_count != 2 ||
+        !metadata_raw || metadata_size != sizeof(Conv2dAutogradMetadata)) {
+        return 430;
+    }
+    const auto& metadata =
+        *static_cast<const Conv2dAutogradMetadata*>(metadata_raw);
+    const void* input = saved_tensors[0];
+    const void* first_gradient = saved_tensors[1];
+    int status = nn_metal_conv2d_backward_data(
+        gradient_output, first_gradient, gradient_inputs[0],
+        metadata.stride, metadata.padding, metadata.groups);
+    if (status != 0) return 431;
+    status = nn_metal_conv2d_forward(
+        input, gradient_output, nullptr, gradient_inputs[1],
+        metadata.stride, metadata.padding, metadata.groups);
+    return status == 0 ? 0 : 432;
+}
+
+int conv2d_metal_db_backward_f32(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void*,
+    std::uint64_t) {
+    if (!saved_tensors || saved_tensor_count != 1 ||
+        !gradient_output || !gradient_inputs || gradient_input_count != 1) {
+        return 440;
+    }
+    return nn_metal_conv2d_bias_broadcast(
+               gradient_output, gradient_inputs[0]) == 0 ? 0 : 441;
+}
+
+int conv2d_metal_backward_tracked_f32(
+    const void* const* differentiable_inputs,
+    std::uint64_t differentiable_input_count,
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata_raw,
+    std::uint64_t metadata_size) {
+    if (!differentiable_inputs || differentiable_input_count != 3)
+        return 450;
+    const int first_order = conv2d_metal_backward_f32(
+        saved_tensors, saved_tensor_count, gradient_output,
+        gradient_inputs, gradient_input_count,
+        metadata_raw, metadata_size);
+    if (first_order != 0) return first_order;
+
+    const void* dx_inputs[] = {
+        differentiable_inputs[1], gradient_output
+    };
+    int status = qcore_tensor_attach_custom_autograd(
+        gradient_inputs[0], dx_inputs, 2, conv2d_metal_dx_backward_f32,
+        metadata_raw, metadata_size);
+    if (status != 0) return 451;
+
+    const void* dw_inputs[] = {
+        differentiable_inputs[0], gradient_output
+    };
+    status = qcore_tensor_attach_custom_autograd(
+        gradient_inputs[1], dw_inputs, 2, conv2d_metal_dw_backward_f32,
+        metadata_raw, metadata_size);
+    if (status != 0) return 452;
+
+    const void* db_inputs[] = {gradient_output};
+    status = qcore_tensor_attach_custom_autograd(
+        gradient_inputs[2], db_inputs, 1, conv2d_metal_db_backward_f32,
+        nullptr, 0);
+    if (status != 0) return 453;
+    return 0;
+}
+
+// One custom autograd node for a Metal Conv2D output (no-op when no input is
+// tracked).
+int attach_conv2d_metal_autograd(
+    const void* input, const void* weight, const void* bias, void* output,
+    long long stride, long long padding, long long groups) {
+    const Conv2dAutogradMetadata metadata{
+        static_cast<std::int64_t>(stride),
+        static_cast<std::int64_t>(padding),
+        static_cast<std::int64_t>(groups)
+    };
+    const void* autograd_inputs[] = {input, weight, bias};
+    return qcore_tensor_attach_custom_autograd_ex(
+        output, autograd_inputs, 3, conv2d_metal_backward_f32,
+        conv2d_metal_backward_tracked_f32, &metadata, sizeof(metadata));
+}
+#endif
 
 bool tensor_cpu_dense_dtype(const void* tensor, int dtype) {
     return tensor &&
@@ -2540,6 +2963,88 @@ extern "C" std::int32_t nn_native_is_cpu_floating(
            qcore_tensor_is_contiguous(input) != 0 ? 1 : 0;
 }
 
+// Metal Adam batch: begin returns a batch token owned by the caller, then one
+// encode per float32 Parameter into that batch, then one commit that runs
+// every update in a single GPU round trip. The coefficient contract matches
+// the CPU kernel; encode refuses anything else. A token <= 0 means no batch.
+extern "C" std::int32_t nn_native_adam_metal_begin() {
+#ifdef __APPLE__
+    return nn_metal_adam_begin();
+#else
+    return 0;
+#endif
+}
+
+extern "C" std::int32_t nn_native_adam_metal_encode(
+    long long batch,
+    const void* parameter,
+    const void* gradient,
+    const void* first,
+    const void* second,
+    void* next_parameter,
+    void* next_first,
+    void* next_second,
+    double beta1,
+    double beta2,
+    double one_minus_beta1,
+    double one_minus_beta2,
+    double adjusted_epsilon,
+    double step_scale) {
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION ||
+        batch <= 0 || batch > std::numeric_limits<std::int32_t>::max() ||
+        !parameter || qcore_tensor_backend(parameter) != QCORE_BACKEND_METAL ||
+        qcore_tensor_dtype(parameter) != QCORE_DTYPE_FLOAT32) {
+        return 1;
+    }
+    if (!std::isfinite(beta1) || !std::isfinite(beta2) ||
+        !std::isfinite(one_minus_beta1) || !std::isfinite(one_minus_beta2) ||
+        !std::isfinite(adjusted_epsilon) || !std::isfinite(step_scale) ||
+        beta1 < 0.0 || beta1 >= 1.0 || beta2 < 0.0 || beta2 >= 1.0 ||
+        one_minus_beta1 < 0.0 || one_minus_beta2 < 0.0 ||
+        adjusted_epsilon <= 0.0) {
+        return 4;
+    }
+#ifdef __APPLE__
+    return nn_metal_adam_encode(
+               static_cast<std::int32_t>(batch),
+               parameter, gradient, first, second,
+               next_parameter, next_first, next_second,
+               static_cast<float>(beta1), static_cast<float>(beta2),
+               static_cast<float>(one_minus_beta1),
+               static_cast<float>(one_minus_beta2),
+               static_cast<float>(adjusted_epsilon),
+               static_cast<float>(step_scale)) == 0 ? 0 : 6;
+#else
+    (void)gradient;
+    (void)first;
+    (void)second;
+    (void)next_parameter;
+    (void)next_first;
+    (void)next_second;
+    return 6;
+#endif
+}
+
+// Commits batch `batch`, which must hold exactly `expected` encoded updates
+// (the ones the caller will replace state from), and releases it. Anything
+// else (unknown batch, a lost or extra update, a failed command) is an error
+// and nothing may be replaced. `expected == 0` only releases the batch.
+extern "C" std::int32_t nn_native_adam_metal_commit(
+    long long batch,
+    long long expected) {
+    if (batch <= 0 || batch > std::numeric_limits<std::int32_t>::max() ||
+        expected < 0) {
+        return 1;
+    }
+#ifdef __APPLE__
+    return nn_metal_adam_commit(
+               static_cast<std::int32_t>(batch),
+               static_cast<std::uint64_t>(expected)) == 0 ? 0 : 1;
+#else
+    return expected == 0 ? 0 : 1;
+#endif
+}
+
 extern "C" std::int32_t nn_native_adam_step(
     const void* parameter,
     const void* gradient,
@@ -2737,6 +3242,658 @@ extern "C" std::int32_t nn_native_relu_training_f32(
     return attach_status == 0 ? 0 : 4;
 }
 
+// Fused NN activations for tracked and untracked tensors. Activation ids are
+// NN policy shared with the CUDA epilogue: 1 = ReLU expression
+// (x + |x|) / 2, 2 = GELU expression x / 2 * (1 + nn.tanh(sqrt(2/pi) *
+// (x + 0.044715 x^3))) where nn.tanh clamps its argument to [-20, 20] and
+// evaluates (e^(2z) - 1) / (e^(2z) + 1). The forward kernels repeat every
+// rounding step of that source expression (no contraction), so CPU results
+// are bit-identical to the compositional graph. Backward kernels apply the
+// analytic first and second derivatives of the same expression.
+namespace {
+
+enum class NnActivation : std::uint8_t {
+    Relu = 1,
+    Gelu = 2,
+};
+
+bool activation_from_id(long long raw, NnActivation& activation) {
+    if (raw != 1 && raw != 2) return false;
+    activation = static_cast<NnActivation>(raw);
+    return true;
+}
+
+[[gnu::always_inline]] inline float activation_abs_derivative(float value) {
+    return value < 0.0F ? -1.0F : (value > 0.0F ? 1.0F : 0.0F);
+}
+
+float relu_expression(float value) {
+#pragma clang fp contract(off)
+    return (value + std::fabs(value)) * 0.5F;
+}
+
+float gelu_expression(float value) {
+#pragma clang fp contract(off)
+    const float square = value * value;
+    const float cubic = square * value;
+    const float inner = (value + cubic * 0.044715F) * 0.7978845608028654F;
+    const float lifted = ((inner - 20.0F) + std::fabs(inner + 20.0F)) * 0.5F;
+    const float limited = ((lifted + 20.0F) - std::fabs(lifted - 20.0F)) * 0.5F;
+    const float exponent = std::exp(limited * 2.0F);
+    const float hyperbolic = (exponent - 1.0F) / (exponent + 1.0F);
+    return (value * 0.5F) * (1.0F + hyperbolic);
+}
+
+// exp for the GELU derivative kernels, whose argument is 2 * clamp(z) in
+// [-40, 40] or NaN. A Cody-Waite reduction with the Cephes expf polynomial
+// is accurate to about one ulp and, unlike a libm call, can be inlined into
+// the element loops. Only derivatives use it; the forward keeps std::exp,
+// the function behind math.exp, so forward values stay bit-identical.
+[[gnu::always_inline]] inline float derivative_exp(float value) {
+    const float bounded = std::fmin(std::fmax(value, -80.0F), 80.0F);
+    const float count = std::floor(bounded * 1.44269504088896341F + 0.5F);
+    const float reduced =
+        (bounded - count * 0.693359375F) - count * -2.12194440e-4F;
+    float polynomial = 1.9875691500e-4F;
+    polynomial = polynomial * reduced + 1.3981999507e-3F;
+    polynomial = polynomial * reduced + 8.3334519073e-3F;
+    polynomial = polynomial * reduced + 4.1665795894e-2F;
+    polynomial = polynomial * reduced + 1.6666665459e-1F;
+    polynomial = polynomial * reduced + 5.0000001201e-1F;
+    polynomial = polynomial * (reduced * reduced) + reduced + 1.0F;
+    const std::int32_t bits = (static_cast<std::int32_t>(count) + 127) << 23;
+    float scale = 0.0F;
+    std::memcpy(&scale, &bits, sizeof(scale));
+    const float result = polynomial * scale;
+    return value == value ? result : value;
+}
+
+// Shared terms of the GELU derivatives at one input.
+struct GeluTerms {
+    float square;
+    float hyperbolic;
+    float slope;
+    float clamp;
+    float inner_slope;
+    float inner_derivative;
+};
+
+// The clamp contributes the compositional graph's piecewise factor: 1
+// inside, 0 outside and 1/2 on an exact boundary, because math.abs has
+// derivative 0 at 0 and no curvature.
+[[gnu::always_inline]] inline GeluTerms gelu_terms(float value) {
+#pragma clang fp contract(off)
+    GeluTerms terms{};
+    terms.square = value * value;
+    const float cubic = terms.square * value;
+    const float inner = (value + cubic * 0.044715F) * 0.7978845608028654F;
+    const float lower = inner + 20.0F;
+    const float lifted = ((inner - 20.0F) + std::fabs(lower)) * 0.5F;
+    const float upper = lifted - 20.0F;
+    const float limited = ((lifted + 20.0F) - std::fabs(upper)) * 0.5F;
+    const float exponent = derivative_exp(limited * 2.0F);
+    const float denominator = exponent + 1.0F;
+    terms.hyperbolic = (exponent - 1.0F) / denominator;
+    terms.clamp =
+        ((1.0F + activation_abs_derivative(lower)) * 0.5F) *
+        ((1.0F - activation_abs_derivative(upper)) * 0.5F);
+    // d tanh / d z = 4 e / (e + 1)^2, i.e. 1 - tanh^2 without cancellation.
+    terms.slope = (4.0F * exponent) / (denominator * denominator);
+    terms.inner_slope = terms.slope * terms.clamp;
+    terms.inner_derivative =
+        0.7978845608028654F * (1.0F + (3.0F * 0.044715F) * terms.square);
+    return terms;
+}
+
+[[gnu::always_inline]] inline float gelu_first_from(
+    float value, const GeluTerms& terms) {
+#pragma clang fp contract(off)
+    return 0.5F * (1.0F + terms.hyperbolic) +
+           ((0.5F * value) * terms.inner_slope) * terms.inner_derivative;
+}
+
+// First derivative of gelu_expression, for the first-order backward. It
+// returns by value and inlines, so the backward loop needs no call per
+// element and no second derivative it would discard.
+[[gnu::always_inline]] inline float gelu_first_derivative(float value) {
+    return gelu_first_from(value, gelu_terms(value));
+}
+
+// First and second derivative of gelu_expression (second backward).
+[[gnu::always_inline]] inline void gelu_derivatives(
+    float value, float& first, float& second) {
+#pragma clang fp contract(off)
+    const GeluTerms terms = gelu_terms(value);
+    const float hyperbolic = terms.hyperbolic;
+    const float slope = terms.slope;
+    const float clamp = terms.clamp;
+    const float inner_slope = terms.inner_slope;
+    const float inner_derivative = terms.inner_derivative;
+    first = gelu_first_from(value, terms);
+    // tanh'' times the square of d limited / dx = clamp * inner_derivative.
+    // Squaring that product keeps the term exactly 0 outside the clamp
+    // window, where inner_derivative^2 alone overflows float32 for
+    // |x| >= 1.3128e10 (the forward stays finite up to |x| = 6.9815e12) and
+    // clamp^2 * inf would be NaN. Inside the window clamp is 1 (1/2 on an
+    // exact boundary: a power of two), so every rounding equals that of
+    // (curvature * clamp^2) * (inner_derivative * inner_derivative).
+    const float curvature = (-2.0F * hyperbolic) * slope;
+    const float limited_derivative = clamp * inner_derivative;
+    const float inner_curvature =
+        0.7978845608028654F * ((6.0F * 0.044715F) * value);
+    second = inner_slope * inner_derivative +
+             (0.5F * value) *
+                 (curvature * (limited_derivative * limited_derivative) +
+                  inner_slope * inner_curvature);
+}
+
+bool activation_cpu_tensor(const void* tensor, std::uint64_t count) {
+    return tensor &&
+           qcore_tensor_dtype(tensor) == QCORE_DTYPE_FLOAT32 &&
+           qcore_tensor_backend(tensor) == QCORE_BACKEND_CPU &&
+           qcore_tensor_is_contiguous(tensor) != 0 &&
+           qcore_tensor_element_count(tensor) == count;
+}
+
+int activation_backward_impl(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata,
+    std::uint64_t metadata_size,
+    bool internal) {
+    NnActivation activation{};
+    if (!saved_tensors || saved_tensor_count != 1 || !saved_tensors[0] ||
+        !gradient_output || !gradient_inputs || gradient_input_count != 1 ||
+        !gradient_inputs[0] || !metadata || metadata_size != 1 ||
+        !activation_from_id(*static_cast<const std::uint8_t*>(metadata),
+                            activation)) {
+        return 501;
+    }
+    const void* input_tensor = saved_tensors[0];
+    if (qcore_tensor_backend(input_tensor) == QCORE_BACKEND_METAL) {
+#ifdef __APPLE__
+        const auto launch = internal ? nn_metal_activation_backward_internal
+                                     : nn_metal_activation_backward;
+        return launch(input_tensor, gradient_output, gradient_inputs[0],
+                      static_cast<long long>(activation)) == 0 ? 0 : 502;
+#else
+        return 502;
+#endif
+    }
+    const auto count = qcore_tensor_element_count(input_tensor);
+    if (!activation_cpu_tensor(input_tensor, count) ||
+        !activation_cpu_tensor(gradient_output, count) ||
+        !activation_cpu_tensor(gradient_inputs[0], count)) {
+        return 503;
+    }
+    // Empty tensors have no host storage (NULL data) and nothing to write.
+    if (count == 0) return 0;
+    const auto* input = static_cast<const float*>(
+        qcore_tensor_cpu_data_const(input_tensor));
+    const auto* upstream = static_cast<const float*>(
+        qcore_tensor_cpu_data_const(gradient_output));
+    auto* gradient = static_cast<float*>(
+        qcore_tensor_cpu_data(gradient_inputs[0]));
+    if (!input || !upstream || !gradient) return 504;
+    if (activation == NnActivation::Relu) {
+        for (std::uint64_t index = 0; index < count; ++index) {
+            // The compositional ReLU graph: s = g / 2; dx = s + s * abs'(x).
+            const float half = upstream[index] * 0.5F;
+            gradient[index] =
+                half + half * activation_abs_derivative(input[index]);
+        }
+    } else {
+        for (std::uint64_t index = 0; index < count; ++index)
+            gradient[index] =
+                upstream[index] * gelu_first_derivative(input[index]);
+    }
+    return 0;
+}
+
+int activation_backward_f32(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata,
+    std::uint64_t metadata_size) {
+    return activation_backward_impl(
+        saved_tensors, saved_tensor_count, gradient_output, gradient_inputs,
+        gradient_input_count, metadata, metadata_size, false);
+}
+
+// For the activation of a Conv2D fusion target: its input is the fused
+// call's pre-activation tensor, which only NN's Conv2D node reads, so the
+// Metal kernel need not wait (nn_metal_activation_backward_internal).
+int activation_backward_internal_f32(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata,
+    std::uint64_t metadata_size) {
+    return activation_backward_impl(
+        saved_tensors, saved_tensor_count, gradient_output, gradient_inputs,
+        gradient_input_count, metadata, metadata_size, true);
+}
+
+// Adjoint of dx = g * f'(x): gradient_inputs are (d/dx, d/dg).
+int activation_second_backward_f32(
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata,
+    std::uint64_t metadata_size) {
+    NnActivation activation{};
+    if (!saved_tensors || saved_tensor_count != 2 ||
+        !saved_tensors[0] || !saved_tensors[1] || !gradient_output ||
+        !gradient_inputs || gradient_input_count != 2 ||
+        !gradient_inputs[0] || !gradient_inputs[1] ||
+        !metadata || metadata_size != 1 ||
+        !activation_from_id(*static_cast<const std::uint8_t*>(metadata),
+                            activation)) {
+        return 511;
+    }
+    const void* input_tensor = saved_tensors[0];
+    if (qcore_tensor_backend(input_tensor) == QCORE_BACKEND_METAL) {
+#ifdef __APPLE__
+        return nn_metal_activation_second_backward(
+                   input_tensor, saved_tensors[1], gradient_output,
+                   gradient_inputs[0], gradient_inputs[1],
+                   static_cast<long long>(activation)) == 0 ? 0 : 512;
+#else
+        return 512;
+#endif
+    }
+    const auto count = qcore_tensor_element_count(input_tensor);
+    if (!activation_cpu_tensor(input_tensor, count) ||
+        !activation_cpu_tensor(saved_tensors[1], count) ||
+        !activation_cpu_tensor(gradient_output, count) ||
+        !activation_cpu_tensor(gradient_inputs[0], count) ||
+        !activation_cpu_tensor(gradient_inputs[1], count)) {
+        return 513;
+    }
+    if (count == 0) return 0;
+    const auto* input = static_cast<const float*>(
+        qcore_tensor_cpu_data_const(input_tensor));
+    const auto* first_upstream = static_cast<const float*>(
+        qcore_tensor_cpu_data_const(saved_tensors[1]));
+    const auto* upstream = static_cast<const float*>(
+        qcore_tensor_cpu_data_const(gradient_output));
+    auto* gradient_input = static_cast<float*>(
+        qcore_tensor_cpu_data(gradient_inputs[0]));
+    auto* gradient_first = static_cast<float*>(
+        qcore_tensor_cpu_data(gradient_inputs[1]));
+    if (!input || !first_upstream || !upstream ||
+        !gradient_input || !gradient_first) {
+        return 514;
+    }
+    if (activation == NnActivation::Relu) {
+        for (std::uint64_t index = 0; index < count; ++index) {
+            // Same rules as relu_training_second_backward_f32: math.abs has
+            // zero curvature, preserving inf/NaN propagation.
+            const float sign = activation_abs_derivative(input[index]);
+            const float first_half = first_upstream[index] * 0.5F;
+            gradient_input[index] = (upstream[index] * first_half) * 0.0F;
+            gradient_first[index] =
+                upstream[index] * 0.5F + (upstream[index] * sign) * 0.5F;
+        }
+    } else {
+        for (std::uint64_t index = 0; index < count; ++index) {
+            float first = 0.0F;
+            float second = 0.0F;
+            gelu_derivatives(input[index], first, second);
+            gradient_input[index] =
+                (upstream[index] * first_upstream[index]) * second;
+            gradient_first[index] = upstream[index] * first;
+        }
+    }
+    return 0;
+}
+
+int activation_backward_tracked_f32(
+    const void* const* differentiable_inputs,
+    std::uint64_t differentiable_input_count,
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata,
+    std::uint64_t metadata_size) {
+    if (!differentiable_inputs || differentiable_input_count != 1 ||
+        !differentiable_inputs[0] || !gradient_output) {
+        return 521;
+    }
+    const int status = activation_backward_f32(
+        saved_tensors, saved_tensor_count, gradient_output,
+        gradient_inputs, gradient_input_count, metadata, metadata_size);
+    if (status != 0) return status;
+    const void* parents[] = {differentiable_inputs[0], gradient_output};
+    return qcore_tensor_attach_custom_autograd_ex(
+               gradient_inputs[0], parents, 2,
+               activation_second_backward_f32, nullptr,
+               metadata, metadata_size) == 0 ? 0 : 522;
+}
+
+// One custom autograd node for an activation output (no-op when the input
+// is untracked).
+int attach_activation_autograd(
+    const void* input, void* output, long long activation,
+    bool internal_input = false) {
+    const auto metadata = static_cast<std::uint8_t>(activation);
+    const void* inputs[] = {input};
+    return qcore_tensor_attach_custom_autograd_ex(
+        output, inputs, 1,
+        internal_input ? activation_backward_internal_f32
+                       : activation_backward_f32,
+        activation_backward_tracked_f32,
+        &metadata, sizeof(metadata));
+}
+
+} // namespace
+
+// Global average pooling y[n, c] = sum(x[n, c, :, :]) / (H * W) and its
+// adjoint u[n, c, y, x] = g[n, c] / (H * W). Both are linear, so each one's
+// backward is the other and every order of differentiation stays available
+// (the compositional gather/sum_last graph also supported any order). The
+// forward sums each plane left to right like math.sum_last and divides by
+// the float32 plane size, bit-identical to the former composition on CPU.
+namespace {
+
+bool pooling_cpu_shapes(
+    const void* planes, const void* rows,
+    std::uint64_t& row_count, std::uint64_t& plane) {
+    if (!planes || !rows ||
+        qcore_tensor_dtype(planes) != QCORE_DTYPE_FLOAT32 ||
+        qcore_tensor_dtype(rows) != QCORE_DTYPE_FLOAT32 ||
+        qcore_tensor_backend(planes) != QCORE_BACKEND_CPU ||
+        qcore_tensor_backend(rows) != QCORE_BACKEND_CPU ||
+        !qcore_tensor_is_contiguous(planes) ||
+        !qcore_tensor_is_contiguous(rows) ||
+        qcore_tensor_rank(planes) != 4 || qcore_tensor_rank(rows) != 2 ||
+        qcore_tensor_extent(planes, 0) != qcore_tensor_extent(rows, 0) ||
+        qcore_tensor_extent(planes, 1) != qcore_tensor_extent(rows, 1)) {
+        return false;
+    }
+    row_count = qcore_tensor_element_count(rows);
+    const auto total = qcore_tensor_element_count(planes);
+    if (row_count == 0 || total % row_count != 0) return false;
+    plane = total / row_count;
+    return plane != 0;
+}
+
+int pool_forward(const void* input, void* output) {
+    if (qcore_tensor_backend(input) == QCORE_BACKEND_METAL) {
+#ifdef __APPLE__
+        return nn_metal_global_average_pool(input, output) == 0 ? 0 : 1;
+#else
+        return 1;
+#endif
+    }
+    std::uint64_t rows = 0;
+    std::uint64_t plane = 0;
+    if (!pooling_cpu_shapes(input, output, rows, plane)) return 2;
+    const auto* source =
+        static_cast<const float*>(qcore_tensor_cpu_data_const(input));
+    auto* destination = static_cast<float*>(qcore_tensor_cpu_data(output));
+    if (!source || !destination) return 3;
+    const auto divisor = static_cast<float>(plane);
+    for (std::uint64_t row = 0; row < rows; ++row) {
+        const float* values = source + row * plane;
+        float sum = values[0];
+        for (std::uint64_t index = 1; index < plane; ++index)
+            sum = sum + values[index];
+        destination[row] = sum / divisor;
+    }
+    return 0;
+}
+
+int pool_adjoint(const void* gradient, void* output) {
+    if (qcore_tensor_backend(gradient) == QCORE_BACKEND_METAL) {
+#ifdef __APPLE__
+        return nn_metal_global_average_unpool(gradient, output) == 0 ? 0 : 1;
+#else
+        return 1;
+#endif
+    }
+    std::uint64_t rows = 0;
+    std::uint64_t plane = 0;
+    if (!pooling_cpu_shapes(output, gradient, rows, plane)) return 2;
+    const auto* source =
+        static_cast<const float*>(qcore_tensor_cpu_data_const(gradient));
+    auto* destination = static_cast<float*>(qcore_tensor_cpu_data(output));
+    if (!source || !destination) return 3;
+    const auto divisor = static_cast<float>(plane);
+    for (std::uint64_t row = 0; row < rows; ++row) {
+        const float value = source[row] / divisor;
+        float* values = destination + row * plane;
+        for (std::uint64_t index = 0; index < plane; ++index)
+            values[index] = value;
+    }
+    return 0;
+}
+
+int pool_backward_f32(
+    const void* const*, std::uint64_t saved_tensor_count,
+    const void* gradient_output, void* const* gradient_inputs,
+    std::uint64_t gradient_input_count, const void*, std::uint64_t) {
+    if (saved_tensor_count != 0 || !gradient_output || !gradient_inputs ||
+        gradient_input_count != 1 || !gradient_inputs[0])
+        return 601;
+    return pool_adjoint(gradient_output, gradient_inputs[0]) == 0 ? 0 : 602;
+}
+
+int unpool_backward_f32(
+    const void* const*, std::uint64_t saved_tensor_count,
+    const void* gradient_output, void* const* gradient_inputs,
+    std::uint64_t gradient_input_count, const void*, std::uint64_t) {
+    if (saved_tensor_count != 0 || !gradient_output || !gradient_inputs ||
+        gradient_input_count != 1 || !gradient_inputs[0])
+        return 611;
+    return pool_forward(gradient_output, gradient_inputs[0]) == 0 ? 0 : 612;
+}
+
+int unpool_backward_tracked_f32(
+    const void* const*, std::uint64_t,
+    const void* const*, std::uint64_t,
+    const void*, void* const*, std::uint64_t,
+    const void*, std::uint64_t);
+
+// Backward of the pool with provenance: the gradient is the adjoint of g,
+// itself a differentiable pooling-adjoint node of g.
+int pool_backward_tracked_f32(
+    const void* const* differentiable_inputs,
+    std::uint64_t differentiable_input_count,
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata,
+    std::uint64_t metadata_size) {
+    if (!differentiable_inputs || differentiable_input_count != 1)
+        return 621;
+    const int status = pool_backward_f32(
+        saved_tensors, saved_tensor_count, gradient_output, gradient_inputs,
+        gradient_input_count, metadata, metadata_size);
+    if (status != 0) return status;
+    const void* parents[] = {gradient_output};
+    return qcore_tensor_attach_custom_autograd_with_saved_ex(
+               gradient_inputs[0], parents, 1, nullptr, 0,
+               unpool_backward_f32, unpool_backward_tracked_f32,
+               nullptr, 0) == 0 ? 0 : 622;
+}
+
+int unpool_backward_tracked_f32(
+    const void* const* differentiable_inputs,
+    std::uint64_t differentiable_input_count,
+    const void* const* saved_tensors,
+    std::uint64_t saved_tensor_count,
+    const void* gradient_output,
+    void* const* gradient_inputs,
+    std::uint64_t gradient_input_count,
+    const void* metadata,
+    std::uint64_t metadata_size) {
+    if (!differentiable_inputs || differentiable_input_count != 1)
+        return 631;
+    const int status = unpool_backward_f32(
+        saved_tensors, saved_tensor_count, gradient_output, gradient_inputs,
+        gradient_input_count, metadata, metadata_size);
+    if (status != 0) return status;
+    const void* parents[] = {gradient_output};
+    return qcore_tensor_attach_custom_autograd_with_saved_ex(
+               gradient_inputs[0], parents, 1, nullptr, 0,
+               pool_backward_f32, pool_backward_tracked_f32,
+               nullptr, 0) == 0 ? 0 : 632;
+}
+
+} // namespace
+
+// Global average pooling of a dense float32 [N, C, H, W] CPU or Metal tensor
+// into [N, C] with one custom autograd node. It saves nothing: the gradient
+// does not depend on the input values.
+extern "C" std::int32_t nn_native_global_average_pool2d_f32(
+    const void* input,
+    void* output) {
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION ||
+        !input || !output ||
+        qcore_tensor_backend(input) != qcore_tensor_backend(output) ||
+        qcore_tensor_device(input) != qcore_tensor_device(output)) {
+        return 1;
+    }
+    const auto backend = qcore_tensor_backend(input);
+    if (backend != QCORE_BACKEND_CPU && backend != QCORE_BACKEND_METAL)
+        return 2;
+    if (pool_forward(input, output) != 0) return 3;
+    const void* inputs[] = {input};
+    return qcore_tensor_attach_custom_autograd_with_saved_ex(
+               output, inputs, 1, nullptr, 0,
+               pool_backward_f32, pool_backward_tracked_f32,
+               nullptr, 0) == 0 ? 0 : 4;
+}
+
+// -1 for a float32 CPU tensor, the device index for a float32 Metal tensor,
+// and -2 when NN has no fused elementwise/pooling kernel for the backend.
+extern "C" std::int32_t nn_native_fused_device_f32(
+    const void* input) {
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION || !input ||
+        qcore_tensor_dtype(input) != QCORE_DTYPE_FLOAT32) {
+        return -2;
+    }
+    if (qcore_tensor_backend(input) == QCORE_BACKEND_CPU) return -1;
+#ifdef __APPLE__
+    const auto device = nn_metal_device_f32(input);
+    if (device >= 0 &&
+        device <= static_cast<long long>(
+            std::numeric_limits<std::int32_t>::max())) {
+        return static_cast<std::int32_t>(device);
+    }
+#endif
+    return -2;
+}
+
+// output = activation(input) plus one custom autograd node (first order and
+// a tracked callback for backward(track = true)). Inputs must be dense; the
+// source-level caller never materializes a tracked tensor.
+extern "C" std::int32_t nn_native_activation_f32(
+    const void* input,
+    void* output,
+    long long activation_raw) {
+    NnActivation activation{};
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION ||
+        !input || !output || !activation_from_id(activation_raw, activation)) {
+        return 1;
+    }
+    const auto backend = qcore_tensor_backend(input);
+    if (qcore_tensor_backend(output) != backend ||
+        qcore_tensor_device(output) != qcore_tensor_device(input) ||
+        !same_tensor_shape(input, output)) {
+        return 2;
+    }
+    if (backend == QCORE_BACKEND_METAL) {
+#ifdef __APPLE__
+        if (nn_metal_activation_forward(input, output, activation_raw) != 0)
+            return 3;
+#else
+        return 3;
+#endif
+    } else if (backend == QCORE_BACKEND_CPU) {
+        const auto count = qcore_tensor_element_count(input);
+        if (!activation_cpu_tensor(input, count) ||
+            !activation_cpu_tensor(output, count)) {
+            return 4;
+        }
+        const auto* source =
+            static_cast<const float*>(qcore_tensor_cpu_data_const(input));
+        auto* destination = static_cast<float*>(qcore_tensor_cpu_data(output));
+        if (count != 0 && (!source || !destination)) return 5;
+        if (activation == NnActivation::Relu) {
+            for (std::uint64_t index = 0; index < count; ++index)
+                destination[index] = relu_expression(source[index]);
+        } else {
+            for (std::uint64_t index = 0; index < count; ++index)
+                destination[index] = gelu_expression(source[index]);
+        }
+    } else {
+        return 6;
+    }
+
+    return attach_activation_autograd(input, output, activation_raw) == 0
+               ? 0 : 7;
+}
+
+// Metal Conv2D + activation in one GPU round trip. Produces the tensors and
+// autograd nodes of nn_native_conv2d_f32 followed by nn_native_activation_f32:
+// conv_output carries the Conv2D node and activation_output the activation
+// node whose input is conv_output. conv_output must stay internal to the
+// caller (the activation backward does not wait for its Metal kernel; the
+// Conv2D backward that reads the result does). Other backends answer an
+// error so the caller runs the two operations.
+extern "C" std::int32_t nn_native_conv2d_activation_f32(
+    const void* input,
+    const void* weight,
+    const void* bias,
+    void* conv_output,
+    void* activation_output,
+    long long stride_raw,
+    long long padding_raw,
+    long long groups_raw,
+    long long activation_raw) {
+    NnActivation activation{};
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION ||
+        !input || !weight || !bias || !conv_output || !activation_output ||
+        !activation_from_id(activation_raw, activation) ||
+        qcore_tensor_backend(input) != QCORE_BACKEND_METAL) {
+        return 1;
+    }
+#ifdef __APPLE__
+    const int status = nn_metal_conv2d_activation_forward(
+        input, weight, bias, conv_output, activation_output,
+        stride_raw, padding_raw, groups_raw, activation_raw);
+    if (status != 0) return 100 + status;
+    if (attach_conv2d_metal_autograd(
+            input, weight, bias, conv_output,
+            stride_raw, padding_raw, groups_raw) != 0)
+        return 11;
+    return attach_activation_autograd(
+               conv_output, activation_output, activation_raw, true) == 0
+               ? 0 : 12;
+#else
+    (void)stride_raw;
+    (void)padding_raw;
+    (void)groups_raw;
+    return 2;
+#endif
+}
+
 extern "C" std::int32_t nn_native_relu_reuse_f32(void* value) {
     if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION || !value)
         return 1;
@@ -2764,6 +3921,39 @@ extern "C" std::int32_t nn_native_relu_reuse_f32(void* value) {
         data[index] = (input + std::fabs(input)) * 0.5F;
     }
     return 0;
+}
+
+// Test probe, not part of the Quidra-visible package API: how many NN Metal
+// commands of one kernel family (DispatchKind in native/nn_metal.mm)
+// completed in this process; 0 where NN has no Metal kernels. NN's native
+// Metal kernels and its portable fallback produce the same values, so tests
+// compare these counts around an operation to prove the native path ran.
+extern "C" std::int64_t nn_native_metal_dispatch_count(std::int32_t kind) {
+#ifdef __APPLE__
+    const auto count = nn_metal_dispatch_count(static_cast<int>(kind));
+    return count > static_cast<unsigned long long>(
+                       std::numeric_limits<std::int64_t>::max())
+               ? std::numeric_limits<std::int64_t>::max()
+               : static_cast<std::int64_t>(count);
+#else
+    (void)kind;
+    return 0;
+#endif
+}
+
+extern "C" std::int32_t nn_native_metal_device_f32(
+    const void* input) {
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION || !input)
+        return -1;
+#ifdef __APPLE__
+    const auto device = nn_metal_device_f32(input);
+    if (device >= 0 &&
+        device <= static_cast<long long>(
+            std::numeric_limits<std::int32_t>::max())) {
+        return static_cast<std::int32_t>(device);
+    }
+#endif
+    return -1;
 }
 
 extern "C" std::int32_t nn_native_is_cpu_f32(
@@ -3056,101 +4246,43 @@ std::int32_t conv2d_cpu_f32_impl(
         static_cast<float*>(qcore_tensor_cpu_data(output));
     if (!source || !weights || !biases || !destination) return 9;
 
+    const CpuConvGeometry geometry{
+        batches, channels_in, channels_out, weight_channels,
+        height, width, kernel_height, kernel_width,
+        output_height, output_width, stride, padding, groups
+    };
+    cpu_conv_forward_sums(source, weights, destination, geometry);
+    const auto output_plane = output_height * output_width;
     for (std::size_t batch = 0; batch < batches; ++batch) {
-        for (std::size_t group = 0; group < groups; ++group) {
-            const auto input_channel_base = group * weight_channels;
-            const auto output_channel_base = group * outputs_per_group;
-            for (std::size_t local_output = 0;
-                 local_output < outputs_per_group; ++local_output) {
-                const auto output_channel =
-                    output_channel_base + local_output;
-                for (std::size_t output_y = 0;
-                     output_y < output_height; ++output_y) {
-                    if (!multiply_ok(output_y, stride)) return 10;
-                    const auto window_y = output_y * stride;
-                    for (std::size_t output_x = 0;
-                         output_x < output_width; ++output_x) {
-                        if (!multiply_ok(output_x, stride)) return 10;
-                        const auto window_x = output_x * stride;
-                        float sum = 0.0F;
-                        for (std::size_t local_input = 0;
-                             local_input < weight_channels; ++local_input) {
-                            const auto input_channel =
-                                input_channel_base + local_input;
-                            for (std::size_t kernel_y = 0;
-                                 kernel_y < kernel_height; ++kernel_y) {
-                                if (window_y >
-                                    std::numeric_limits<std::size_t>::max() -
-                                        kernel_y) {
-                                    return 10;
-                                }
-                                const auto padded_y = window_y + kernel_y;
-                                if (padded_y < padding) continue;
-                                const auto source_y = padded_y - padding;
-                                if (source_y >= height) continue;
-                                for (std::size_t kernel_x = 0;
-                                     kernel_x < kernel_width; ++kernel_x) {
-                                    if (window_x >
-                                        std::numeric_limits<std::size_t>::max() -
-                                            kernel_x) {
-                                        return 10;
-                                    }
-                                    const auto padded_x = window_x + kernel_x;
-                                    if (padded_x < padding) continue;
-                                    const auto source_x = padded_x - padding;
-                                    if (source_x >= width) continue;
-
-                                    const auto source_index =
-                                        ((batch * channels_in + input_channel) *
-                                             height +
-                                         source_y) *
-                                            width +
-                                        source_x;
-                                    const auto weight_index =
-                                        ((output_channel * weight_channels +
-                                          local_input) *
-                                             kernel_height +
-                                         kernel_y) *
-                                            kernel_width +
-                                        kernel_x;
-                                    sum +=
-                                        source[source_index] *
-                                        weights[weight_index];
-                                }
-                            }
-                        }
-                        const auto output_index =
-                            ((batch * channels_out + output_channel) *
-                                 output_height +
-                             output_y) *
-                                output_width +
-                            output_x;
-                        const float biased =
-                            sum + biases[output_channel];
-                        if (apply_relu) {
-                            destination[output_index] =
-                                (biased + std::fabs(biased)) * 0.5F;
-                        } else if (apply_gelu) {
-                            const float cubic = biased * biased * biased;
-                            const float inner =
-                                (biased + cubic * 0.044715F) *
-                                0.7978845608028654F;
-                            const float lifted =
-                                (inner - 20.0F + std::fabs(inner + 20.0F)) *
-                                0.5F;
-                            const float limited =
-                                (lifted + 20.0F -
-                                 std::fabs(lifted - 20.0F)) * 0.5F;
-                            const float exponent =
-                                std::exp(limited * 2.0F);
-                            const float hyperbolic =
-                                (exponent - 1.0F) / (exponent + 1.0F);
-                            destination[output_index] =
-                                biased * 0.5F * (1.0F + hyperbolic);
-                        } else {
-                            destination[output_index] = biased;
-                        }
-                    }
+        for (std::size_t output_channel = 0; output_channel < channels_out;
+             ++output_channel) {
+            float* values = destination +
+                (batch * channels_out + output_channel) * output_plane;
+            for (std::size_t index = 0; index < output_plane; ++index) {
+                const float biased =
+                    values[index] + biases[output_channel];
+                if (apply_relu) {
+                    values[index] =
+                        (biased + std::fabs(biased)) * 0.5F;
+                } else if (apply_gelu) {
+                    const float cubic = biased * biased * biased;
+                    const float inner =
+                        (biased + cubic * 0.044715F) *
+                        0.7978845608028654F;
+                    const float lifted =
+                        (inner - 20.0F + std::fabs(inner + 20.0F)) *
+                        0.5F;
+                    const float limited =
+                        (lifted + 20.0F -
+                         std::fabs(lifted - 20.0F)) * 0.5F;
+                    const float exponent =
+                        std::exp(limited * 2.0F);
+                    const float hyperbolic =
+                        (exponent - 1.0F) / (exponent + 1.0F);
+                    values[index] =
+                        biased * 0.5F * (1.0F + hyperbolic);
+                } else {
+                    values[index] = biased;
                 }
             }
         }
@@ -3171,6 +4303,17 @@ std::int32_t conv2d_cpu_f32_impl(
     return 0;
 }
 
+extern "C" std::int32_t nn_native_conv2d_metal_f32(
+    const void* input,
+    const void* weight,
+    const void* bias,
+    void* output,
+    long long stride_raw,
+    long long padding_raw,
+    long long groups_raw);
+
+// Backend dispatcher for differentiable Conv2D: Metal tensors use the Metal
+// kernels, everything else the CPU kernel (which rejects non-CPU tensors).
 extern "C" std::int32_t nn_native_conv2d_f32(
     const void* input,
     const void* weight,
@@ -3179,10 +4322,44 @@ extern "C" std::int32_t nn_native_conv2d_f32(
     long long stride_raw,
     long long padding_raw,
     long long groups_raw) {
+    if (input && qcore_tensor_backend(input) == QCORE_BACKEND_METAL) {
+        return nn_native_conv2d_metal_f32(
+            input, weight, bias, output, stride_raw, padding_raw, groups_raw);
+    }
     return conv2d_cpu_f32_impl(
         input, weight, bias, output,
         stride_raw, padding_raw, groups_raw,
         false, false, true);
+}
+
+// Metal Conv2D: NN's direct convolution plus one custom autograd node that
+// saves input/weight/bias and the stride/padding/groups metadata. Tracked
+// inputs must already be dense; the bridge never materializes them.
+extern "C" std::int32_t nn_native_conv2d_metal_f32(
+    const void* input,
+    const void* weight,
+    const void* bias,
+    void* output,
+    long long stride_raw,
+    long long padding_raw,
+    long long groups_raw) {
+    if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION ||
+        !input || !weight || !bias || !output) {
+        return 1;
+    }
+#ifdef __APPLE__
+    const int status = nn_metal_conv2d_forward(
+        input, weight, bias, output, stride_raw, padding_raw, groups_raw);
+    if (status != 0) return 100 + status;
+    return attach_conv2d_metal_autograd(
+               input, weight, bias, output,
+               stride_raw, padding_raw, groups_raw) == 0 ? 0 : 11;
+#else
+    (void)stride_raw;
+    (void)padding_raw;
+    (void)groups_raw;
+    return 2;
+#endif
 }
 
 extern "C" std::int32_t nn_native_conv2d_relu_inference_f32(

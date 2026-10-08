@@ -1,0 +1,210 @@
+// NN operations on a Metal GPU must run NN's native Metal kernels, not the
+// portable fallback. Both produce the same values, so the value checks in
+// metal_native.qui cannot tell them apart: a pipeline that fails to compile
+// or a kernel status error would silently fall back and still pass. This
+// test reads NN's per-kernel-family dispatch counter around each operation.
+// The counter is a test probe exported by native/nn_native.cpp
+// (nn_native_metal_dispatch_count); it is not part of the nn API.
+//
+// Run by real_gpu_integration.sh on a Metal GPU; each check prints one line
+// ending in "true" when it passes.
+import nn
+import math
+
+cli args
+    int device = option(default = 0)
+
+extern int metal_dispatches(int32 kind) = "nn_native_metal_dispatch_count"
+
+// DispatchKind in native/nn_metal.mm.
+class Kinds
+    int conv2d_forward
+    int conv2d_backward
+    int activation_forward
+    int activation_backward
+    int activation_backward_internal
+    int global_average_pool
+    int global_average_unpool
+    int adam_update
+    int conv2d_activation_forward
+
+Kinds kinds()
+    Kinds kind
+    kind.conv2d_forward = 1
+    kind.conv2d_backward = 2
+    kind.activation_forward = 6
+    kind.activation_backward = 7
+    kind.activation_backward_internal = 8
+    kind.global_average_pool = 10
+    kind.global_average_unpool = 11
+    kind.adam_update = 12
+    kind.conv2d_activation_forward = 13
+    return kind
+
+// Dispatch counts of every kind, 1..13.
+int[] counts()
+    int[] values = []
+    for kind in range(1, 14)
+        values = values.append(metal_dispatches(int32(kind)))
+    return values
+
+// Dispatches of `kind` between two snapshots.
+int delta(int[] before, int[] after, int kind)
+    return after[kind - 1] - before[kind - 1]
+
+// True when exactly the listed kinds ran, each `expected[i]` times.
+bool exactly(int[] before, int[] after, int[] listed, int[] expected)
+    for kind in range(1, 14)
+        int wanted = 0
+        for index in range(len(listed))
+            if listed[index] == kind
+                wanted = expected[index]
+        if delta(before, after, kind) != wanted
+            print("  kind {kind}: {delta(before, after, kind)} dispatches, expected {wanted}{NL}")
+            return false
+    return true
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+tensor<float32> uniform(int[] shape, int seed, int device)
+    int count = 1
+    for extent in shape
+        count = count * extent
+    tensor<float32> flat = nn.uniform_weights(count, 1.0, seed)
+    return flat.reshape(shape).gpu(device)
+
+class Net
+    nn.Conv2D convolution
+
+Net net_on(int channels_in, int channels_out, int stride, int padding, int groups, int device)
+    Net net
+    net.convolution = nn.Conv2D(channels_in, channels_out, 3, stride = stride, padding = padding, seed = 5, groups = groups)
+    net.convolution.weight.replace(net.convolution.weight.raw().gpu(device))
+    net.convolution.bias.replace(net.convolution.bias.raw().gpu(device))
+    return net
+
+class Linear
+    nn.FC dense
+
+class Pair
+    nn.Parameter<float32> strided
+    nn.Parameter<float32> dense
+
+void activation_checks(int device)
+    Kinds kind = kinds()
+    tensor<float32> x = uniform([2, 3, 4, 5], 11, device)
+
+    int[] before = counts()
+    tensor<float32> relu = nn.relu(x)
+    report("metal relu forward is native", exactly(before, counts(), [kind.activation_forward], [1]))
+
+    before = counts()
+    tensor<float32> gelu = nn.gelu(x)
+    report("metal gelu forward is native", exactly(before, counts(), [kind.activation_forward], [1]))
+
+    tensor<float32> tracked = x.track()
+    before = counts()
+    math.sum(nn.relu(tracked)).backward(&tracked)
+    int[] after = counts()
+    report("metal tracked relu is native", delta(before, after, kind.activation_forward) == 1 and delta(before, after, kind.activation_backward) == 1)
+
+    tracked = x.track()
+    before = counts()
+    math.sum(nn.gelu(tracked)).backward(&tracked)
+    after = counts()
+    report("metal tracked gelu is native", delta(before, after, kind.activation_forward) == 1 and delta(before, after, kind.activation_backward) == 1)
+
+void pooling_checks(int device)
+    Kinds kind = kinds()
+    tensor<float32> x = uniform([2, 3, 4, 5], 12, device)
+    int[] before = counts()
+    tensor<float32> pooled = nn.global_average_pool2d(x)
+    report("metal global average pooling is native", exactly(before, counts(), [kind.global_average_pool], [1]))
+
+    tensor<float32> tracked = x.track()
+    before = counts()
+    math.sum(nn.global_average_pool2d(tracked)).backward(&tracked)
+    int[] after = counts()
+    report("metal tracked global average pooling is native", delta(before, after, kind.global_average_pool) == 1 and delta(before, after, kind.global_average_unpool) == 1)
+
+bool conv_is_native(int channels_in, int channels_out, int stride, int padding, int groups, int device)
+    Kinds kind = kinds()
+    Net net = net_on(channels_in, channels_out, stride, padding, groups, device)
+    tensor<float32> x = uniform([2, channels_in, 7, 6], 13, device)
+    int[] before = counts()
+    tensor<float32> output = net.convolution.forward(x)
+    bool untracked = exactly(before, counts(), [kind.conv2d_forward], [1])
+
+    tensor<float32> tracked = x.track()
+    before = counts()
+    math.sum(net.convolution.forward(tracked)).backward(&net, &tracked)
+    int[] after = counts()
+    bool both = delta(before, after, kind.conv2d_forward) == 1 and delta(before, after, kind.conv2d_backward) == 1
+    return untracked and both
+
+void conv_checks(int device)
+    report("metal conv2d 3x3 stride 1 padding 1 is native", conv_is_native(2, 3, 1, 1, 1, device))
+    report("metal conv2d stride 2 groups 2 is native", conv_is_native(4, 6, 2, 0, 2, device))
+
+// Conv2D followed by GELU: the compiler may select NN's fused target (one
+// Conv2D+activation command, an unwaited activation backward and one Conv2D
+// backward) or keep the separate calls; either way no portable graph runs.
+void fused_checks(int device)
+    Kinds kind = kinds()
+    Net net = net_on(1, 4, 2, 1, 1, device)
+    tensor<float32> x = uniform([3, 1, 9, 8], 14, device)
+    tensor<float32> tracked = x.track()
+    int[] before = counts()
+    math.mean(nn.gelu(net.convolution.forward(tracked))).backward(&net, &tracked)
+    int[] after = counts()
+    bool fused = delta(before, after, kind.conv2d_activation_forward) == 1 and delta(before, after, kind.activation_backward_internal) == 1
+    bool separate = delta(before, after, kind.conv2d_forward) == 1 and delta(before, after, kind.activation_forward) == 1 and delta(before, after, kind.activation_backward) == 1
+    bool backward = delta(before, after, kind.conv2d_backward) == 1
+    report("metal conv2d+gelu is native", (fused or separate) and backward)
+
+// Every Metal Parameter joins the fused Adam batch, including one whose
+// gradient arrives as a strided view (nn.FC's weight gradient from Math's
+// matmul backward can be one; a transpose always produces one).
+void | error adam_checks(int device)
+    Kinds kind = kinds()
+    Pair pair
+    pair.strided = nn.Parameter<float32>(value = uniform([3, 5], 15, device))
+    pair.dense = nn.Parameter<float32>(value = uniform([4], 16, device))
+    nn.Adam optimizer = try nn.Adam(rate = 0.01)
+    tensor<float32> strided = pair.strided.track()
+    tensor<float32> dense = pair.dense.track()
+    tensor<float32> loss = math.sum(strided.transpose(0, 1) * uniform([5, 3], 17, device)) + math.sum(dense * dense)
+    optimizer.zero_grad(&pair)
+    loss.backward(&pair)
+    bool strided_gradient = not pair.strided.gradient().untrack().is_contiguous()
+    int[] before = counts()
+    optimizer.step(&pair)
+    report("metal adam batches a strided gradient", strided_gradient and exactly(before, counts(), [kind.adam_update], [2]))
+
+    Linear linear
+    linear.dense = try nn.FC(6, 2, seed = 3)
+    linear.dense.weight.replace(linear.dense.weight.raw().gpu(device))
+    linear.dense.bias.replace(linear.dense.bias.raw().gpu(device))
+    nn.Adam fc_optimizer = try nn.Adam(rate = 0.01)
+    tensor<float32> samples = uniform([4, 6], 18, device)
+    tensor<float32> targets = tensor.zeros<float32>([4, 2])
+    for row in range(4)
+        targets[row, row % 2] = float32(1)
+    tensor<float32> fc_loss = nn.cross_entropy(linear.dense.forward(samples.track()), targets.gpu(device))
+    fc_optimizer.zero_grad(&linear)
+    fc_loss.backward(&linear)
+    before = counts()
+    fc_optimizer.step(&linear)
+    report("metal adam batches every fc parameter", exactly(before, counts(), [kind.adam_update], [2]))
+    return
+
+void | error run(int device)
+    activation_checks(device)
+    pooling_checks(device)
+    conv_checks(device)
+    fused_checks(device)
+    try adam_checks(device)
+    return
+
+run(args.device)

@@ -26,7 +26,7 @@ tensor<float32> output = nn.relu(layer.forward(input))
 nn.Adam optimizer = nn.Adam()
 ```
 
-NN may use cuDNN/NCCL and package-owned native kernels behind its own boundary. Generic GEMM/cuBLAS remains Math-owned. Core contains no NN-specific operation names, kernels, differentiation rules, or backend policy.
+NN may use cuDNN/NCCL and package-owned native kernels behind its own boundary; on macOS, NN-owned Metal kernels serve Conv2D, ReLU/GELU, global average pooling and Adam. Generic GEMM/cuBLAS remains Math-owned. Core contains no NN-specific operation names, kernels, differentiation rules, or backend policy.
 
 The state serializer is owned here. For compatibility with the pre-split DNN package, the on-disk state magic remains `QUIDRA_DNN_STATE`; ownership of that format is now NN.
 

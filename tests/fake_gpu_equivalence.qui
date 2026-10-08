@@ -285,6 +285,42 @@ int | error run()
         and cpu_accumulation_after < float32(0.8001)
     )
     print(NL)
+
+    // CPU ReLU/GELU run NN's fused kernels; the test backend keeps the
+    // compositional expression. Values and gradients must agree.
+    tensor<float32> activation_input = tensor.zeros<float32>([1, 6])
+    activation_input[0, 0] = float32(-3)
+    activation_input[0, 1] = float32(-0.5)
+    activation_input[0, 2] = float32(0)
+    activation_input[0, 3] = float32(0.25)
+    activation_input[0, 4] = float32(1.5)
+    activation_input[0, 5] = float32(7)
+    bool activation_values_match = true
+    bool activation_gradients_match = true
+    for activation in range(2)
+        tensor<float32> cpu_activation_input = activation_input.track()
+        tensor<float32> gpu_activation_input = activation_input.gpu(0).track()
+        tensor<float32> cpu_activation_output
+        tensor<float32> gpu_activation_output
+        if activation == 0
+            cpu_activation_output = nn.relu(cpu_activation_input)
+            gpu_activation_output = nn.relu(gpu_activation_input)
+        else
+            cpu_activation_output = nn.gelu(cpu_activation_input)
+            gpu_activation_output = nn.gelu(gpu_activation_input)
+        math.mean(cpu_activation_output * cpu_activation_output).backward(&cpu_activation_input)
+        math.mean(gpu_activation_output * gpu_activation_output).backward(&gpu_activation_input)
+        tensor<float32> cpu_activation_values = cpu_activation_output.untrack()
+        tensor<float32> gpu_activation_values = gpu_activation_output.untrack().cpu()
+        tensor<float32> cpu_activation_gradient = cpu_activation_input.grad.untrack()
+        tensor<float32> gpu_activation_gradient = gpu_activation_input.grad.untrack().cpu()
+        for column in range(6)
+            activation_values_match = activation_values_match and near(cpu_activation_values[0, column].item(), gpu_activation_values[0, column].item())
+            activation_gradients_match = activation_gradients_match and near(cpu_activation_gradient[0, column].item(), gpu_activation_gradient[0, column].item())
+    print(activation_values_match)
+    print(NL)
+    print(activation_gradients_match)
+    print(NL)
     return 0
 
 auto | error result = run()

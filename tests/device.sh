@@ -442,7 +442,7 @@ if [[ "$training_output" != "$training_expected" ]]; then
 fi
 
 equivalence_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$REPOSITORY_ROOT/tests/fake_gpu_equivalence.qui")"
-equivalence_expected="$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue')"
+equivalence_expected="$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue')"
 if [[ "$equivalence_output" != "$equivalence_expected" ]]; then
     echo "fake GPU CPU-equivalence regression failed:" >&2
     printf '%s\n' "$equivalence_output" >&2

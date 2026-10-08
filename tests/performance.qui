@@ -1,0 +1,107 @@
+// NN kernel timings for small/medium/large Conv2D and GELU shapes.
+//     quidra tests/performance.qui --device N [--reps R] [--sizes small,medium,large]
+// --device -1 is the CPU, otherwise a GPU index. Every timing ends with a
+// device synchronization. Backward timings seed the gradient through
+// nn.global_average_pool2d and math.mean so that the measurement stays
+// dominated by the NN layer under test.
+import nn
+import math
+
+cli args
+    int device = option(default = -1)
+    int reps = option(default = 3)
+    string sizes = option(default = "small,medium")
+
+class Layer
+    nn.Conv2D convolution
+
+tensor<float32> place(tensor<float32> value, int device)
+    if device >= 0
+        return value.gpu(device)
+    return value
+
+float milliseconds(time.Instant start, int reps)
+    return time.since(start, sync = true).seconds() * 1000.0 / float(reps)
+
+void | error bench(string name, int batches, int channels_in, int channels_out, int stride, int height, int width, int device, int reps)
+    Layer layer
+    layer.convolution = try nn.Conv2D(channels_in, channels_out, 3, stride = stride, padding = 1)
+    if device >= 0
+        layer.convolution.weight.replace(layer.convolution.weight.raw().gpu(device))
+        layer.convolution.bias.replace(layer.convolution.bias.raw().gpu(device))
+    tensor<float32> input = place(tensor.ones<float32>([batches, channels_in, height, width]) * float32(0.5), device)
+    nn.SGD optimizer = try nn.SGD(rate = 0.01)
+
+    // Warm-up compiles pipelines and native code paths.
+    tensor<float32> warm_input = input.track()
+    math.mean(nn.global_average_pool2d(nn.gelu(layer.convolution.forward(warm_input)))).backward(&layer)
+    float32 ignored = layer.convolution.forward(input).cpu()[0, 0, 0, 0].item()
+
+    time.Instant start = time.now()
+    for rep in range(reps)
+        tensor<float32> output = layer.convolution.forward(input)
+    float conv_forward = milliseconds(start, reps)
+
+    start = time.now()
+    for rep in range(reps)
+        tensor<float32> tracked = input.track()
+        tensor<float32> loss = math.mean(nn.global_average_pool2d(layer.convolution.forward(tracked)))
+        optimizer.zero_grad(&layer)
+        loss.backward(&layer, &tracked)
+    float conv_both = milliseconds(start, reps)
+
+    tensor<float32> activations = layer.convolution.forward(input)
+    start = time.now()
+    for rep in range(reps)
+        tensor<float32> output = nn.gelu(activations)
+    float gelu_forward = milliseconds(start, reps)
+
+    start = time.now()
+    for rep in range(reps)
+        tensor<float32> tracked = activations.track()
+        math.mean(nn.global_average_pool2d(nn.gelu(tracked))).backward(&tracked)
+    float gelu_both = milliseconds(start, reps)
+
+    print("{name} {batches}x{channels_in}x{height}x{width} conv{channels_in}->{channels_out}/s{stride}  conv2d forward {conv_forward:frac=2} ms  conv2d forward+backward {conv_both:frac=2} ms  gelu forward {gelu_forward:frac=2} ms  gelu forward+backward {gelu_both:frac=2} ms{NL}")
+    return
+
+// nn.cross_entropy forward+backward (the NanoTWICE loss) on few and many
+// rows. A last-axis reduction that reads every row back to the host
+// (per-row .item()) costs tens of microseconds per row on a GPU; native
+// reductions cost a small fraction of that. Reports the marginal cost per
+// row in microseconds.
+float loss_time(int rows, int device, int reps)
+    tensor<float32> samples = nn.uniform_weights(rows * 2, 2.0, 7)
+    tensor<float32> logits = place(samples.reshape([rows, 2]), device)
+    tensor<float32> target_values = tensor.zeros<float32>([rows, 2])
+    for row in range(rows)
+        target_values[row, row % 2] = float32(1)
+    tensor<float32> targets = place(target_values, device)
+    tensor<float32> warm = logits.track()
+    nn.cross_entropy(warm, targets).backward(&warm)
+    time.Instant start = time.now()
+    for rep in range(reps)
+        tensor<float32> tracked = logits.track()
+        nn.cross_entropy(tracked, targets).backward(&tracked)
+    return milliseconds(start, reps)
+
+void loss_bench(int device, int reps)
+    int few = 45
+    int many = 2880
+    float few_time = loss_time(few, device, reps)
+    float many_time = loss_time(many, device, reps)
+    float per_row = (many_time - few_time) * 1000.0 / float(many - few)
+    print("loss cross_entropy forward+backward {few} rows {few_time:frac=2} ms  {many} rows {many_time:frac=2} ms  per row {per_row:frac=2} us{NL}")
+
+string[] selected = args.sizes.split(",")
+for size in selected
+    if size == "small"
+        bench("small", 45, 1, 4, 2, 43, 64, args.device, args.reps)
+    elif size == "medium"
+        bench("medium", 32, 16, 16, 1, 128, 128, args.device, args.reps)
+    elif size == "large"
+        bench("large", 16, 64, 64, 1, 256, 256, args.device, args.reps)
+    elif size == "loss"
+        loss_bench(args.device, args.reps)
+    else
+        print("unknown size {size}{NL}")

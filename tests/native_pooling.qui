@@ -1,0 +1,91 @@
+// nn.global_average_pool2d's native kernel against the former compositional
+// graph on the CPU (values, gradients and three orders of autograd). Run by
+// integration.sh; every check prints one line ending in "true".
+import nn
+import math
+
+// The gather/sum_last composition NN used before the native kernel.
+tensor<float32> pool_reference(tensor<float32> value)
+    int[] shape = value.shape()
+    int batches = shape[0]
+    int channels = shape[1]
+    int count = shape[2] * shape[3]
+    int total_count = batches * channels * count
+    int[] flatten_indices = array(total_count, fill = 0)
+    for index in range(total_count)
+        flatten_indices[index] = index
+    tensor<float32> flattened = value.gather(flatten_indices, [batches, channels, count])
+    tensor<float32> means = math.sum_last(flattened) / float32(count)
+    int[] indices = array(batches * channels, fill = 0)
+    for index in range(batches * channels)
+        indices[index] = index * count
+    return means.gather(indices, [batches, channels])
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+bool identical(tensor<float32> left, tensor<float32> right)
+    tensor<float32> a = left.untrack().cpu()
+    tensor<float32> b = right.untrack().cpu()
+    if a.shape() != b.shape()
+        return false
+    return float(math.max_all(math.abs(a - b)).item()) == 0.0
+
+bool close(tensor<float32> left, tensor<float32> right, float tolerance)
+    tensor<float32> a = left.untrack().cpu()
+    tensor<float32> b = right.untrack().cpu()
+    if a.shape() != b.shape()
+        return false
+    float scale = 1.0 + float(math.max_all(math.abs(b)).item())
+    return float(math.max_all(math.abs(a - b)).item()) <= tolerance * scale
+
+tensor<float32> uniform(int[] shape, int seed)
+    int count = 1
+    for extent in shape
+        count = count * extent
+    tensor<float32> flat = nn.uniform_weights(count, 2.0, seed)
+    return flat.reshape(shape)
+
+class Orders
+    tensor<float32> first
+    tensor<float32> second
+    tensor<float32> third
+
+// loss = sum(w * pool(x)^3); three successive derivatives with respect to x.
+Orders orders(tensor<float32> base, tensor<float32> weights, bool native)
+    tensor<float32> x = base.track()
+    tensor<float32> pooled
+    if native
+        pooled = nn.global_average_pool2d(x)
+    else
+        pooled = pool_reference(x)
+    math.sum(pooled * pooled * pooled * weights).backward(&x, track = true)
+    tensor<float32> first = x.grad
+    x.clear_grad()
+    math.sum(first * first).backward(&x, track = true)
+    tensor<float32> second = x.grad
+    x.clear_grad()
+    math.sum(second).backward(&x)
+    Orders result
+    result.first = first.untrack()
+    result.second = second.untrack()
+    result.third = x.grad.untrack()
+    return result
+
+tensor<float32> input = uniform([3, 5, 6, 8], 21)
+report("pool forward matches the graph", identical(nn.global_average_pool2d(input), pool_reference(input)))
+tensor<float32> view = uniform([3, 5, 8, 6], 22).transpose(2, 3)
+report("pool strided input", identical(nn.global_average_pool2d(view), pool_reference(view)))
+
+tensor<float32> weights = uniform([3, 5], 23)
+Orders native_orders = orders(input, weights, true)
+Orders graph_orders = orders(input, weights, false)
+report("pool first derivative", close(native_orders.first, graph_orders.first, 0.000001))
+report("pool second derivative", close(native_orders.second, graph_orders.second, 0.000001))
+report("pool third derivative", close(native_orders.third, graph_orders.third, 0.000001))
+
+tensor<float32> tracked_view = uniform([2, 3, 5, 4], 24).track()
+math.sum(nn.global_average_pool2d(tracked_view.transpose(2, 3)) * uniform([2, 3], 25)).backward(&tracked_view)
+tensor<float32> reference_view = uniform([2, 3, 5, 4], 24).track()
+math.sum(pool_reference(reference_view.transpose(2, 3)) * uniform([2, 3], 25)).backward(&reference_view)
+report("pool tracked strided input", identical(tracked_view.grad, reference_view.grad))

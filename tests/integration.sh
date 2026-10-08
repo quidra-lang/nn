@@ -103,6 +103,65 @@ if [[ "$true_lines" -lt 5 ]]; then
     exit 1
 fi
 
+# NN's fused CPU activation kernels reproduce the package source
+# expressions exactly and carry first- and second-order autograd.
+activation_output="$(
+    QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+    "$QUIDRA" "$ROOT/tests/native_activations.qui"
+)"
+activation_expected_count="$(grep -c '^ *report("' "$ROOT/tests/native_activations.qui")"
+activation_passed_count="$(grep -c ' true$' <<< "$activation_output" || true)"
+if [[ "$activation_passed_count" -ne "$activation_expected_count" ]] ||
+   grep -Fq ' false' <<< "$activation_output"; then
+    echo "NN fused activation equivalence failed:" >&2
+    printf '%s\n' "$activation_output" >&2
+    exit 1
+fi
+
+# nn.softmax/nn.cross_entropy semantics against closed forms.
+loss_output="$(
+    QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+    "$QUIDRA" "$ROOT/tests/losses.qui"
+)"
+loss_expected_count="$(grep -c '^ *report("' "$ROOT/tests/losses.qui")"
+loss_passed_count="$(grep -c ' true$' <<< "$loss_output" || true)"
+if [[ "$loss_passed_count" -ne "$loss_expected_count" ]] ||
+   grep -Fq ' false' <<< "$loss_output"; then
+    echo "NN loss semantics failed:" >&2
+    printf '%s\n' "$loss_output" >&2
+    exit 1
+fi
+
+# NN's CPU Conv2D kernels agree with the portable graph and with finite
+# differences across stride/padding/group configurations.
+conv_output="$(
+    QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+    "$QUIDRA" "$ROOT/tests/native_conv.qui"
+)"
+conv_expected_count="$(grep -c '^ *report("' "$ROOT/tests/native_conv.qui")"
+conv_passed_count="$(grep -c ' true$' <<< "$conv_output" || true)"
+if [[ "$conv_passed_count" -ne "$conv_expected_count" ]] ||
+   grep -Fq ' false' <<< "$conv_output"; then
+    echo "NN CPU Conv2D equivalence failed:" >&2
+    printf '%s\n' "$conv_output" >&2
+    exit 1
+fi
+
+# NN's native global average pooling matches the former compositional graph
+# (values and three orders of autograd).
+pooling_output="$(
+    QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+    "$QUIDRA" "$ROOT/tests/native_pooling.qui"
+)"
+pooling_expected_count="$(grep -c '^ *report("' "$ROOT/tests/native_pooling.qui")"
+pooling_passed_count="$(grep -c ' true$' <<< "$pooling_output" || true)"
+if [[ "$pooling_passed_count" -ne "$pooling_expected_count" ]] ||
+   grep -Fq ' false' <<< "$pooling_output"; then
+    echo "NN native pooling equivalence failed:" >&2
+    printf '%s\n' "$pooling_output" >&2
+    exit 1
+fi
+
 ir="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" ir "$TMP/use-nn.qui")"
 if ! grep -Fq "compiler-extension nn.graph" <<< "$ir"; then
     echo "NN compiler extension was not registered" >&2

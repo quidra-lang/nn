@@ -1,0 +1,54 @@
+// Reads of a partially initialized, untracked GPU tensor through NN's Metal
+// paths (scenarios 0-3: nn.gelu, nn.relu, nn.global_average_pool2d,
+// Conv2D.forward). The portable graph on Core kernels stops each one with
+// Quidra runtime error[UNINITIALIZED]. NN's native Metal kernels get their
+// buffers through qcore_tensor_device_handle(_const) and rely on Core to
+// reject such views there; with a Core that does not, they compute on
+// unwritten memory instead. Tracked inputs are not affected: .track()
+// already rejects a partially initialized tensor.
+// real_gpu_integration.sh runs each scenario in its own process and
+// requires UNINITIALIZED once Core rejects such views.
+//
+//     quidra tests/metal_uninitialized.qui --device N --scenario K
+// prints "computed <value>" when the scenario finished without the error.
+import nn
+import math
+
+cli args
+    int device = option(default = 0)
+    int scenario = option(default = 0)
+
+class Net
+    nn.Conv2D convolution
+
+// Only element [0, 0, 0, 0] is written.
+tensor<float32> partial(int device)
+    tensor<float32> value = tensor<float32>([1, 1, 4, 4], gpu = device)
+    value[0, 0, 0, 0] = float32(1)
+    return value
+
+Net net_on(int device)
+    Net net
+    net.convolution = nn.Conv2D(1, 1, 3, padding = 1, seed = 2)
+    net.convolution.weight.replace(net.convolution.weight.raw().gpu(device))
+    net.convolution.bias.replace(net.convolution.bias.raw().gpu(device))
+    return net
+
+tensor<float32> run(int device, int scenario)
+    tensor<float32> input = partial(device)
+    if scenario == 0
+        return nn.gelu(input)
+    if scenario == 1
+        return nn.relu(input)
+    if scenario == 2
+        return nn.global_average_pool2d(input)
+    Net net = net_on(device)
+    return net.convolution.forward(input)
+
+float leading_value(tensor<float32> value)
+    int count = 1
+    for extent in value.shape()
+        count = count * extent
+    return float(value.cpu().reshape([count])[0].item())
+
+print("computed {leading_value(run(args.device, args.scenario))}{NL}")

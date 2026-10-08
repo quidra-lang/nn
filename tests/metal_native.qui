@@ -1,0 +1,560 @@
+// NN-owned Metal kernels against the CPU reference. Run by
+// real_gpu_integration.sh when the selected GPU is a Metal device; each check
+// prints one line ending in "true" when it passes.
+import nn
+import math
+
+cli args
+    int device = option(default = 0)
+
+float max_difference(tensor<float32> left, tensor<float32> right)
+    return float(math.max_all(math.abs(left - right)).item())
+
+float max_magnitude(tensor<float32> value)
+    return float(math.max_all(math.abs(value)).item())
+
+bool close(tensor<float32> expected, tensor<float32> actual, float tolerance)
+    if expected.shape() != actual.shape()
+        return false
+    return max_difference(expected, actual) <= tolerance * (1.0 + max_magnitude(expected))
+
+tensor<float32> uniform(int[] shape, int seed)
+    int count = 1
+    for extent in shape
+        count = count * extent
+    tensor<float32> flat = nn.uniform_weights(count, 1.0, seed)
+    return flat.reshape(shape)
+
+class ConvPair
+    nn.Conv2D host
+    nn.Conv2D metal
+
+ConvPair conv_pair(int channels_in, int channels_out, int kernel, int stride, int padding, int groups, int seed, int device)
+    ConvPair pair
+    pair.host = nn.Conv2D(channels_in, channels_out, kernel, stride = stride, padding = padding, seed = seed, groups = groups)
+    pair.host.bias.replace(uniform([channels_out], seed + 101))
+    pair.metal = nn.Conv2D(channels_in, channels_out, kernel, stride = stride, padding = padding, seed = seed, groups = groups)
+    pair.metal.weight.replace(pair.host.weight.raw().gpu(device))
+    pair.metal.bias.replace(pair.host.bias.raw().gpu(device))
+    return pair
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+// Forward: kernel 1x1/3x3, stride 1/2, padding 0/1, groups 1/>1, several
+// batches and channel counts.
+bool forward_case(int batches, int channels_in, int channels_out, int kernel, int stride, int padding, int groups, int height, int width, int seed, int device)
+    ConvPair pair = conv_pair(channels_in, channels_out, kernel, stride, padding, groups, seed, device)
+    tensor<float32> input = uniform([batches, channels_in, height, width], seed + 7)
+    tensor<float32> expected = pair.host.forward(input)
+    tensor<float32> actual = pair.metal.forward(input.gpu(device))
+    return actual.device() == device and close(expected, actual.cpu(), 0.00001)
+
+void forward_checks(int device)
+    bool passed = forward_case(1, 1, 1, 1, 1, 0, 1, 4, 5, 1, device)
+    passed = forward_case(2, 3, 4, 3, 1, 1, 1, 7, 6, 2, device) and passed
+    passed = forward_case(3, 4, 6, 3, 2, 1, 2, 9, 11, 3, device) and passed
+    passed = forward_case(2, 4, 4, 3, 2, 0, 4, 8, 8, 4, device) and passed
+    passed = forward_case(2, 6, 3, 1, 2, 0, 3, 5, 7, 5, device) and passed
+    passed = forward_case(1, 2, 2, 5, 3, 2, 1, 13, 10, 6, device) and passed
+    passed = forward_case(45, 8, 16, 3, 2, 1, 1, 11, 16, 7, device) and passed
+    report("metal conv2d forward", passed)
+
+    // A non-contiguous untracked input is densified explicitly on the GPU.
+    ConvPair pair = conv_pair(3, 2, 3, 1, 1, 1, 11, device)
+    tensor<float32> input = uniform([2, 3, 6, 5], 12)
+    tensor<float32> view = input.transpose(2, 3)
+    tensor<float32> expected = pair.host.forward(view.contiguous())
+    tensor<float32> actual = pair.metal.forward(input.gpu(device).transpose(2, 3))
+    report("metal conv2d strided input", close(expected, actual.cpu(), 0.00001))
+
+    // Direct convolution has one writer per output element.
+    tensor<float32> repeat_input = uniform([4, 3, 9, 9], 13).gpu(device)
+    tensor<float32> first = pair.metal.forward(repeat_input).cpu()
+    tensor<float32> second = pair.metal.forward(repeat_input).cpu()
+    report("metal conv2d deterministic", max_difference(first, second) == 0.0)
+
+class ConvModel
+    nn.Conv2D convolution
+
+class ConvGradients
+    tensor<float32> input
+    tensor<float32> weight
+    tensor<float32> bias
+    tensor<float32> loss
+
+// loss = sum(conv(x) * r) for a fixed random r, so every output position gets
+// a distinct upstream gradient.
+ConvGradients conv_gradients(nn.Conv2D convolution, tensor<float32> input, tensor<float32> upstream)
+    ConvModel model
+    model.convolution = convolution
+    tensor<float32> tracked = input.track()
+    tensor<float32> loss = math.sum(model.convolution.forward(tracked) * upstream)
+    nn.SGD optimizer = nn.SGD(rate = 0.1)
+    optimizer.zero_grad(&model)
+    loss.backward(&model, &tracked)
+    ConvGradients result
+    result.input = tracked.grad.untrack().cpu()
+    result.weight = model.convolution.weight.gradient().untrack().cpu()
+    result.bias = model.convolution.bias.gradient().untrack().cpu()
+    result.loss = loss.untrack().cpu()
+    return result
+
+bool gradient_case(int batches, int channels_in, int channels_out, int kernel, int stride, int padding, int groups, int height, int width, int seed, int device)
+    ConvPair pair = conv_pair(channels_in, channels_out, kernel, stride, padding, groups, seed, device)
+    tensor<float32> input = uniform([batches, channels_in, height, width], seed + 7)
+    tensor<float32> output_shape = pair.host.forward(input)
+    tensor<float32> upstream = uniform(output_shape.shape(), seed + 9)
+    ConvGradients expected = conv_gradients(pair.host, input, upstream)
+    ConvGradients actual = conv_gradients(pair.metal, input.gpu(device), upstream.gpu(device))
+    return close(expected.loss, actual.loss, 0.00001) and close(expected.input, actual.input, 0.00001) and close(expected.weight, actual.weight, 0.00001) and close(expected.bias, actual.bias, 0.00001)
+
+// Conv2D is linear in each of input, weight and bias, so central differences
+// of sum(conv * r) are exact up to float32 rounding.
+float central_difference(nn.Conv2D convolution, tensor<float32> input, tensor<float32> upstream, int which, int index, int device)
+    float32 step = float32(0.5)
+    tensor<float32> base
+    if which == 0
+        base = input.cpu()
+    elif which == 1
+        base = convolution.weight.raw().cpu()
+    else
+        base = convolution.bias.raw().cpu()
+    int[] shape = base.shape()
+    int count = 1
+    for extent in shape
+        count = count * extent
+    tensor<float32> flat = base.reshape([count])
+    tensor<float32> plus = flat.contiguous()
+    plus[index] = flat[index].item() + step
+    tensor<float32> minus = flat.contiguous()
+    minus[index] = flat[index].item() - step
+    float[] losses = []
+    for probe in [plus, minus]
+        tensor<float32> value = probe.reshape(shape).gpu(device)
+        // A fresh layer per probe: the original Parameters stay untouched.
+        nn.Conv2D shifted
+        shifted.weight = nn.Parameter<float32>(value = convolution.weight.raw())
+        shifted.bias = nn.Parameter<float32>(value = convolution.bias.raw())
+        shifted.step = convolution.step
+        shifted.border = convolution.border
+        shifted.group_count = convolution.group_count
+        tensor<float32> probe_input = input
+        if which == 0
+            probe_input = value
+        elif which == 1
+            shifted.weight.replace(value)
+        else
+            shifted.bias.replace(value)
+        tensor<float32> loss = math.sum(shifted.forward(probe_input) * upstream)
+        losses = losses.append(float(loss.cpu().item()))
+    return (losses[0] - losses[1]) / (2.0 * float(step))
+
+bool finite_difference_case(int device)
+    ConvPair pair = conv_pair(4, 6, 3, 2, 1, 2, 31, device)
+    tensor<float32> input = uniform([2, 4, 7, 9], 32).gpu(device)
+    tensor<float32> output = pair.metal.forward(input)
+    tensor<float32> upstream = uniform(output.shape(), 33).gpu(device)
+    ConvGradients analytic = conv_gradients(pair.metal, input, upstream)
+    tensor<float32> input_gradient = analytic.input.reshape([2 * 4 * 7 * 9])
+    tensor<float32> weight_gradient = analytic.weight.reshape([6 * 2 * 3 * 3])
+    bool passed = true
+    int[] input_probes = [0, 17, 63, 200, 503]
+    for index in input_probes
+        float numeric = central_difference(pair.metal, input, upstream, 0, index, device)
+        float analytic_value = float(input_gradient[index].item())
+        passed = passed and math.abs(numeric - analytic_value) <= 0.001 * (1.0 + math.abs(analytic_value))
+    int[] weight_probes = [0, 9, 55, 107]
+    for index in weight_probes
+        float numeric = central_difference(pair.metal, input, upstream, 1, index, device)
+        float analytic_value = float(weight_gradient[index].item())
+        passed = passed and math.abs(numeric - analytic_value) <= 0.001 * (1.0 + math.abs(analytic_value))
+    int[] bias_probes = [0, 5]
+    for index in bias_probes
+        float numeric = central_difference(pair.metal, input, upstream, 2, index, device)
+        float analytic_value = float(analytic.bias[index].item())
+        passed = passed and math.abs(numeric - analytic_value) <= 0.001 * (1.0 + math.abs(analytic_value))
+    return passed
+
+void gradient_checks(int device)
+    bool passed = gradient_case(1, 1, 1, 1, 1, 0, 1, 4, 5, 1, device)
+    passed = gradient_case(2, 3, 4, 3, 1, 1, 1, 7, 6, 2, device) and passed
+    passed = gradient_case(3, 4, 6, 3, 2, 1, 2, 9, 11, 3, device) and passed
+    passed = gradient_case(2, 4, 4, 3, 2, 0, 4, 8, 8, 4, device) and passed
+    passed = gradient_case(2, 6, 3, 1, 2, 0, 3, 5, 7, 5, device) and passed
+    passed = gradient_case(1, 2, 2, 5, 3, 2, 1, 13, 10, 6, device) and passed
+    passed = gradient_case(45, 4, 8, 3, 2, 1, 1, 22, 32, 7, device) and passed
+    report("metal conv2d gradients match cpu", passed)
+    report("metal conv2d finite differences", finite_difference_case(device))
+
+    // Every gradient element has exactly one writer.
+    ConvPair pair = conv_pair(4, 8, 3, 2, 1, 1, 41, device)
+    tensor<float32> input = uniform([16, 4, 20, 20], 42).gpu(device)
+    tensor<float32> upstream = uniform([16, 8, 10, 10], 43).gpu(device)
+    ConvGradients first = conv_gradients(pair.metal, input, upstream)
+    ConvGradients second = conv_gradients(pair.metal, input, upstream)
+    report("metal conv2d backward deterministic", max_difference(first.input, second.input) == 0.0 and max_difference(first.weight, second.weight) == 0.0 and max_difference(first.bias, second.bias) == 0.0)
+
+// Elementwise bit equality after moving both tensors to the CPU.
+bool identical(tensor<float32> left, tensor<float32> right)
+    tensor<float32> a = left.untrack().cpu()
+    tensor<float32> b = right.untrack().cpu()
+    if a.shape() != b.shape()
+        return false
+    return max_difference(a, b) == 0.0
+
+tensor<float32> activation_values(int count, int seed)
+    tensor<float32> values = nn.uniform_weights(count, 9.0, seed)
+    values[0] = float32(0)
+    values[1] = float32(-0.0)
+    values[2] = float32(30)
+    values[3] = float32(-30)
+    return values
+
+tensor<float32> activation_gradient(tensor<float32> base, tensor<float32> upstream, int activation)
+    tensor<float32> x = base.track()
+    tensor<float32> y
+    if activation == 1
+        y = nn.relu(x)
+    else
+        y = nn.gelu(x)
+    math.sum(y * upstream).backward(&x)
+    return x.grad.untrack().cpu()
+
+void activation_checks(int device)
+    tensor<float32> values = activation_values(4096, 51)
+    tensor<float32> metal_values = values.gpu(device)
+    tensor<float32> metal_relu = nn.relu(metal_values)
+    report("metal relu forward", metal_relu.device() == device and identical(nn.relu(values), metal_relu))
+    report("metal gelu forward", close(nn.gelu(values), nn.gelu(metal_values).cpu(), 0.000001))
+
+    tensor<float32> upstream = nn.uniform_weights(4096, 1.0, 52)
+    tensor<float32> metal_upstream = upstream.gpu(device)
+    report("metal relu gradient", identical(activation_gradient(values, upstream, 1), activation_gradient(metal_values, metal_upstream, 1)))
+    report("metal gelu gradient", close(activation_gradient(values, upstream, 2), activation_gradient(metal_values, metal_upstream, 2), 0.00001))
+
+    // Untracked views are densified on the GPU; tracked views keep the
+    // compositional graph.
+    tensor<float32> matrix = values.reshape([64, 64])
+    tensor<float32> metal_matrix = matrix.gpu(device)
+    report("metal strided activation", close(nn.gelu(matrix.transpose(0, 1)).contiguous(), nn.gelu(metal_matrix.transpose(0, 1)).cpu().contiguous(), 0.000001))
+    tensor<float32> tracked = metal_matrix.track()
+    math.sum(nn.gelu(tracked.transpose(0, 1))).backward(&tracked)
+    tensor<float32> host_tracked = matrix.track()
+    math.sum(nn.gelu(host_tracked.transpose(0, 1))).backward(&host_tracked)
+    report("metal tracked strided activation", close(host_tracked.grad.untrack(), tracked.grad.untrack().cpu(), 0.00001))
+
+    tensor<float32> first = nn.gelu(metal_values).cpu()
+    tensor<float32> second = nn.gelu(metal_values).cpu()
+    report("metal activation deterministic", identical(first, second))
+
+// The composed float32 graph of NN's GELU source expression, as evaluated
+// by backends without a fused kernel.
+tensor<float32> gelu_reference(tensor<float32> value)
+    tensor<float32> cubic = value * value * value
+    tensor<float32> inner = (value + cubic * float32(0.044715)) * float32(0.7978845608028654)
+    tensor<float32> lifted = (inner - 20.0 + math.abs(inner + 20.0)) / 2.0
+    tensor<float32> limited = (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
+    tensor<float32> exponent = math.exp(limited * 2.0)
+    tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
+    return value * 0.5 * (1.0 + hyperbolic)
+
+float power2(int exponent)
+    float result = 1.0
+    for step in range(math.abs(exponent))
+        if exponent > 0
+            result = result * 2.0
+        else
+            result = result * 0.5
+    return result
+
+// The dense inputs of native_activations.qui (all with a finite forward
+// value): every float32 in +-[7.32, 7.37], [5, 7.32) in steps of 2^-12,
+// [-12, 12] in steps of 2^-8, +-2^e (1 + k/32) for e in [-149, 42], +-0,
+// the largest subnormal, the smallest normal, x = 7.30049419 and the ends
+// of the range 1.3128e10 <= |x| <= 6.9815e12.
+tensor<float32> dense_gelu_values()
+    float32[] values = [float32(0), float32(-0.0)]
+    float32[] edges = [float32(1.1754942106924411e-38), float32(1.1754943508222875e-38), float32(7.30049419), float32(13128121344.0), float32(13128122368.0), float32(6981463048192.0)]
+    for value in edges
+        values = values.append(value)
+        values = values.append(-value)
+    float boundary_start = float(float32(7.32))
+    float boundary_ulp = power2(-21)
+    for index in range(104858)
+        float32 value = float32(boundary_start + float(index) * boundary_ulp)
+        values = values.append(value)
+        values = values.append(-value)
+    for index in range(9503)
+        float32 value = float32(5.0 + float(index) / 4096.0)
+        values = values.append(value)
+        values = values.append(-value)
+    for index in range(6145)
+        values = values.append(float32(-12.0 + float(index) / 256.0))
+    for exponent in range(-149, 43)
+        float scale = power2(exponent)
+        for step in range(32)
+            float32 value = float32(scale * (1.0 + float(step) / 32.0))
+            if float(value) <= 6981463048192.0
+                values = values.append(value)
+                values = values.append(-value)
+    tensor<float32> result = tensor.zeros<float32>([len(values)])
+    for index in range(len(values))
+        result[index] = values[index]
+    return result
+
+tensor<float> unit_first_derivative(tensor<float32> base, bool fused)
+    tensor<float32> x = base.track()
+    if fused
+        math.sum(nn.gelu(x)).backward(&x)
+    else
+        math.sum(gelu_reference(x)).backward(&x)
+    return float(x.grad.untrack().cpu())
+
+// Largest |actual - reference| / (1 + |reference|) over all elements.
+float scaled_difference(tensor<float> actual, tensor<float> reference)
+    return math.max_all(math.abs(actual - reference) / (1.0 + math.abs(reference))).item()
+
+// Fused GELU first derivative on Metal (unit upstream) over the dense
+// inputs. Bounds per element, metric |fused - reference| / (1 + |reference|):
+//   - vs the composed graph on Metal: bound 1e-5. The graph differentiates
+//     the float32 composition and cancels where tanh saturates (|x| around
+//     7.3, which the dense inputs cover); the fused kernel evaluates the
+//     analytic derivative. The graph runs on Core/Math Metal kernels
+//     compiled with fast math, so this bound depends on their math mode.
+//   - vs NN's CPU kernel: bound 1e-6. Both evaluate the same analytic
+//     derivative and differ only in the last bits, from Metal's exp against
+//     the CPU kernel's exp polynomial.
+void dense_gelu_checks(int device)
+    tensor<float32> values = dense_gelu_values()
+    tensor<float> metal_fused = unit_first_derivative(values.gpu(device), true)
+    tensor<float> metal_graph = unit_first_derivative(values.gpu(device), false)
+    tensor<float> cpu_fused = unit_first_derivative(values, true)
+    float to_graph = scaled_difference(metal_fused, metal_graph)
+    float to_cpu = scaled_difference(metal_fused, cpu_fused)
+    print("metal gelu dense first derivative over {values.shape()[0]} inputs (|d| / (1 + |reference|)): vs metal graph {to_graph}, vs cpu kernel {to_cpu}{NL}")
+    report("metal gelu dense first derivative finite", ((metal_fused - metal_fused) == 0.0).all())
+    report("metal gelu dense first derivative matches the graph", to_graph <= 0.00001)
+    report("metal gelu dense first derivative matches cpu", to_cpu <= 0.000001)
+
+// The NanoTWICE layer pattern: tracked Conv2D followed by GELU (compiler
+// fused into Conv2D.forward_gelu) on Metal matches the CPU gradients.
+void conv_gelu_check(int device)
+    ConvPair pair = conv_pair(4, 8, 3, 2, 1, 1, 61, device)
+    tensor<float32> input = uniform([6, 4, 11, 16], 62)
+    ConvModel host
+    host.convolution = pair.host
+    ConvModel metal
+    metal.convolution = pair.metal
+    tensor<float32> host_loss = math.mean(nn.gelu(host.convolution.forward(input.track())))
+    tensor<float32> metal_loss = math.mean(nn.gelu(metal.convolution.forward(input.gpu(device).track())))
+    nn.SGD optimizer = nn.SGD(rate = 0.1)
+    optimizer.zero_grad(&host)
+    optimizer.zero_grad(&metal)
+    host_loss.backward(&host)
+    metal_loss.backward(&metal)
+    report("metal conv gelu training gradients", close(host.convolution.weight.gradient().untrack(), metal.convolution.weight.gradient().untrack().cpu(), 0.00001) and close(host.convolution.bias.gradient().untrack(), metal.convolution.bias.gradient().untrack().cpu(), 0.00001))
+
+// nn.relu/nn.gelu(conv.forward(x)) reach the Conv2D fusion targets, which
+// run the convolution and the activation in one Metal round trip; values
+// (untracked and tracked) and gradients must match the CPU.
+bool fused_target_case(int activation, int device)
+    ConvPair pair = conv_pair(3, 4, 3, 2, 1, 1, 101, device)
+    tensor<float32> input = uniform([5, 3, 9, 10], 102)
+    tensor<float32> metal_input = input.gpu(device)
+    tensor<float32> host_output
+    tensor<float32> metal_output
+    if activation == 1
+        host_output = nn.relu(pair.host.forward(input))
+        metal_output = nn.relu(pair.metal.forward(metal_input))
+    else
+        host_output = nn.gelu(pair.host.forward(input))
+        metal_output = nn.gelu(pair.metal.forward(metal_input))
+    bool passed = close(host_output, metal_output.cpu(), 0.00001)
+    ConvModel host
+    host.convolution = pair.host
+    ConvModel metal
+    metal.convolution = pair.metal
+    tensor<float32> host_tracked = input.track()
+    tensor<float32> metal_tracked = metal_input.track()
+    tensor<float32> host_loss
+    tensor<float32> metal_loss
+    if activation == 1
+        host_loss = math.sum(nn.relu(host.convolution.forward(host_tracked)))
+        metal_loss = math.sum(nn.relu(metal.convolution.forward(metal_tracked)))
+    else
+        host_loss = math.sum(nn.gelu(host.convolution.forward(host_tracked)))
+        metal_loss = math.sum(nn.gelu(metal.convolution.forward(metal_tracked)))
+    nn.SGD optimizer = nn.SGD(rate = 0.1)
+    optimizer.zero_grad(&host)
+    optimizer.zero_grad(&metal)
+    host_loss.backward(&host, &host_tracked)
+    metal_loss.backward(&metal, &metal_tracked)
+    passed = passed and close(host_tracked.grad.untrack(), metal_tracked.grad.untrack().cpu(), 0.00001)
+    passed = passed and close(host.convolution.weight.gradient().untrack(), metal.convolution.weight.gradient().untrack().cpu(), 0.00001)
+    return passed and close(host.convolution.bias.gradient().untrack(), metal.convolution.bias.gradient().untrack().cpu(), 0.00001)
+
+// Planes of more than 64 values use the threadgroup tree reduction instead
+// of the CPU's left-to-right sum, so the two differ by the rounding of a
+// reordered sum, which grows slowly with the plane size and with
+// cancellation. The planes below (65 to 16385 values) cover reduction
+// widths from 2 to 256 lanes. Bounds in close()'s metric, max |metal -
+// cpu| / (1 + max |cpu|) per call:
+//   x uniform in [-1, 1]: bound 3e-7.
+//   x + r x^2, r uniform in [-1000, 1000] (mixed magnitudes, cancelling
+//   sums): bound 1e-5.
+// The CPU kernel equals the compositional gather/sum_last graph bit for bit
+// (native_pooling.qui), and the gradient (one division per element) must
+// be bitwise equal to the CPU.
+class PlaneCase
+    float difference
+    bool gradient_identical
+
+PlaneCase large_plane_case(int plane, bool mixed, int device)
+    int[] shape = [2, 3, 1, plane]
+    tensor<float32> values = uniform(shape, 74 + plane)
+    if mixed
+        tensor<float32> scale = nn.uniform_weights(6 * plane, 1000.0, 75 + plane)
+        values = values + scale.reshape(shape) * values * values
+    tensor<float32> metal_values = values.gpu(device)
+    tensor<float32> expected = nn.global_average_pool2d(values)
+    tensor<float32> actual = nn.global_average_pool2d(metal_values).cpu()
+    tensor<float32> weights = uniform([2, 3], 76 + plane)
+    tensor<float32> host_input = values.track()
+    math.sum(nn.global_average_pool2d(host_input) * weights).backward(&host_input)
+    tensor<float32> metal_input = metal_values.track()
+    math.sum(nn.global_average_pool2d(metal_input) * weights.gpu(device)).backward(&metal_input)
+    PlaneCase result
+    result.difference = max_difference(expected, actual) / (1.0 + max_magnitude(expected))
+    result.gradient_identical = identical(host_input.grad, metal_input.grad)
+    return result
+
+void pooling_checks(int device)
+    // Planes of at most 64 values take the sequential path: bitwise equal.
+    tensor<float32> small = uniform([45, 16, 6, 8], 71)
+    tensor<float32> metal_small = nn.global_average_pool2d(small.gpu(device))
+    report("metal pooling forward", metal_small.device() == device and identical(nn.global_average_pool2d(small), metal_small))
+    float uniform_difference = 0.0
+    float mixed_difference = 0.0
+    bool gradients_identical = true
+    int[] planes = [65, 128, 129, 257, 1600, 4097, 16385]
+    for plane in planes
+        PlaneCase plain = large_plane_case(plane, false, device)
+        PlaneCase mixed = large_plane_case(plane, true, device)
+        uniform_difference = math.max(uniform_difference, plain.difference)
+        mixed_difference = math.max(mixed_difference, mixed.difference)
+        gradients_identical = gradients_identical and plain.gradient_identical and mixed.gradient_identical
+    print("metal pooling planes above 64 (max |d| / (1 + max |cpu|)): uniform {uniform_difference}, mixed magnitudes {mixed_difference}{NL}")
+    report("metal pooling planes above 64", uniform_difference <= 0.0000003 and mixed_difference <= 0.00001 and gradients_identical)
+
+    tensor<float32> weights = uniform([45, 16], 73)
+    tensor<float32> host_input = small.track()
+    math.sum(nn.global_average_pool2d(host_input) * weights).backward(&host_input)
+    tensor<float32> metal_input = small.gpu(device).track()
+    math.sum(nn.global_average_pool2d(metal_input) * weights.gpu(device)).backward(&metal_input)
+    report("metal pooling gradient", identical(host_input.grad, metal_input.grad))
+
+class ParameterModel
+    nn.Parameter<float32> value
+
+// Adam's fused Metal update against the CPU kernel over several steps with
+// changing gradients (loss = sum(p^2 * r)).
+void adam_check(int device)
+    tensor<float32> initial = uniform([7, 5], 81)
+    tensor<float32> weights = uniform([7, 5], 82)
+    ParameterModel host
+    host.value = nn.Parameter<float32>(value = initial)
+    ParameterModel metal
+    metal.value = nn.Parameter<float32>(value = initial.gpu(device))
+    nn.Adam host_optimizer = nn.Adam(rate = 0.05)
+    nn.Adam metal_optimizer = nn.Adam(rate = 0.05)
+    tensor<float32> metal_weights = weights.gpu(device)
+    for step in range(4)
+        tensor<float32> host_value = host.value.track()
+        tensor<float32> metal_value = metal.value.track()
+        tensor<float32> host_loss = math.sum(host_value * host_value * weights)
+        tensor<float32> metal_loss = math.sum(metal_value * metal_value * metal_weights)
+        host_optimizer.zero_grad(&host)
+        metal_optimizer.zero_grad(&metal)
+        host_loss.backward(&host)
+        metal_loss.backward(&metal)
+        host_optimizer.step(&host)
+        metal_optimizer.step(&metal)
+    tensor<float32> metal_result = metal.value.raw()
+    report("metal adam update", metal_result.device() == device and close(host.value.raw(), metal_result.cpu(), 0.00001))
+
+// Core passes the upstream gradient to a custom node unchanged, so a view
+// taken of an NN output (here a transpose) hands NN's Metal nodes a strided
+// gradient. Every Metal node (activations, Conv2D, the fused Conv2D +
+// activation target, pooling) must still give the CPU gradients.
+tensor<float32> strided_output(int which, nn.Conv2D convolution, tensor<float32> input)
+    if which == 0
+        return nn.relu(input)
+    if which == 1
+        return nn.gelu(input)
+    if which == 2
+        return convolution.forward(input)
+    if which == 3
+        return nn.gelu(convolution.forward(input))
+    return nn.global_average_pool2d(input)
+
+bool strided_gradient_case(int which, int device)
+    ConvPair pair = conv_pair(3, 4, 3, 1, 1, 1, 141, device)
+    tensor<float32> input = uniform([2, 3, 6, 5], 142)
+    ConvModel host
+    host.convolution = pair.host
+    ConvModel metal
+    metal.convolution = pair.metal
+    tensor<float32> host_tracked = input.track()
+    tensor<float32> metal_tracked = input.gpu(device).track()
+    tensor<float32> host_output = strided_output(which, host.convolution, host_tracked)
+    tensor<float32> metal_output = strided_output(which, metal.convolution, metal_tracked)
+    tensor<float32> weights = uniform(host_output.transpose(0, 1).shape(), 143)
+    tensor<float32> host_loss = math.sum(host_output.transpose(0, 1) * weights)
+    tensor<float32> metal_loss = math.sum(metal_output.transpose(0, 1) * weights.gpu(device))
+    nn.SGD optimizer = nn.SGD(rate = 0.1)
+    optimizer.zero_grad(&host)
+    optimizer.zero_grad(&metal)
+    host_loss.backward(&host, &host_tracked)
+    metal_loss.backward(&metal, &metal_tracked)
+    bool passed = close(host_tracked.grad.untrack(), metal_tracked.grad.untrack().cpu(), 0.00001)
+    if which == 2 or which == 3
+        passed = passed and close(host.convolution.weight.gradient().untrack(), metal.convolution.weight.gradient().untrack().cpu(), 0.00001)
+        passed = passed and close(host.convolution.bias.gradient().untrack(), metal.convolution.bias.gradient().untrack().cpu(), 0.00001)
+    return passed
+
+void strided_gradient_checks(int device)
+    bool passed = true
+    for which in range(5)
+        passed = strided_gradient_case(which, device) and passed
+    report("metal strided upstream gradients", passed)
+
+// Contiguous views with a storage offset (a batch slice) bind their buffer
+// at the view's byte offset.
+void offset_checks(int device)
+    tensor<float32> values = uniform([4, 3, 6, 5], 91)
+    tensor<float32> host_view = values[1:3, :, :, :].contiguous()
+    tensor<float32> metal_view = values.gpu(device)[1:3, :, :, :]
+    ConvPair pair = conv_pair(3, 2, 3, 1, 1, 1, 92, device)
+    bool passed = metal_view.is_contiguous()
+    passed = passed and close(pair.host.forward(host_view), pair.metal.forward(metal_view).cpu(), 0.00001)
+    passed = passed and close(nn.gelu(host_view), nn.gelu(metal_view).cpu(), 0.000001)
+    passed = passed and identical(nn.global_average_pool2d(host_view), nn.global_average_pool2d(metal_view))
+    tensor<float32> tracked = metal_view.track()
+    math.sum(nn.gelu(tracked)).backward(&tracked)
+    tensor<float32> host_tracked = host_view.track()
+    math.sum(nn.gelu(host_tracked)).backward(&host_tracked)
+    passed = passed and close(host_tracked.grad.untrack(), tracked.grad.untrack().cpu(), 0.00001)
+    report("metal offset views", passed)
+
+forward_checks(args.device)
+offset_checks(args.device)
+gradient_checks(args.device)
+activation_checks(args.device)
+dense_gelu_checks(args.device)
+conv_gelu_check(args.device)
+report("metal fused conv relu target", fused_target_case(1, args.device))
+report("metal fused conv gelu target", fused_target_case(2, args.device))
+pooling_checks(args.device)
+strided_gradient_checks(args.device)
+adam_check(args.device)

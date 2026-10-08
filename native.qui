@@ -18,12 +18,37 @@ extern int32 cuda_device_f32(
     const tensor<float32> &input
 ) = "nn_native_cuda_device_f32"
 
+// Device index of a float32 tensor on a Metal GPU (any layout), or -1. NN's
+// Metal kernels are compiled only on macOS; other platforms always answer -1.
+extern int32 metal_device_f32(
+    const tensor<float32> &input
+) = "nn_native_metal_device_f32"
+
 // Exact package-owned CUDA activation epilogue. The activation id is private
 // NN policy: 1 = ReLU expression, 2 = GELU expression.
 extern int32 cuda_activation_inplace_f32(
     tensor<float32> &value,
     int activation
 ) = "nn_cuda_activation_inplace_f32"
+
+// Package-owned fused kernels for float32 tensors, tracked or not.
+// fused_device_f32 answers -1 for CPU, the Metal device index, or -2 when no
+// fused NN kernel serves the tensor's backend. The activation id is NN
+// policy shared with the CUDA epilogue: 1 = ReLU expression, 2 = GELU.
+extern int32 fused_device_f32(
+    const tensor<float32> &input
+) = "nn_native_fused_device_f32"
+
+extern int32 activation_f32(
+    const tensor<float32> &input,
+    tensor<float32> &output,
+    int activation
+) = "nn_native_activation_f32"
+
+extern int32 global_average_pool2d_f32(
+    const tensor<float32> &input,
+    tensor<float32> &output
+) = "nn_native_global_average_pool2d_f32"
 
 extern int32 fc_relu_inference_f32(
     const tensor<float32> &input,
@@ -49,6 +74,8 @@ extern int32 conv2d_cuda_f32(
     int groups
 ) = "nn_native_conv2d_cuda_f32"
 
+// NN-owned direct convolution with one custom autograd node. The native
+// dispatcher selects the CPU or Metal kernel from the tensors' backend.
 extern int32 conv2d_f32(
     const tensor<float32> &input,
     const tensor<float32> &weight,
@@ -58,6 +85,21 @@ extern int32 conv2d_f32(
     int padding,
     int groups
 ) = "nn_native_conv2d_f32"
+
+// Metal Conv2D followed by an NN activation (1 = ReLU, 2 = GELU) in one GPU
+// round trip, with the same two custom autograd nodes as the separate
+// operations. Other backends answer an error.
+extern int32 conv2d_activation_f32(
+    const tensor<float32> &input,
+    const tensor<float32> &weight,
+    const tensor<float32> &bias,
+    tensor<float32> &conv_output,
+    tensor<float32> &activation_output,
+    int stride,
+    int padding,
+    int groups,
+    int activation
+) = "nn_native_conv2d_activation_f32"
 
 extern int32 conv2d_relu_inference_f32(
     const tensor<float32> &input,
@@ -114,6 +156,33 @@ extern int32 nccl_all_reduce<T: floating>(
 
 extern int32 nccl_group_end() = "nn_native_nccl_group_end"
 
+
+// Metal fused Adam updates, batched per optimizer step: begin returns a
+// batch token (<= 0: no batch) owned by the calling step, then one encode per
+// float32 Parameter (fresh output tensors) into that batch, then one commit
+// of exactly the encoded count. A refused encode leaves that Parameter to the
+// element-wise update; a failed commit leaves every encoded Parameter to it.
+// The caller keeps every encoded tensor alive until the commit returns.
+extern int32 adam_metal_begin() = "nn_native_adam_metal_begin"
+
+extern int32 adam_metal_encode(
+    int batch,
+    const tensor<float32> &parameter,
+    const tensor<float32> &gradient,
+    const tensor<float32> &first,
+    const tensor<float32> &second,
+    tensor<float32> &next_parameter,
+    tensor<float32> &next_first,
+    tensor<float32> &next_second,
+    float beta1,
+    float beta2,
+    float one_minus_beta1,
+    float one_minus_beta2,
+    float adjusted_epsilon,
+    float step_scale
+) = "nn_native_adam_metal_encode"
+
+extern int32 adam_metal_commit(int batch, int expected) = "nn_native_adam_metal_commit"
 
 // CPU fused Adam update. The native implementation writes only fresh output
 // tensors; Parameter/state replacement remains explicit in NN Quidra code.

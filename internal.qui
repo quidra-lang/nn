@@ -5,13 +5,78 @@ import native = "./native.qui"
 // This module is imported without `public`, so these functions are not part
 // of the source-visible nn package API.
 
+// NN's exact ReLU and GELU source expressions. They define the activation
+// semantics; fused kernels must reproduce them.
+tensor<float32> relu_expression(tensor<float32> value)
+    return (value + math.abs(value)) / 2.0
+
+tensor<float32> gelu_expression(tensor<float32> value)
+    tensor<float32> cubic = value * value * value
+    tensor<float32> inner = (
+        value + cubic * float32(0.044715)
+    ) * float32(0.7978845608028654)
+    tensor<float32> lifted = (
+        inner - 20.0 + math.abs(inner + 20.0)
+    ) / 2.0
+    tensor<float32> limited = (
+        lifted + 20.0 - math.abs(lifted - 20.0)
+    ) / 2.0
+    tensor<float32> exponent = math.exp(limited * 2.0)
+    tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
+    return value * 0.5 * (1.0 + hyperbolic)
+
+// Core hands a custom native backward the upstream gradient unchanged, and
+// on a GPU that can be a strided view (for example the gradient reaching y
+// through y.transpose(0, 1)), while the native ABI exposes no strides. NN's
+// Metal nodes therefore return their tracked output through a same-shape
+// reshape view: Core's reshape backward always passes a dense gradient on
+// (the same buffer when it is already dense, one device copy otherwise).
+// Host gradients are always dense, so CPU outputs need no view.
+tensor<float32> dense_device_gradient(tensor<float32> output)
+    if output.is_tracked()
+        return output.reshape(output.shape())
+    return output
+
+// Fused activation for CPU and Metal float32 tensors, tracked or not: one
+// package-native kernel plus one custom autograd node with first- and
+// second-order callbacks. A tracked non-contiguous tensor is never
+// materialized (that would cut its graph); it and every other backend keep
+// the compositional expression.
+tensor<float32> fused_activation(tensor<float32> value, int activation)
+    int32 device = native.fused_device_f32(&value)
+    if device >= int32(-1)
+        tensor<float32> input = value
+        bool dense = input.is_contiguous()
+        if not dense and not input.is_tracked()
+            input = input.contiguous()
+            dense = true
+        if dense
+            tensor<float32> output
+            if device == int32(-1)
+                output = tensor.zeros<float32>(input.shape())
+            else
+                output = tensor.zeros<float32>(input.shape(), gpu = int(device))
+            if native.activation_f32(&input, &output, activation) == int32(0)
+                if device >= int32(0)
+                    return dense_device_gradient(output)
+                return output
+    if activation == 1
+        return relu_expression(value)
+    return gelu_expression(value)
+
+tensor<float32> relu_fused(tensor<float32> value)
+    return fused_activation(value, 1)
+
+tensor<float32> gelu_fused(tensor<float32> value)
+    return fused_activation(value, 2)
+
 // Compiler-selected last-use target. Core proves ownership/liveness only;
 // NN owns the ReLU semantics and the actual in-place package-native mutation.
 // CPU uses the native loop; CUDA uses NN's exact package-owned PTX epilogue.
 // Other devices and tracked values stay compositional.
 tensor<float32> relu_reuse(tensor<float32> value)
     if value.is_tracked() or not value.is_contiguous()
-        return (value + math.abs(value)) / 2.0
+        return relu_fused(value)
     if native.is_cpu_f32(&value) == int32(1)
         int32 status = native.relu_reuse_f32(&value)
         if status != int32(0)
@@ -21,7 +86,7 @@ tensor<float32> relu_reuse(tensor<float32> value)
         int32 status = native.cuda_activation_inplace_f32(&value, 1)
         if status == int32(0)
             return value
-    return (value + math.abs(value)) / 2.0
+    return relu_fused(value)
 
 // Compiler-selected training target for statically-known tracked contiguous
 // CPU float32 tensors. NN owns the activation and custom-autograd semantics;
@@ -29,7 +94,7 @@ tensor<float32> relu_reuse(tensor<float32> value)
 tensor<float32> relu_training(tensor<float32> value)
     tensor<float32> input = value
     if not input.is_tracked() or not input.is_contiguous() or native.is_cpu_f32(&input) != int32(1)
-        return (input + math.abs(input)) / 2.0
+        return relu_fused(input)
     tensor<float32> output = tensor.zeros<float32>(input.shape())
     int32 status = native.relu_training_f32(&input, &output)
     if status != int32(0)

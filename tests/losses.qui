@@ -1,0 +1,91 @@
+// nn.softmax and nn.cross_entropy semantics: row normalization, the loss
+// value and its gradient against closed forms. Run by integration.sh on the
+// CPU and by real_gpu_integration.sh with --device N on a GPU; every check
+// prints one line ending in "true".
+import nn
+import math
+
+cli args
+    int device = option(default = -1)
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+tensor<float32> place(tensor<float32> value, int device)
+    if device >= 0
+        return value.gpu(device)
+    return value
+
+int loss_rows()
+    return 45
+
+int loss_classes()
+    return 3
+
+tensor<float32> logits_values()
+    tensor<float32> flat = nn.uniform_weights(loss_rows() * loss_classes(), 4.0, 91)
+    return flat.reshape([loss_rows(), loss_classes()])
+
+// One-hot rows scaled by a per-row weight, as NanoTWICE's class weighting.
+tensor<float32> target_values()
+    tensor<float32> target = tensor.zeros<float32>([loss_rows(), loss_classes()])
+    for row in range(loss_rows())
+        target[row, row % loss_classes()] = float32(1 + row % 2)
+    return target
+
+void | error loss_checks(int device)
+    tensor<float32> logits = logits_values()
+    tensor<float32> target = target_values()
+    tensor<float32> probabilities = nn.softmax(place(logits, device)).cpu()
+    bool normalized = true
+    bool positive = true
+    for row in range(loss_rows())
+        float total = 0.0
+        for column in range(loss_classes())
+            float value = float(probabilities[row, column].item())
+            total = total + value
+            positive = positive and value > 0.0
+        normalized = normalized and math.abs(total - 1.0) <= 0.000001
+    report("softmax rows are normalized", normalized and positive)
+
+    // loss = mean over rows of -sum(t * log softmax(z)), evaluated in float64.
+    float expected = 0.0
+    for row in range(loss_rows())
+        float largest = float(logits[row, 0].item())
+        for column in range(1, loss_classes())
+            largest = math.max(largest, float(logits[row, column].item()))
+        float denominator = 0.0
+        for column in range(loss_classes())
+            denominator = denominator + math.exp(float(logits[row, column].item()) - largest)
+        float log_denominator = try math.log(denominator)
+        for column in range(loss_classes())
+            float log_probability = float(logits[row, column].item()) - largest - log_denominator
+            expected = expected - float(target[row, column].item()) * log_probability
+    expected = expected / float(loss_rows())
+
+    tensor<float32> tracked = place(logits, device).track()
+    tensor<float32> loss = nn.cross_entropy(tracked, place(target, device))
+    float actual = float(loss.untrack().cpu().item())
+    report("cross entropy value", math.abs(actual - expected) <= 0.00001 * (1.0 + math.abs(expected)))
+
+    // d loss / d z = (softmax(z) * sum(t) - t) / rows.
+    loss.backward(&tracked)
+    tensor<float32> gradient = tracked.grad.untrack().cpu()
+    bool gradient_ok = true
+    for row in range(loss_rows())
+        float weight_sum = 0.0
+        for column in range(loss_classes())
+            weight_sum = weight_sum + float(target[row, column].item())
+        for column in range(loss_classes())
+            float closed = (float(probabilities[row, column].item()) * weight_sum - float(target[row, column].item())) / float(loss_rows())
+            gradient_ok = gradient_ok and math.abs(float(gradient[row, column].item()) - closed) <= 0.000001
+    report("cross entropy gradient", gradient_ok)
+    return
+
+auto | error result = loss_checks(args.device)
+match result
+    void
+        int ignored = 0
+    error problem
+        print(problem)
+        print(NL)

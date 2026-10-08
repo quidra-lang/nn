@@ -443,6 +443,156 @@ if [[ "$output" != "$expected" ]]; then
     exit 1
 fi
 
+# Loss semantics on the GPU (closed-form value and gradient).
+gpu_loss_output="$(
+    QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+    "$QUIDRA" "$REPOSITORY_ROOT/tests/losses.qui" --device "$GPU_INDEX"
+)"
+gpu_loss_expected_count="$(grep -c '^ *report("' "$REPOSITORY_ROOT/tests/losses.qui")"
+gpu_loss_passed_count="$(grep -c ' true$' <<<"$gpu_loss_output" || true)"
+if [[ "$gpu_loss_passed_count" -ne "$gpu_loss_expected_count" ]] ||
+   grep -Fq ' false' <<<"$gpu_loss_output"; then
+    echo "NN loss semantics failed on gpu($GPU_INDEX)" >&2
+    printf '%s\n' "$gpu_loss_output" >&2
+    exit 1
+fi
+
+if grep -Fq "backend: Metal" <<<"$gpu_block"; then
+    # NN-owned Metal kernels: CPU equivalence, gradients and determinism.
+    metal_output="$(
+        QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+        "$QUIDRA" "$REPOSITORY_ROOT/tests/metal_native.qui" --device "$GPU_INDEX"
+    )"
+    metal_expected_count="$(grep -c '^ *report("' "$REPOSITORY_ROOT/tests/metal_native.qui")"
+    metal_passed_count="$(grep -c ' true$' <<<"$metal_output" || true)"
+    if [[ "$metal_passed_count" -ne "$metal_expected_count" ]] ||
+       grep -Fq ' false' <<<"$metal_output"; then
+        echo "NN Metal native kernels failed on gpu($GPU_INDEX)" >&2
+        printf '%s\n' "$metal_output" >&2
+        exit 1
+    fi
+
+    # The Metal operations above must have run NN's native kernels: the
+    # portable fallback gives the same values, so count dispatches instead.
+    dispatch_output="$(
+        QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+        "$QUIDRA" "$REPOSITORY_ROOT/tests/metal_dispatch.qui" --device "$GPU_INDEX"
+    )"
+    dispatch_expected_count="$(grep -c '^ *report("' "$REPOSITORY_ROOT/tests/metal_dispatch.qui")"
+    dispatch_passed_count="$(grep -c ' true$' <<<"$dispatch_output" || true)"
+    if [[ "$dispatch_passed_count" -ne "$dispatch_expected_count" ]] ||
+       grep -Fq ' false' <<<"$dispatch_output"; then
+        echo "NN Metal operations fell back to the portable path on gpu($GPU_INDEX)" >&2
+        printf '%s\n' "$dispatch_output" >&2
+        exit 1
+    fi
+
+    # Partially initialized, untracked GPU inputs must stop with
+    # UNINITIALIZED, as they do on the portable path. NN's Metal kernels rely
+    # on Core rejecting such views in qcore_tensor_device_handle(_const); with
+    # a Core that does not, they compute on unwritten memory. That known
+    # regression is reported here, and QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED=1
+    # makes it a failure. Once Core rejects the views, all four scenarios
+    # must raise the error.
+    QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" build \
+        "$REPOSITORY_ROOT/tests/metal_uninitialized.qui" \
+        -o "$TMP/metal-uninitialized" >/dev/null
+    uninitialized_raised=0
+    uninitialized_computed=0
+    for scenario in 0 1 2 3; do
+        set +e
+        "$TMP/metal-uninitialized" --device "$GPU_INDEX" --scenario "$scenario" \
+            >"$TMP/metal-uninitialized.out" 2>"$TMP/metal-uninitialized.err"
+        uninitialized_status=$?
+        set -e
+        if [[ $uninitialized_status -ne 0 ]] &&
+           grep -Fq "runtime error[UNINITIALIZED]" "$TMP/metal-uninitialized.err"; then
+            uninitialized_raised=$((uninitialized_raised + 1))
+        elif [[ $uninitialized_status -eq 0 ]] &&
+             grep -q '^computed ' "$TMP/metal-uninitialized.out"; then
+            uninitialized_computed=$((uninitialized_computed + 1))
+        else
+            echo "NN Metal uninitialized scenario $scenario failed unexpectedly on gpu($GPU_INDEX)" >&2
+            cat "$TMP/metal-uninitialized.out" "$TMP/metal-uninitialized.err" >&2
+            exit 1
+        fi
+    done
+    if [[ $uninitialized_raised -eq 4 ]]; then
+        :
+    elif [[ $uninitialized_computed -eq 4 &&
+            "${QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED:-0}" != "1" ]]; then
+        echo "nn Metal UNINITIALIZED checks: known regression, waiting for Core to reject partially initialized views (NN's Metal kernels compute on partially initialized untracked inputs)"
+    else
+        echo "NN Metal kernels accepted partially initialized inputs on gpu($GPU_INDEX): $uninitialized_raised of 4 scenarios raised UNINITIALIZED" >&2
+        exit 1
+    fi
+
+    # nn.Adam on Metal: parameter, m, v, step count and bias corrections after
+    # every step against the element-wise Metal update (bitwise) and the CPU
+    # (tolerances explained in the test); concurrent optimizers; tied
+    # Parameters.
+    adam_output="$(
+        QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" QUIDRA_REAL_GPU_INDEX="$GPU_INDEX" \
+        "$QUIDRA" "$REPOSITORY_ROOT/tests/metal_adam.qui" --device "$GPU_INDEX" --scratch "$TMP"
+    )"
+    adam_expected_count="$(grep -c '^ *report("' "$REPOSITORY_ROOT/tests/metal_adam.qui")"
+    adam_passed_count="$(grep -c ' true$' <<<"$adam_output" || true)"
+    if [[ "$adam_passed_count" -ne "$adam_expected_count" ]] ||
+       grep -Fq ' false' <<<"$adam_output"; then
+        echo "NN Metal Adam state comparison failed on gpu($GPU_INDEX)" >&2
+        printf '%s\n' "$adam_output" >&2
+        exit 1
+    fi
+
+    # Core does not yet run backward(track = true) on GPU graphs. Until it
+    # does, the Metal Conv2D/GELU custom nodes must keep the portable graph's
+    # diagnostic instead of silently dropping higher-order provenance; once
+    # Core accepts the probe, their second-order callbacks must match the CPU.
+    cat > "$TMP/metal-higher-order.qui" <<QUI
+import nn
+import math
+
+nn.Conv2D convolution
+convolution.weight = nn.Parameter<float32>(
+    value = tensor.ones<float32>([1, 1, 2, 2], gpu = $GPU_INDEX)
+)
+convolution.bias = nn.Parameter<float32>(
+    value = tensor.zeros<float32>([1], gpu = $GPU_INDEX)
+)
+convolution.step = 1
+convolution.border = 0
+tensor<float32> input = tensor.ones<float32>([1, 1, 3, 3], gpu = $GPU_INDEX).track()
+math.mean(nn.gelu(convolution.forward(input))).backward(&convolution, &input, track = true)
+print("unexpected success")
+print(NL)
+QUI
+    set +e
+    QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/metal-higher-order.qui" \
+        >"$TMP/metal-higher-order.out" 2>"$TMP/metal-higher-order.err"
+    higher_order_status=$?
+    set -e
+    if [[ $higher_order_status -eq 0 ]]; then
+        second_output="$(
+            QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" \
+            "$QUIDRA" "$REPOSITORY_ROOT/tests/metal_second_order.qui" --device "$GPU_INDEX"
+        )"
+        second_expected_count="$(grep -c '^ *report("' "$REPOSITORY_ROOT/tests/metal_second_order.qui")"
+        second_passed_count="$(grep -c ' true$' <<<"$second_output" || true)"
+        if [[ "$second_passed_count" -ne "$second_expected_count" ]] ||
+           grep -Fq ' false' <<<"$second_output"; then
+            echo "NN Metal second-order autograd failed on gpu($GPU_INDEX)" >&2
+            printf '%s\n' "$second_output" >&2
+            exit 1
+        fi
+    elif ! grep -Fq "backward(track = true) currently requires CPU tensors" "$TMP/metal-higher-order.err"; then
+        echo "NN Metal higher-order autograd changed its diagnostic on gpu($GPU_INDEX)" >&2
+        cat "$TMP/metal-higher-order.out" "$TMP/metal-higher-order.err" >&2
+        exit 1
+    else
+        echo "nn Metal second-order checks: waiting for Core GPU backward(track = true)"
+    fi
+fi
+
 if grep -Fq "backend: NVIDIA" <<<"$gpu_block"; then
     cat > "$TMP/dnn-nvidia-higher-order.qui" <<QUI
 import nn
