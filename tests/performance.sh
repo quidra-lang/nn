@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# NN kernel timings (small = NanoTWICE's first conv layer, medium, large).
+# NN kernel timings (small = the first conv layer of an external training
+# program, medium, large).
 #
 #   bash tests/performance.sh /path/to/quidra [sizes]
 #

@@ -26,7 +26,7 @@ tensor<float32> logits_values()
     tensor<float32> flat = nn.uniform_weights(loss_rows() * loss_classes(), 4.0, 91)
     return flat.reshape([loss_rows(), loss_classes()])
 
-// One-hot rows scaled by a per-row weight, as NanoTWICE's class weighting.
+// One-hot rows scaled by a per-row weight, as in class-weighted training.
 tensor<float32> target_values()
     tensor<float32> target = tensor.zeros<float32>([loss_rows(), loss_classes()])
     for row in range(loss_rows())

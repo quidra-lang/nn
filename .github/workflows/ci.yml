@@ -56,7 +56,7 @@ jobs:
       - name: Install Quidra dependencies
         run: sudo apt-get update && sudo apt-get install -y ccache clang llvm libcurl4-openssl-dev
       - name: Build Quidra develop
-        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DQUIDRA_ENABLE_TEST_GPU_BACKEND=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel
+        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DQUIDRA_ENABLE_TEST_GPU_BACKEND=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel ${{ runner.os == 'macOS' && 3 || 4 }}
       - name: Validate package metadata
         run: quidra/build/quidra package validate "$GITHUB_WORKSPACE"
       - name: Integration
@@ -92,7 +92,7 @@ jobs:
       - name: Install Quidra dependencies
         run: brew install ccache curl
       - name: Build Quidra develop
-        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix curl)" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel
+        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix curl)" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel ${{ runner.os == 'macOS' && 3 || 4 }}
       - name: Real Metal GPU integration
         env:
           QUIDRA_REQUIRE_REAL_GPU: "1"

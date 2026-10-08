@@ -337,8 +337,8 @@ void dense_gelu_checks(int device)
     report("metal gelu dense first derivative matches the graph", to_graph <= 0.00001)
     report("metal gelu dense first derivative matches cpu", to_cpu <= 0.000001)
 
-// The NanoTWICE layer pattern: tracked Conv2D followed by GELU (compiler
-// fused into Conv2D.forward_gelu) on Metal matches the CPU gradients.
+// Training a tracked Conv2D followed by GELU (compiler fused into
+// Conv2D.forward_gelu) on Metal matches the CPU gradients.
 void conv_gelu_check(int device)
     ConvPair pair = conv_pair(4, 8, 3, 2, 1, 1, 61, device)
     tensor<float32> input = uniform([6, 4, 11, 16], 62)

@@ -9,7 +9,7 @@
 // Gradients are exact (loss = sum(p * G) with a fixed G per step), so every
 // run sees bit-identical gradients and only optimizer arithmetic is compared.
 // Parameter d receives its gradient as a strided (transposed) view, as
-// nn.FC's weight does from Math's matmul backward in NanoTWICE.
+// nn.FC's weight does from Math's matmul backward.
 // Optimizer state is read back from nn.Adam.save after every step.
 //
 // It also covers optimizers stepping concurrently under task.all and a

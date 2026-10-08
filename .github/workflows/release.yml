@@ -117,7 +117,7 @@ jobs:
         run: python3 quidra/tests/package_native_boundary_tests.py .
 
       - name: Build released Quidra baseline
-        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DQUIDRA_ENABLE_TEST_GPU_BACKEND=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel
+        run: cmake -S quidra -B quidra/build -DCMAKE_BUILD_TYPE=Release -DQUIDRA_ENABLE_TEST_GPU_BACKEND=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && cmake --build quidra/build --parallel ${{ runner.os == 'macOS' && 3 || 4 }}
 
       - name: Validate package metadata with released Core
         run: quidra/build/quidra package validate "$GITHUB_WORKSPACE"

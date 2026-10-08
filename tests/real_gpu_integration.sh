@@ -489,11 +489,11 @@ if grep -Fq "backend: Metal" <<<"$gpu_block"; then
 
     # Partially initialized, untracked GPU inputs must stop with
     # UNINITIALIZED, as they do on the portable path. NN's Metal kernels rely
-    # on Core rejecting such views in qcore_tensor_device_handle(_const); with
-    # a Core that does not, they compute on unwritten memory. That known
-    # regression is reported here, and QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED=1
-    # makes it a failure. Once Core rejects the views, all four scenarios
-    # must raise the error.
+    # on Core rejecting such views in qcore_tensor_device_handle(_const), so
+    # all four scenarios must raise the error. With an older Core that does
+    # not reject them, the kernels compute on unwritten memory; that is only
+    # reported, and QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED=1 makes it a
+    # failure.
     QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" build \
         "$REPOSITORY_ROOT/tests/metal_uninitialized.qui" \
         -o "$TMP/metal-uninitialized" >/dev/null
@@ -521,7 +521,7 @@ if grep -Fq "backend: Metal" <<<"$gpu_block"; then
         :
     elif [[ $uninitialized_computed -eq 4 &&
             "${QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED:-0}" != "1" ]]; then
-        echo "nn Metal UNINITIALIZED checks: known regression, waiting for Core to reject partially initialized views (NN's Metal kernels compute on partially initialized untracked inputs)"
+        echo "nn Metal UNINITIALIZED checks: not enforced, this Core does not reject partially initialized views (NN's Metal kernels compute on partially initialized untracked inputs)"
     else
         echo "NN Metal kernels accepted partially initialized inputs on gpu($GPU_INDEX): $uninitialized_raised of 4 scenarios raised UNINITIALIZED" >&2
         exit 1

@@ -46,13 +46,16 @@ When GPU 0 is a Metal device, `real_gpu_integration.sh` additionally runs
 portable fallback gives the same values, so the test reads NN's per-kernel
 dispatch counter, a test probe exported by `nn_native.cpp`),
 `tests/metal_adam.qui` (Adam state after every step) and
-`tests/metal_uninitialized.qui`. The last one is a known regression until
-Core rejects partially initialized views in
-`qcore_tensor_device_handle(_const)`: the suite reports it, and
-`QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED=1` makes it fail.
+`tests/metal_uninitialized.qui` (partially initialized, untracked GPU inputs
+stop with `UNINITIALIZED` on the native kernels too, because Core rejects
+such views in `qcore_tensor_device_handle(_const)`). With an older Core that
+does not reject them, the kernels compute on unwritten memory; the suite
+only reports that, and `QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED=1` makes it
+fail.
 
-`tests/performance.sh` prints Conv2D/GELU timings for the small
-(NanoTWICE), medium and, on request, large shapes on the CPU and GPU 0:
+`tests/performance.sh` prints Conv2D/GELU timings for the small (the first
+convolution of an external training program), medium and, on request, large
+shapes on the CPU and GPU 0:
 
 ```sh
 bash tests/performance.sh /path/to/quidra small,medium,large

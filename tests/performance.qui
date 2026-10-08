@@ -65,11 +65,10 @@ void | error bench(string name, int batches, int channels_in, int channels_out, 
     print("{name} {batches}x{channels_in}x{height}x{width} conv{channels_in}->{channels_out}/s{stride}  conv2d forward {conv_forward:frac=2} ms  conv2d forward+backward {conv_both:frac=2} ms  gelu forward {gelu_forward:frac=2} ms  gelu forward+backward {gelu_both:frac=2} ms{NL}")
     return
 
-// nn.cross_entropy forward+backward (the NanoTWICE loss) on few and many
-// rows. A last-axis reduction that reads every row back to the host
-// (per-row .item()) costs tens of microseconds per row on a GPU; native
-// reductions cost a small fraction of that. Reports the marginal cost per
-// row in microseconds.
+// nn.cross_entropy forward+backward on few and many rows. A last-axis
+// reduction that reads every row back to the host (per-row .item()) costs
+// tens of microseconds per row on a GPU; native reductions cost a small
+// fraction of that. Reports the marginal cost per row in microseconds.
 float loss_time(int rows, int device, int reps)
     tensor<float32> samples = nn.uniform_weights(rows * 2, 2.0, 7)
     tensor<float32> logits = place(samples.reshape([rows, 2]), device)
