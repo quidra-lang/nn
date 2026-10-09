@@ -215,6 +215,24 @@ if [[ "$clear_grad_output" != "$(printf 'true\ntrue\ntrue\ntrue\ntrue')" ]]; the
     exit 1
 fi
 
+# Machine-readable NN errors retain their specific human-oriented messages.
+cat > "$TMP/error-codes.qui" <<'QUI'
+import nn
+
+nn.SGD | error invalid_rate = nn.SGD(rate = real64(-1.0))
+match invalid_rate
+    nn.SGD
+        print(false)
+    error problem
+        print(problem.code == "NN_ARGUMENT")
+print(NL)
+QUI
+codes_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/error-codes.qui")"
+if [[ "$codes_output" != "true" ]]; then
+    printf 'NN error code mismatch: %s\n' "$codes_output" >&2
+    exit 1
+fi
+
 cat > "$TMP/private-bridge.qui" <<'QUI'
 import nn
 nn.nn_runtime_fast()
