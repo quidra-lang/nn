@@ -36,7 +36,7 @@ int | error run()
     conv.bias.replace(tensor.zeros<real32>([1]))
     tensor<real32> image = tensor.ones<real32>([1, 1, 2, 2])
     tensor<real32> activated = nn.relu(conv.forward(image))
-    int[] activated_shape = activated.shape()
+    nat[] activated_shape = activated.shape()
     print(
         len(activated_shape) == 4
         and activated_shape[0] == 1
@@ -48,7 +48,7 @@ int | error run()
 
     nn.BatchNorm norm = try nn.BatchNorm(1)
     tensor<real32> normalized = norm.infer(activated)
-    int[] normalized_shape = normalized.shape()
+    nat[] normalized_shape = normalized.shape()
     print(
         len(normalized_shape) == 4
         and normalized_shape[0] == 1
