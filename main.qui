@@ -2449,7 +2449,10 @@ class Adam
             // lr * (m/c1) / (sqrt(v/c2) + eps)
             // == (lr*sqrt(c2)/c1) * m / (sqrt(v) + eps*sqrt(c2)).
             // c1/c2 are maintained by a stable recurrence rather than pow().
-            real64 correction2_root = math.sqrt(second_correction)
+            // Materialize the mutable field as a typed local for the
+            // statically selected Math overload.
+            real64 correction2_input = this.second_correction
+            real64 correction2_root = math.sqrt(correction2_input)
             real64 step_scale = (
                 learning_rate * correction2_root / first_correction
             )
