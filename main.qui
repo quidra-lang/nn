@@ -14,59 +14,59 @@ class Parameter<T: floating>
 
     construct(tensor<T> value)
         if value.is_tracked()
-            storage = ref.Cell<tensor<T>>(value = value.untrack())
+            this.storage = ref.Cell<tensor<T>>(value = value.untrack())
         else
-            storage = ref.Cell<tensor<T>>(value = value)
-        gradient_state = autograd.target()
+            this.storage = ref.Cell<tensor<T>>(value = value)
+        this.gradient_state = autograd.target()
 
     tensor<T> raw()
-        if storage.value.is_tracked()
-            return storage.value.untrack()
-        return storage.value
+        if this.storage.value.is_tracked()
+            return this.storage.value.untrack()
+        return this.storage.value
 
     tensor<T> track()
-        return storage.value.track(&gradient_state)
+        return this.storage.value.track(&this.gradient_state)
 
     bool has_grad()
-        return gradient_state.has_grad()
+        return this.gradient_state.has_grad()
 
     tensor<T> gradient()
-        return gradient_state.gradient<T>()
+        return this.gradient_state.gradient<T>()
 
     void clear_grad()
-        gradient_state.clear_grad()
+        this.gradient_state.clear_grad()
 
     bool same(Parameter<T> other)
-        return storage.same(other.storage)
+        return this.storage.same(other.storage)
 
     void replace(tensor<T> value)
         if value.is_tracked()
-            storage.value = value.untrack()
+            this.storage.value = value.untrack()
         else
-            storage.value = value
+            this.storage.value = value
 
 class State<T: floating>
     private ref.Cell<tensor<T>> storage
 
     construct(tensor<T> value)
         if value.is_tracked()
-            storage = ref.Cell<tensor<T>>(value = value.untrack())
+            this.storage = ref.Cell<tensor<T>>(value = value.untrack())
         else
-            storage = ref.Cell<tensor<T>>(value = value)
+            this.storage = ref.Cell<tensor<T>>(value = value)
 
     tensor<T> raw()
-        if storage.value.is_tracked()
-            return storage.value.untrack()
-        return storage.value
+        if this.storage.value.is_tracked()
+            return this.storage.value.untrack()
+        return this.storage.value
 
     bool same(State<T> other)
-        return storage.same(other.storage)
+        return this.storage.same(other.storage)
 
     void replace(tensor<T> value)
         if value.is_tracked()
-            storage.value = value.untrack()
+            this.storage.value = value.untrack()
         else
-            storage.value = value
+            this.storage.value = value
 
 // Explicit NN distributed-training collective. `devices` gives the destination
 // of each reduced value: -1 means CPU, otherwise the explicit GPU index.
