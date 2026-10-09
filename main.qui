@@ -1950,12 +1950,7 @@ class SGD
         iteration = 0
 
     void zero_grad<M>(M &model)
-        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
-        for parameter in parameters32
-            parameter.clear_grad()
-        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
-        for parameter in parameters64
-            parameter.clear_grad()
+        clear_grad(&model)
 
     void step<M>(M &model)
         iteration = iteration + int(1)
@@ -2408,12 +2403,7 @@ class Adam
             )
 
     void zero_grad<M>(M &model)
-        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
-        for parameter in parameters32
-            parameter.clear_grad()
-        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
-        for parameter in parameters64
-            parameter.clear_grad()
+        clear_grad(&model)
 
     void step<M>(M &model)
         Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
