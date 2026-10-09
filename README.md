@@ -34,6 +34,16 @@ The state serializer is owned here. For compatibility with the pre-split DNN pac
 
 Development uses the permanent `develop` branch. See [`docs/development.md`](docs/development.md) for the canonical dependency-first release procedure and immutable-release checks.
 
+## Clearing gradients
+
+Gradients accumulate until explicitly cleared. `nn.clear_grad(&model)` walks
+the model's `Parameter<T>` fields and discards the gradient state for
+`real16`, `real16b`, `real32`, and `real64` parameters. Calling it again
+before backward is harmless; it does not allocate zero-valued gradients.
+Both `SGD.zero_grad(&model)` and `Adam.zero_grad(&model)` delegate to this
+operation. It does not change the model's parameter values or the optimizer's
+moment estimates.
+
 ## Error codes
 
 NN errors preserve their specific message text and carry a stable category
