@@ -23,6 +23,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE_ROOT="$(dirname "$ROOT")"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export QUIDRA_CACHE_DIR="$TMP/run-cache"
 
 BINARY="$TMP/performance"
 QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" build "$ROOT/tests/performance.qui" -o "$BINARY" >/dev/null

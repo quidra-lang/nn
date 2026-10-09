@@ -14,6 +14,7 @@ REQUIRE_REAL="${QUIDRA_REQUIRE_REAL_GPU:-0}"
 REQUIRE_BACKEND="${QUIDRA_REQUIRE_GPU_BACKEND:-}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export QUIDRA_CACHE_DIR="$TMP/run-cache"
 
 set +e
 gpu_info="$("$QUIDRA" gpu 2>&1)"

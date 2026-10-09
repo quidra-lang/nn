@@ -6,6 +6,7 @@ REPOSITORY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE_ROOT="$(dirname "$REPOSITORY_ROOT")"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export QUIDRA_CACHE_DIR="$TMP/run-cache"
 
 # Effective only with the core's test-only fake GPU backend.
 export QUIDRA_TEST_FAKE_GPU_COUNT=2

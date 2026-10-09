@@ -6,6 +6,7 @@ REPOSITORY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE_ROOT="$(dirname "$REPOSITORY_ROOT")"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export QUIDRA_CACHE_DIR="$TMP/run-cache"
 
 cat > "$TMP/make-state.qui" <<QUI
 import nn
