@@ -22,7 +22,7 @@ Core owns language, tensor/autograd/device substrate, basic operators, and gener
 import nn
 
 nn.FC layer = nn.FC(128, 64)
-tensor<float32> output = nn.relu(layer.forward(input))
+tensor<real32> output = nn.relu(layer.forward(input))
 nn.Adam optimizer = nn.Adam()
 ```
 

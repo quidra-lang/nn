@@ -48,7 +48,7 @@ for device in "${devices[@]}"; do
         small="$(grep '^small ' <<<"$output" || true)"
         if [[ -n "$small" ]]; then
             both="$(sed -E 's/.*conv2d forward\+backward ([0-9.]+) ms.*/\1/' <<<"$small")"
-            if ! python3 -c "import sys; sys.exit(0 if float('$both') < 100.0 else 1)"; then
+            if ! python3 -c "import sys; sys.exit(0 if real64('$both') < 100.0 else 1)"; then
                 echo "small Conv2D forward+backward on gpu$device took $both ms (limit 100 ms)" >&2
                 exit 1
             fi
@@ -61,7 +61,7 @@ for device in "${devices[@]}"; do
             exit 1
         fi
         per_row="$(sed -E 's/.*per row (-?[0-9.]+) us.*/\1/' <<<"$loss")"
-        if ! python3 -c "import sys; sys.exit(0 if float('$per_row') < 20.0 else 1)"; then
+        if ! python3 -c "import sys; sys.exit(0 if real64('$per_row') < 20.0 else 1)"; then
             echo "GPU cross_entropy costs $per_row us per row on gpu$device (limit 20 us): per-row host readback" >&2
             exit 1
         fi

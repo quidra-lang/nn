@@ -5,8 +5,8 @@ import math
 import internal = "./internal.qui"
 import native = "./native.qui"
 
-tensor<float32> relu(tensor<float32> value);
-tensor<float32> gelu(tensor<float32> value);
+tensor<real32> relu(tensor<real32> value);
+tensor<real32> gelu(tensor<real32> value);
 
 class Parameter<T: floating>
     private ref.Cell<tensor<T>> storage
@@ -143,14 +143,14 @@ void | error all_reduce_sum<T: floating>(
 
 
 void | error save<M>(M model, string path)
-    Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
-    Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
-    State<float32>[] states32 = reflect.collect<State<float32>>(model)
-    State<float>[] states64 = reflect.collect<State<float>>(model)
-    string[] parameter_paths32 = reflect.paths<Parameter<float32>>(model)
-    string[] parameter_paths64 = reflect.paths<Parameter<float>>(model)
-    string[] state_paths32 = reflect.paths<State<float32>>(model)
-    string[] state_paths64 = reflect.paths<State<float>>(model)
+    Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
+    Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
+    State<real32>[] states32 = reflect.collect<State<real32>>(model)
+    State<real64>[] states64 = reflect.collect<State<real64>>(model)
+    string[] parameter_paths32 = reflect.paths<Parameter<real32>>(model)
+    string[] parameter_paths64 = reflect.paths<Parameter<real64>>(model)
+    string[] state_paths32 = reflect.paths<State<real32>>(model)
+    string[] state_paths64 = reflect.paths<State<real64>>(model)
 
     if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
         return error("nn.save reflection metadata does not match collected state")
@@ -191,7 +191,7 @@ void | error save<M>(M model, string path)
             &output,
             &checksum,
             "Parameter",
-            "float32",
+            "real32",
             parameter_paths32[index],
             parameters32[index].raw()
         )
@@ -200,7 +200,7 @@ void | error save<M>(M model, string path)
             &output,
             &checksum,
             "Parameter",
-            "float",
+            "real64",
             parameter_paths64[index],
             parameters64[index].raw()
         )
@@ -209,7 +209,7 @@ void | error save<M>(M model, string path)
             &output,
             &checksum,
             "State",
-            "float32",
+            "real32",
             state_paths32[index],
             states32[index].raw()
         )
@@ -218,7 +218,7 @@ void | error save<M>(M model, string path)
             &output,
             &checksum,
             "State",
-            "float",
+            "real64",
             state_paths64[index],
             states64[index].raw()
         )
@@ -227,14 +227,14 @@ void | error save<M>(M model, string path)
     return
 
 void | error load<M>(M &model, string path)
-    Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
-    Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
-    State<float32>[] states32 = reflect.collect<State<float32>>(model)
-    State<float>[] states64 = reflect.collect<State<float>>(model)
-    string[] parameter_paths32 = reflect.paths<Parameter<float32>>(model)
-    string[] parameter_paths64 = reflect.paths<Parameter<float>>(model)
-    string[] state_paths32 = reflect.paths<State<float32>>(model)
-    string[] state_paths64 = reflect.paths<State<float>>(model)
+    Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
+    Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
+    State<real32>[] states32 = reflect.collect<State<real32>>(model)
+    State<real64>[] states64 = reflect.collect<State<real64>>(model)
+    string[] parameter_paths32 = reflect.paths<Parameter<real32>>(model)
+    string[] parameter_paths64 = reflect.paths<Parameter<real64>>(model)
+    string[] state_paths32 = reflect.paths<State<real32>>(model)
+    string[] state_paths64 = reflect.paths<State<real64>>(model)
     if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
         return error("nn.load reflection metadata does not match collected state")
 
@@ -276,44 +276,44 @@ void | error load<M>(M &model, string path)
         try internal.read_checked_line(
             &input,
             &checksum,
-            "Parameter<float32> count"
+            "Parameter<real32> count"
         ),
-        "Parameter<float32> count"
+        "Parameter<real32> count"
     )
     int count64 = try internal.parse_nonnegative_state_int(
         try internal.read_checked_line(
             &input,
             &checksum,
-            "Parameter<float> count"
+            "Parameter<real64> count"
         ),
-        "Parameter<float> count"
+        "Parameter<real64> count"
     )
     int state_count32 = try internal.parse_nonnegative_state_int(
         try internal.read_checked_line(
             &input,
             &checksum,
-            "State<float32> count"
+            "State<real32> count"
         ),
-        "State<float32> count"
+        "State<real32> count"
     )
     int state_count64 = try internal.parse_nonnegative_state_int(
         try internal.read_checked_line(
             &input,
             &checksum,
-            "State<float> count"
+            "State<real64> count"
         ),
-        "State<float> count"
+        "State<real64> count"
     )
     if count32 != len(parameters32) or count64 != len(parameters64) or state_count32 != len(states32) or state_count64 != len(states64)
         return error("nn.load state schema does not match the target model")
 
-    tensor<float32>[] loaded_parameters32 = []
-    tensor<float>[] loaded_parameters64 = []
-    tensor<float32>[] loaded_states32 = []
-    tensor<float>[] loaded_states64 = []
+    tensor<real32>[] loaded_parameters32 = []
+    tensor<real64>[] loaded_parameters64 = []
+    tensor<real32>[] loaded_states32 = []
+    tensor<real64>[] loaded_states64 = []
 
     for index in range(len(parameters32))
-        tensor<float32> value = try internal.read_state_entry32(
+        tensor<real32> value = try internal.read_state_entry32(
             &input,
             &checksum,
             "Parameter",
@@ -323,7 +323,7 @@ void | error load<M>(M &model, string path)
         loaded_parameters32 = loaded_parameters32.append(value)
 
     for index in range(len(parameters64))
-        tensor<float> value = try internal.read_state_entry64(
+        tensor<real64> value = try internal.read_state_entry64(
             &input,
             &checksum,
             "Parameter",
@@ -333,7 +333,7 @@ void | error load<M>(M &model, string path)
         loaded_parameters64 = loaded_parameters64.append(value)
 
     for index in range(len(states32))
-        tensor<float32> value = try internal.read_state_entry32(
+        tensor<real32> value = try internal.read_state_entry32(
             &input,
             &checksum,
             "State",
@@ -343,7 +343,7 @@ void | error load<M>(M &model, string path)
         loaded_states32 = loaded_states32.append(value)
 
     for index in range(len(states64))
-        tensor<float> value = try internal.read_state_entry64(
+        tensor<real64> value = try internal.read_state_entry64(
             &input,
             &checksum,
             "State",
@@ -364,28 +364,28 @@ void | error load<M>(M &model, string path)
         states64[index].replace(loaded_states64[index])
     return
 
-tensor<float32> | error uniform_weights(int count, float bound, int seed)
+tensor<real32> | error uniform_weights(int count, real64 bound, int seed)
     if count < 0
         return error("nn.uniform_weights count must be nonnegative")
     if not math.is_finite(bound) or bound < 0.0
         return error("nn.uniform_weights bound must be finite and nonnegative")
-    tensor<float32> values = tensor.zeros<float32>([count])
+    tensor<real32> values = tensor.zeros<real32>([count])
     random.Generator generator = random.generator(seed = seed)
     for index in range(count)
-        float unit = generator.float()
-        values[index] = float32((unit * 2.0 - 1.0) * bound)
+        real64 unit = generator.real64()
+        values[index] = real32((unit * 2.0 - 1.0) * bound)
     return values
 
-tensor<float32> | error normal_weights(
+tensor<real32> | error normal_weights(
     int count,
-    float standard_deviation,
+    real64 standard_deviation,
     int seed
 )
     if count < 0
         return error("nn.normal_weights count must be nonnegative")
     if not math.is_finite(standard_deviation) or standard_deviation < 0.0
         return error("nn.normal_weights standard deviation must be finite and nonnegative")
-    tensor<float32> values = tensor.zeros<float32>([count])
+    tensor<real32> values = tensor.zeros<real32>([count])
     if standard_deviation == 0.0
         return values
 
@@ -393,20 +393,20 @@ tensor<float32> | error normal_weights(
     for index in range(count)
         // 1-u avoids the common zero endpoint; the guard also keeps
         // Box-Muller defined for any future generator endpoint policy.
-        float radius_uniform = 1.0 - generator.float()
+        real64 radius_uniform = 1.0 - generator.real64()
         if radius_uniform <= 0.0
             radius_uniform = 0.0000000000000001
-        float angle_uniform = generator.float()
-        float log_radius = try math.log(radius_uniform)
-        float radius = try math.sqrt(float(-2.0) * log_radius)
-        float standard_normal = (
+        real64 angle_uniform = generator.real64()
+        real64 log_radius = try math.log(radius_uniform)
+        real64 radius = try math.sqrt(real64(-2.0) * log_radius)
+        real64 standard_normal = (
             radius
             * math.cos(
-                float(6.283185307179586476925286766559005768)
+                real64(6.283185307179586476925286766559005768)
                 * angle_uniform
             )
         )
-        values[index] = float32(standard_normal * standard_deviation)
+        values[index] = real32(standard_normal * standard_deviation)
     return values
 
 // A layer is a class whose constructor can fail: `nn.FC(128, 64)` fails
@@ -414,8 +414,8 @@ tensor<float32> | error normal_weights(
 // Declare `nn.FC layer` and assign `weight` and `bias` to build a layer
 // from tensors you supply.
 class FC
-    Parameter<float32> weight
-    Parameter<float32> bias
+    Parameter<real32> weight
+    Parameter<real32> bias
 
     FC | error construct(int features_in, int features_out, int seed = 1)
         if features_in <= 0 or features_out <= 0
@@ -423,18 +423,18 @@ class FC
         if features_out > 9223372036854775807 / features_in
             return error("nn.FC dimensions are too large")
         int weight_count = features_out * features_in
-        float feature_root = try math.sqrt(float(features_in))
-        float bound = 1.0 / feature_root
-        tensor<float32> weight_values = try uniform_weights(
+        real64 feature_root = try math.sqrt(real64(features_in))
+        real64 bound = 1.0 / feature_root
+        tensor<real32> weight_values = try uniform_weights(
             weight_count, bound, seed
         )
         weight_values = weight_values.reshape([features_out, features_in])
-        weight = Parameter<float32>(value = weight_values)
-        bias = Parameter<float32>(
-            value = tensor.zeros<float32>([features_out])
+        weight = Parameter<real32>(value = weight_values)
+        bias = Parameter<real32>(
+            value = tensor.zeros<real32>([features_out])
         )
 
-    tensor<float32> forward(tensor<float32> value)
+    tensor<real32> forward(tensor<real32> value)
         int[] input_shape = value.shape()
         int rank = len(input_shape)
         if rank < 1
@@ -448,8 +448,8 @@ class FC
         if weight_shape[1] != features_in or bias_shape[0] != features_out
             error("nn.FC input, weight, and bias dimensions do not match")
 
-        tensor<float32> parameter_weight
-        tensor<float32> parameter_bias
+        tensor<real32> parameter_weight
+        tensor<real32> parameter_bias
         if value.is_tracked()
             parameter_weight = weight.track()
             parameter_bias = bias.track()
@@ -457,7 +457,7 @@ class FC
             parameter_weight = weight.raw()
             parameter_bias = bias.raw()
 
-        tensor<float32> output = math.matmul(
+        tensor<real32> output = math.matmul(
             value,
             parameter_weight.transpose(0, 1)
         )
@@ -472,7 +472,7 @@ class FC
     // native linear+bias+ReLU loop. Other calls run forward() and then NN's
     // fused ReLU, whose package-owned custom autograd keeps first- and
     // higher-order semantics without a NN semantic primitive in Core.
-    private tensor<float32> forward_relu(tensor<float32> value)
+    private tensor<real32> forward_relu(tensor<real32> value)
         if not value.is_tracked()
             int[] input_shape = value.shape()
             int rank = len(input_shape)
@@ -487,9 +487,9 @@ class FC
             if weight_shape[1] != features_in or bias_shape[0] != features_out
                 error("nn.FC input, weight, and bias dimensions do not match")
 
-            tensor<float32> native_input = value
-            tensor<float32> native_weight = weight.raw()
-            tensor<float32> native_bias = bias.raw()
+            tensor<real32> native_input = value
+            tensor<real32> native_weight = weight.raw()
+            tensor<real32> native_bias = bias.raw()
             if native.is_cpu_f32(&native_input) == int32(1) and native.is_cpu_f32(&native_weight) == int32(1) and native.is_cpu_f32(&native_bias) == int32(1)
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
@@ -499,7 +499,7 @@ class FC
                     native_bias = native_bias.contiguous()
                 int[] output_shape = input_shape
                 output_shape[rank - 1] = features_out
-                tensor<float32> native_output = tensor.zeros<float32>(output_shape)
+                tensor<real32> native_output = tensor.zeros<real32>(output_shape)
                 int32 native_status = native.fc_relu_inference_f32(
                     &native_input,
                     &native_weight,
@@ -509,14 +509,14 @@ class FC
                 if native_status == int32(0)
                     return native_output
 
-        tensor<float32> output = forward(value)
+        tensor<real32> output = forward(value)
         return internal.relu_fused(output)
 
     // Package-owned compiler fusion target for linear+bias+GELU. The native
     // inference path removes the intermediate FC tensor and activation pass.
     // Other calls apply NN's fused GELU, which evaluates the exact package
     // GELU expression and carries its own first- and second-order autograd.
-    private tensor<float32> forward_gelu(tensor<float32> value)
+    private tensor<real32> forward_gelu(tensor<real32> value)
         if not value.is_tracked()
             int[] input_shape = value.shape()
             int rank = len(input_shape)
@@ -531,9 +531,9 @@ class FC
             if weight_shape[1] != features_in or bias_shape[0] != features_out
                 error("nn.FC input, weight, and bias dimensions do not match")
 
-            tensor<float32> native_input = value
-            tensor<float32> native_weight = weight.raw()
-            tensor<float32> native_bias = bias.raw()
+            tensor<real32> native_input = value
+            tensor<real32> native_weight = weight.raw()
+            tensor<real32> native_bias = bias.raw()
             if native.is_cpu_f32(&native_input) == int32(1) and native.is_cpu_f32(&native_weight) == int32(1) and native.is_cpu_f32(&native_bias) == int32(1)
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
@@ -543,7 +543,7 @@ class FC
                     native_bias = native_bias.contiguous()
                 int[] output_shape = input_shape
                 output_shape[rank - 1] = features_out
-                tensor<float32> native_output = tensor.zeros<float32>(output_shape)
+                tensor<real32> native_output = tensor.zeros<real32>(output_shape)
                 int32 native_status = native.fc_gelu_inference_f32(
                     &native_input,
                     &native_weight,
@@ -553,7 +553,7 @@ class FC
                 if native_status == int32(0)
                     return native_output
 
-        tensor<float32> output = forward(value)
+        tensor<real32> output = forward(value)
         return internal.gelu_fused(output)
 
 
@@ -561,28 +561,28 @@ class FC
     // source contract as forward_relu/forward_gelu; Core may select them only
     // from package descriptor rules. CPU targets reach the package-native
     // fused loop, while the Math targets preserve the portable Math backend.
-    private tensor<float32> forward_relu_inference(tensor<float32> value)
+    private tensor<real32> forward_relu_inference(tensor<real32> value)
         return forward_relu(value)
 
-    private tensor<float32> forward_relu_cpu(tensor<float32> value)
+    private tensor<real32> forward_relu_cpu(tensor<real32> value)
         return forward_relu(value)
 
-    private tensor<float32> forward_relu_cuda(tensor<float32> value)
-        tensor<float32> output = forward(value)
+    private tensor<real32> forward_relu_cuda(tensor<real32> value)
+        tensor<real32> output = forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(&output) >= int32(0)
             int32 status = native.cuda_activation_inplace_f32(&output, 1)
             if status == int32(0)
                 return output
         return internal.relu_fused(output)
 
-    private tensor<float32> forward_gelu_inference(tensor<float32> value)
+    private tensor<real32> forward_gelu_inference(tensor<real32> value)
         return forward_gelu(value)
 
-    private tensor<float32> forward_gelu_cpu(tensor<float32> value)
+    private tensor<real32> forward_gelu_cpu(tensor<real32> value)
         return forward_gelu(value)
 
-    private tensor<float32> forward_gelu_cuda(tensor<float32> value)
-        tensor<float32> output = forward(value)
+    private tensor<real32> forward_gelu_cuda(tensor<real32> value)
+        tensor<real32> output = forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(&output) >= int32(0)
             int32 status = native.cuda_activation_inplace_f32(&output, 2)
             if status == int32(0)
@@ -590,8 +590,8 @@ class FC
         return internal.gelu_fused(output)
 
 class Conv2D
-    Parameter<float32> weight
-    Parameter<float32> bias
+    Parameter<real32> weight
+    Parameter<real32> bias
     int step
     int border
     int group_count = 1
@@ -627,24 +627,24 @@ class Conv2D
         if channels_out > 9223372036854775807 / fan_in
             return error("nn.Conv2D dimensions are too large")
         int weight_count = channels_out * fan_in
-        float fan_root = try math.sqrt(float(fan_in))
-        float bound = 1.0 / fan_root
-        tensor<float32> weight_values = try uniform_weights(
+        real64 fan_root = try math.sqrt(real64(fan_in))
+        real64 bound = 1.0 / fan_root
+        tensor<real32> weight_values = try uniform_weights(
             weight_count, bound, seed
         )
         weight_values = weight_values.reshape(
             [channels_out, channels_per_group, kernel, kernel]
         )
-        weight = Parameter<float32>(value = weight_values)
-        bias = Parameter<float32>(
-            value = tensor.zeros<float32>([channels_out])
+        weight = Parameter<real32>(value = weight_values)
+        bias = Parameter<real32>(
+            value = tensor.zeros<real32>([channels_out])
         )
         step = stride
         border = padding
         group_count = groups
 
-    private tensor<float32> extract_patches(
-        tensor<float32> group_input,
+    private tensor<real32> extract_patches(
+        tensor<real32> group_input,
         int batches,
         int weight_channels,
         int padded_height,
@@ -673,10 +673,10 @@ class Conv2D
         // creates an unrelated host patch buffer.
         if not group_input.is_tracked()
             if native.is_cpu_f32(&group_input) == int32(1)
-                tensor<float32> native_input = group_input
+                tensor<real32> native_input = group_input
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
-                tensor<float32> native_patches = tensor.zeros<float32>(
+                tensor<real32> native_patches = tensor.zeros<real32>(
                     [patch_rows, patch_width]
                 )
                 int32 native_status = native.im2col_f32(
@@ -723,9 +723,9 @@ class Conv2D
             [patch_rows, patch_width]
         )
 
-    private tensor<float32> convolve_group(
-        tensor<float32> padded_input,
-        tensor<float32> parameter_weight,
+    private tensor<real32> convolve_group(
+        tensor<real32> padded_input,
+        tensor<real32> parameter_weight,
         int group_index,
         int batches,
         int channels_in,
@@ -747,7 +747,7 @@ class Conv2D
         // NN owns Conv2D patch extraction. Keep grouped channel isolation
         // inside the package rather than depending on a Core image/NN-shaped
         // primitive.
-        tensor<float32> group_input = padded_input
+        tensor<real32> group_input = padded_input
         if group_count > 1
             if padded_input.is_tracked()
                 // Core tensor slices are views but are not yet differentiable.
@@ -779,7 +779,7 @@ class Conv2D
                     :
                 ]
 
-        tensor<float32> patches = extract_patches(
+        tensor<real32> patches = extract_patches(
             group_input,
             batches,
             weight_channels,
@@ -791,7 +791,7 @@ class Conv2D
             output_width
         )
 
-        tensor<float32> group_weight
+        tensor<real32> group_weight
         if group_count == 1
             group_weight = parameter_weight.reshape(
                 [outputs_per_group, patch_width]
@@ -813,7 +813,7 @@ class Conv2D
                 // Output-channel groups are contiguous OIHW slices. Keep the
                 // untracked view and reshape it directly instead of building a
                 // second index array.
-                tensor<float32> weight_view = parameter_weight[
+                tensor<real32> weight_view = parameter_weight[
                     output_channel_start:output_channel_start + outputs_per_group,
                     :,
                     :,
@@ -823,7 +823,7 @@ class Conv2D
                     [outputs_per_group, patch_width]
                 )
 
-        tensor<float32> matrix = math.matmul(
+        tensor<real32> matrix = math.matmul(
             patches,
             group_weight.transpose(0, 1)
         )
@@ -856,7 +856,7 @@ class Conv2D
             [batches, channels_out, output_height, output_width]
         )
 
-    tensor<float32> forward(tensor<float32> value)
+    tensor<real32> forward(tensor<real32> value)
         int[] input_shape = value.shape()
         int[] weight_shape = weight.raw().shape()
         int[] bias_shape = bias.raw().shape()
@@ -897,8 +897,8 @@ class Conv2D
         int output_height = (padded_height - kernel_height) / step + 1
         int output_width = (padded_width - kernel_width) / step + 1
 
-        tensor<float32> parameter_weight
-        tensor<float32> parameter_bias
+        tensor<real32> parameter_weight
+        tensor<real32> parameter_bias
         if value.is_tracked()
             parameter_weight = weight.track()
             parameter_bias = bias.track()
@@ -913,9 +913,9 @@ class Conv2D
         int32 cuda_device = native.cuda_device_f32(&value)
         if cuda_device >= int32(0)
             int device_index = int(cuda_device)
-            tensor<float32> cuda_input = value
-            tensor<float32> cuda_weight = parameter_weight
-            tensor<float32> cuda_bias = parameter_bias
+            tensor<real32> cuda_input = value
+            tensor<real32> cuda_weight = parameter_weight
+            tensor<real32> cuda_bias = parameter_bias
             // Tracked tensors cannot be silently materialized because that
             // would cut their graph. A non-contiguous tracked input therefore
             // falls through to the portable graph; untracked inference may
@@ -927,7 +927,7 @@ class Conv2D
                     cuda_weight = cuda_weight.contiguous()
                 if not cuda_bias.is_contiguous()
                     cuda_bias = cuda_bias.contiguous()
-            tensor<float32> cuda_output = tensor.zeros<float32>(
+            tensor<real32> cuda_output = tensor.zeros<real32>(
                 [batches, channels_out, output_height, output_width],
                 gpu = device_index
             )
@@ -951,9 +951,9 @@ class Conv2D
         // Untracked inference may explicitly densify inputs.
         int32 native_device = native.fused_device_f32(&value)
         if native_device >= int32(-1)
-            tensor<float32> native_input = value
-            tensor<float32> native_weight = parameter_weight
-            tensor<float32> native_bias = parameter_bias
+            tensor<real32> native_input = value
+            tensor<real32> native_weight = parameter_weight
+            tensor<real32> native_bias = parameter_bias
             if not value.is_tracked()
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
@@ -961,13 +961,13 @@ class Conv2D
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-            tensor<float32> native_output
+            tensor<real32> native_output
             if native_device == int32(-1)
-                native_output = tensor.zeros<float32>(
+                native_output = tensor.zeros<real32>(
                     [batches, channels_out, output_height, output_width]
                 )
             else
-                native_output = tensor.zeros<float32>(
+                native_output = tensor.zeros<real32>(
                     [batches, channels_out, output_height, output_width],
                     gpu = int(native_device)
                 )
@@ -987,7 +987,7 @@ class Conv2D
 
         // Padding is common to every output channel. Build it once instead of
         // rebuilding the same mapping for every output channel.
-        tensor<float32> padded_input = value
+        tensor<real32> padded_input = value
         if border > 0
             int input_count = batches * channels_in * height * width
             int[] padded_indices = array(input_count, fill = 0)
@@ -1007,7 +1007,7 @@ class Conv2D
                 [batches, channels_in, padded_height, padded_width]
             )
 
-        tensor<float32> output = convolve_group(
+        tensor<real32> output = convolve_group(
             padded_input,
             parameter_weight,
             0,
@@ -1041,7 +1041,7 @@ class Conv2D
 
         // NCHW bias is a [1,C,1,1] singleton view. Core broadcasting
         // expands it without constructing or transferring an index tensor.
-        tensor<float32> broadcast_bias = parameter_bias.reshape(
+        tensor<real32> broadcast_bias = parameter_bias.reshape(
             [1, channels_out, 1, 1]
         )
         return output + broadcast_bias
@@ -1051,9 +1051,9 @@ class Conv2D
     // autograd nodes as forward() then the activation; false leaves every
     // other case (and any invalid shape) to that sequence.
     private bool metal_activation(
-        tensor<float32> value,
+        tensor<real32> value,
         int activation,
-        tensor<float32> &result
+        tensor<real32> &result
     )
         if native.metal_device_f32(&value) < int32(0)
             return false
@@ -1073,9 +1073,9 @@ class Conv2D
             (padded_height - weight_shape[2]) / step + 1,
             (padded_width - weight_shape[3]) / step + 1
         ]
-        tensor<float32> metal_input = value
-        tensor<float32> metal_weight
-        tensor<float32> metal_bias
+        tensor<real32> metal_input = value
+        tensor<real32> metal_weight
+        tensor<real32> metal_bias
         if value.is_tracked()
             metal_weight = weight.track()
             metal_bias = bias.track()
@@ -1089,8 +1089,8 @@ class Conv2D
             if not metal_bias.is_contiguous()
                 metal_bias = metal_bias.contiguous()
         int device_index = int(native.metal_device_f32(&value))
-        tensor<float32> convolved = tensor.zeros<float32>(output_shape, gpu = device_index)
-        tensor<float32> activated = tensor.zeros<float32>(output_shape, gpu = device_index)
+        tensor<real32> convolved = tensor.zeros<real32>(output_shape, gpu = device_index)
+        tensor<real32> activated = tensor.zeros<real32>(output_shape, gpu = device_index)
         int32 status = native.conv2d_activation_f32(
             &metal_input,
             &metal_weight,
@@ -1113,10 +1113,10 @@ class Conv2D
     // ReLU in one round trip; other tracked and GPU execution runs forward()
     // and then NN's fused ReLU. Both keep package-owned custom autograd that
     // reproduces the compositional first- and higher-order semantics.
-    private tensor<float32> forward_relu(tensor<float32> value)
+    private tensor<real32> forward_relu(tensor<real32> value)
         if not value.is_tracked()
-            tensor<float32> parameter_weight = weight.raw()
-            tensor<float32> parameter_bias = bias.raw()
+            tensor<real32> parameter_weight = weight.raw()
+            tensor<real32> parameter_bias = bias.raw()
             int[] input_shape = value.shape()
             int[] weight_shape = parameter_weight.shape()
             int[] bias_shape = parameter_bias.shape()
@@ -1163,16 +1163,16 @@ class Conv2D
             // then applies NN's exact activation semantics through Math.
 
             if native.is_cpu_f32(&value) == int32(1) and native.is_cpu_f32(&parameter_weight) == int32(1) and native.is_cpu_f32(&parameter_bias) == int32(1)
-                tensor<float32> native_input = value
-                tensor<float32> native_weight = parameter_weight
-                tensor<float32> native_bias = parameter_bias
+                tensor<real32> native_input = value
+                tensor<real32> native_weight = parameter_weight
+                tensor<real32> native_bias = parameter_bias
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
                 if not native_weight.is_contiguous()
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-                tensor<float32> native_output = tensor.zeros<float32>(
+                tensor<real32> native_output = tensor.zeros<real32>(
                     [batches, channels_out, output_height, output_width]
                 )
                 int32 native_status = native.conv2d_relu_inference_f32(
@@ -1187,7 +1187,7 @@ class Conv2D
                 if native_status == int32(0)
                     return native_output
 
-        tensor<float32> fused = value
+        tensor<real32> fused = value
         if metal_activation(value, 1, &fused)
             return fused
 
@@ -1200,10 +1200,10 @@ class Conv2D
     // Package-owned Conv+bias+GELU fusion target. CPU inference applies GELU
     // while each convolution result is still in the native output loop; Metal
     // runs the convolution and the fused GELU in one round trip.
-    private tensor<float32> forward_gelu(tensor<float32> value)
+    private tensor<real32> forward_gelu(tensor<real32> value)
         if not value.is_tracked()
-            tensor<float32> parameter_weight = weight.raw()
-            tensor<float32> parameter_bias = bias.raw()
+            tensor<real32> parameter_weight = weight.raw()
+            tensor<real32> parameter_bias = bias.raw()
             int[] input_shape = value.shape()
             int[] weight_shape = parameter_weight.shape()
             int[] bias_shape = parameter_bias.shape()
@@ -1245,16 +1245,16 @@ class Conv2D
             int output_width = (padded_width - kernel_width) / step + 1
 
             if native.is_cpu_f32(&value) == int32(1) and native.is_cpu_f32(&parameter_weight) == int32(1) and native.is_cpu_f32(&parameter_bias) == int32(1)
-                tensor<float32> native_input = value
-                tensor<float32> native_weight = parameter_weight
-                tensor<float32> native_bias = parameter_bias
+                tensor<real32> native_input = value
+                tensor<real32> native_weight = parameter_weight
+                tensor<real32> native_bias = parameter_bias
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
                 if not native_weight.is_contiguous()
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-                tensor<float32> native_output = tensor.zeros<float32>(
+                tensor<real32> native_output = tensor.zeros<real32>(
                     [batches, channels_out, output_height, output_width]
                 )
                 int32 native_status = native.conv2d_gelu_inference_f32(
@@ -1269,7 +1269,7 @@ class Conv2D
                 if native_status == int32(0)
                     return native_output
 
-        tensor<float32> fused = value
+        tensor<real32> fused = value
         if metal_activation(value, 2, &fused)
             return fused
 
@@ -1281,43 +1281,43 @@ class Conv2D
     // may be redirected here; every target retains the portable fallback in
     // forward()/forward_relu()/forward_gelu(), so backend availability never
     // changes NN semantics.
-    private tensor<float32> forward_inference(tensor<float32> value)
+    private tensor<real32> forward_inference(tensor<real32> value)
         return forward(value)
 
-    private tensor<float32> forward_cpu_inference(tensor<float32> value)
+    private tensor<real32> forward_cpu_inference(tensor<real32> value)
         return forward(value)
 
-    private tensor<float32> forward_cuda_inference(tensor<float32> value)
+    private tensor<real32> forward_cuda_inference(tensor<real32> value)
         return forward(value)
 
-    private tensor<float32> forward_cuda_fast_inference(tensor<float32> value)
+    private tensor<real32> forward_cuda_fast_inference(tensor<real32> value)
         return forward(value)
 
-    private tensor<float32> forward_cuda_deterministic_inference(tensor<float32> value)
+    private tensor<real32> forward_cuda_deterministic_inference(tensor<real32> value)
         return forward(value)
 
-    private tensor<float32> forward_relu_inference(tensor<float32> value)
+    private tensor<real32> forward_relu_inference(tensor<real32> value)
         return forward_relu(value)
 
-    private tensor<float32> forward_relu_cpu_inference(tensor<float32> value)
+    private tensor<real32> forward_relu_cpu_inference(tensor<real32> value)
         return forward_relu(value)
 
-    private tensor<float32> forward_relu_cuda(tensor<float32> value)
-        tensor<float32> output = forward(value)
+    private tensor<real32> forward_relu_cuda(tensor<real32> value)
+        tensor<real32> output = forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(&output) >= int32(0)
             int32 status = native.cuda_activation_inplace_f32(&output, 1)
             if status == int32(0)
                 return output
         return internal.relu_fused(output)
 
-    private tensor<float32> forward_gelu_inference(tensor<float32> value)
+    private tensor<real32> forward_gelu_inference(tensor<real32> value)
         return forward_gelu(value)
 
-    private tensor<float32> forward_gelu_cpu_inference(tensor<float32> value)
+    private tensor<real32> forward_gelu_cpu_inference(tensor<real32> value)
         return forward_gelu(value)
 
-    private tensor<float32> forward_gelu_cuda(tensor<float32> value)
-        tensor<float32> output = forward(value)
+    private tensor<real32> forward_gelu_cuda(tensor<real32> value)
+        tensor<real32> output = forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(&output) >= int32(0)
             int32 status = native.cuda_activation_inplace_f32(&output, 2)
             if status == int32(0)
@@ -1327,8 +1327,8 @@ class Conv2D
 FC | error normal_fc(
     int features_in,
     int features_out,
-    float standard_deviation,
-    float bias_value = 0.0,
+    real64 standard_deviation,
+    real64 bias_value = 0.0,
     int seed = 1
 )
     if features_in <= 0 or features_out <= 0
@@ -1339,17 +1339,17 @@ FC | error normal_fc(
         return error("nn.normal_fc bias must be finite")
 
     int weight_count = features_out * features_in
-    tensor<float32> weight_values = try normal_weights(
+    tensor<real32> weight_values = try normal_weights(
         weight_count, standard_deviation, seed
     )
 
-    float32 bias32 = try float32(bias_value)
+    real32 bias32 = try real32(bias_value)
     FC layer
-    layer.weight = Parameter<float32>(
+    layer.weight = Parameter<real32>(
         value = weight_values.reshape([features_out, features_in])
     )
-    layer.bias = Parameter<float32>(
-        value = tensor.ones<float32>([features_out]) * bias32
+    layer.bias = Parameter<real32>(
+        value = tensor.ones<real32>([features_out]) * bias32
     )
     return layer
 
@@ -1357,8 +1357,8 @@ Conv2D | error normal_conv2d(
     int channels_in,
     int channels_out,
     int kernel,
-    float standard_deviation,
-    float bias_value = 0.0,
+    real64 standard_deviation,
+    real64 bias_value = 0.0,
     int stride = 1,
     int padding = 0,
     int seed = 1,
@@ -1390,18 +1390,18 @@ Conv2D | error normal_conv2d(
         return error("nn.normal_conv2d dimensions are too large")
     int weight_count = channels_out * fan_in
 
-    tensor<float32> weight_values = try normal_weights(
+    tensor<real32> weight_values = try normal_weights(
         weight_count, standard_deviation, seed
     )
-    float32 bias32 = try float32(bias_value)
+    real32 bias32 = try real32(bias_value)
     Conv2D layer
-    layer.weight = Parameter<float32>(
+    layer.weight = Parameter<real32>(
         value = weight_values.reshape(
             [channels_out, channels_per_group, kernel, kernel]
         )
     )
-    layer.bias = Parameter<float32>(
-        value = tensor.ones<float32>([channels_out]) * bias32
+    layer.bias = Parameter<real32>(
+        value = tensor.ones<real32>([channels_out]) * bias32
     )
     layer.step = stride
     layer.border = padding
@@ -1409,8 +1409,8 @@ Conv2D | error normal_conv2d(
     return layer
 
 
-tensor<float32> max_pool2d(
-    tensor<float32> value,
+tensor<real32> max_pool2d(
+    tensor<real32> value,
     int kernel,
     int stride,
     int padding = 0
@@ -1433,8 +1433,8 @@ tensor<float32> max_pool2d(
     int output_height = (padded_height - kernel) / stride + 1
     int output_width = (padded_width - kernel) / stride + 1
     int[] output_shape = [batches, channels, output_height, output_width]
-    tensor<float32> output = (
-        value.untrack().gather([0], [1]) * float32(0)
+    tensor<real32> output = (
+        value.untrack().gather([0], [1]) * real32(0)
     ).scatter([0], output_shape)
 
     for channel in range(channels)
@@ -1470,16 +1470,16 @@ tensor<float32> max_pool2d(
                                     )
                                     cursor = cursor + 1
 
-                tensor<float32> window = value.gather(
+                tensor<real32> window = value.gather(
                     input_indices, [batches, valid_count]
                 )
                 // max_last preserves shape by broadcasting each row maximum;
                 // gather one representative value per batch for the pool output.
-                tensor<float32> maxima = math.max_last(window)
+                tensor<real32> maxima = math.max_last(window)
                 int[] maximum_indices = array(batches, fill = 0)
                 for batch in range(batches)
                     maximum_indices[batch] = batch * valid_count
-                tensor<float32> pooled = maxima.gather(
+                tensor<real32> pooled = maxima.gather(
                     maximum_indices, [batches]
                 )
                 int[] output_indices = array(batches, fill = 0)
@@ -1491,7 +1491,7 @@ tensor<float32> max_pool2d(
                 output = output + pooled.scatter(output_indices, output_shape)
     return output
 
-tensor<float32> global_average_pool2d(tensor<float32> value)
+tensor<real32> global_average_pool2d(tensor<real32> value)
     int[] shape = value.shape()
     if len(shape) != 4
         error("nn.global_average_pool2d requires NCHW rank-4 input")
@@ -1516,17 +1516,17 @@ tensor<float32> global_average_pool2d(tensor<float32> value)
     // Only untracked views are densified; tracked views keep the graph.
     int32 device = native.fused_device_f32(&value)
     if device >= int32(-1)
-        tensor<float32> input = value
+        tensor<real32> input = value
         bool dense = input.is_contiguous()
         if not dense and not input.is_tracked()
             input = input.contiguous()
             dense = true
         if dense
-            tensor<float32> pooled
+            tensor<real32> pooled
             if device == int32(-1)
-                pooled = tensor.zeros<float32>([batches, channels])
+                pooled = tensor.zeros<real32>([batches, channels])
             else
-                pooled = tensor.zeros<float32>([batches, channels], gpu = int(device))
+                pooled = tensor.zeros<real32>([batches, channels], gpu = int(device))
             if native.global_average_pool2d_f32(&input, &pooled) == int32(0)
                 if device >= int32(0)
                     return internal.dense_device_gradient(pooled)
@@ -1537,25 +1537,25 @@ tensor<float32> global_average_pool2d(tensor<float32> value)
     int[] flatten_indices = array(total_count, fill = 0)
     for index in range(total_count)
         flatten_indices[index] = index
-    tensor<float32> flattened = value.gather(
+    tensor<real32> flattened = value.gather(
         flatten_indices, [batches, channels, count]
     )
 
     // sum_last preserves the reduced axis by broadcasting the sum. Select
     // one representative from each spatial plane after dividing by its size.
-    tensor<float32> means = math.sum_last(flattened) / float32(count)
+    tensor<real32> means = math.sum_last(flattened) / real32(count)
     int output_count = batches * channels
     int[] indices = array(output_count, fill = 0)
     for index in range(output_count)
         indices[index] = index * count
     return means.gather(indices, [batches, channels])
 
-tensor<float32> local_response_normalization(
-    tensor<float32> value,
+tensor<real32> local_response_normalization(
+    tensor<real32> value,
     int size = 5,
-    float alpha = 0.0001,
-    float beta = 0.75,
-    float k = 2.0
+    real64 alpha = 0.0001,
+    real64 beta = 0.75,
+    real64 k = 2.0
 )
     int[] shape = value.shape()
     if len(shape) != 4
@@ -1576,8 +1576,8 @@ tensor<float32> local_response_normalization(
     if batches <= 0 or channels <= 0 or height <= 0 or width <= 0
         error("nn.local_response_normalization requires positive input dimensions")
 
-    tensor<float32> output = (
-        value.untrack().gather([0], [1]) * float32(0)
+    tensor<real32> output = (
+        value.untrack().gather([0], [1]) * real32(0)
     ).scatter([0], shape)
     int plane_count = batches * height * width
     int radius = size / 2
@@ -1599,10 +1599,10 @@ tensor<float32> local_response_normalization(
             current_indices[flat_index] = (
                 ((batch * channels + channel) * height + y) * width + x
             )
-        tensor<float32> current = value.gather(
+        tensor<real32> current = value.gather(
             current_indices, [batches, height, width]
         )
-        tensor<float32> square_sum = current.untrack() * float32(0)
+        tensor<real32> square_sum = current.untrack() * real32(0)
 
         for neighbor in range(first_channel, last_channel + 1)
             int[] neighbor_indices = array(plane_count, fill = 0)
@@ -1614,35 +1614,35 @@ tensor<float32> local_response_normalization(
                 neighbor_indices[flat_index] = (
                     ((batch * channels + neighbor) * height + y) * width + x
                 )
-            tensor<float32> neighbor_value = value.gather(
+            tensor<real32> neighbor_value = value.gather(
                 neighbor_indices, [batches, height, width]
             )
             square_sum = square_sum + neighbor_value * neighbor_value
 
-        float32 base_k = float32(k)
-        float32 coefficient = float32(alpha)
-        float32 exponent = float32(beta)
-        tensor<float32> base = base_k + square_sum * coefficient
-        tensor<float32> denominator = math.exp(
+        real32 base_k = real32(k)
+        real32 coefficient = real32(alpha)
+        real32 exponent = real32(beta)
+        tensor<real32> base = base_k + square_sum * coefficient
+        tensor<real32> denominator = math.exp(
             math.log(base) * exponent
         )
-        tensor<float32> normalized = current / denominator
+        tensor<real32> normalized = current / denominator
         output = output + normalized.scatter(current_indices, shape)
 
     return output
 
 class BatchNorm
-    Parameter<float32> scale
-    Parameter<float32> bias
-    State<float32> running_mean
-    State<float32> running_variance
-    float32 running_momentum
-    float32 variance_epsilon
+    Parameter<real32> scale
+    Parameter<real32> bias
+    State<real32> running_mean
+    State<real32> running_variance
+    real32 running_momentum
+    real32 variance_epsilon
 
     BatchNorm | error construct(
         int features,
-        float momentum = 0.1,
-        float epsilon = 0.00001
+        real64 momentum = 0.1,
+        real64 epsilon = 0.00001
     )
         if features <= 0
             return error("nn.BatchNorm features must be positive")
@@ -1650,19 +1650,19 @@ class BatchNorm
             return error("nn.BatchNorm momentum must be finite and in [0, 1)")
         if not math.is_finite(epsilon) or epsilon <= 0.0
             return error("nn.BatchNorm epsilon must be finite and positive")
-        scale = Parameter<float32>(
-            value = tensor.ones<float32>([features])
+        scale = Parameter<real32>(
+            value = tensor.ones<real32>([features])
         )
-        bias = Parameter<float32>(
-            value = tensor.zeros<float32>([features])
+        bias = Parameter<real32>(
+            value = tensor.zeros<real32>([features])
         )
-        running_mean = State<float32>(value = tensor.zeros<float32>([features]))
-        running_variance = State<float32>(value = tensor.ones<float32>([features]))
-        running_momentum = try float32(momentum)
-        variance_epsilon = try float32(epsilon)
+        running_mean = State<real32>(value = tensor.zeros<real32>([features]))
+        running_variance = State<real32>(value = tensor.ones<real32>([features]))
+        running_momentum = try real32(momentum)
+        variance_epsilon = try real32(epsilon)
 
-    private tensor<float32> normalize_value(
-        tensor<float32> value,
+    private tensor<real32> normalize_value(
+        tensor<real32> value,
         bool training
     )
         int[] shape = value.shape()
@@ -1701,8 +1701,8 @@ class BatchNorm
         if training and samples == 0
             error("nn.BatchNorm training requires at least one sample per feature")
 
-        tensor<float32> parameter_scale
-        tensor<float32> parameter_bias
+        tensor<real32> parameter_scale
+        tensor<real32> parameter_bias
         if value.is_tracked()
             parameter_scale = scale.track()
             parameter_bias = bias.track()
@@ -1710,9 +1710,9 @@ class BatchNorm
             parameter_scale = scale.raw()
             parameter_bias = bias.raw()
 
-        tensor<float32> output = value * float32(0)
-        tensor<float32> next_running_mean = running_mean.raw() * float32(0)
-        tensor<float32> next_running_variance = running_variance.raw() * float32(0)
+        tensor<real32> output = value * real32(0)
+        tensor<real32> next_running_mean = running_mean.raw() * real32(0)
+        tensor<real32> next_running_variance = running_variance.raw() * real32(0)
 
         for feature in range(features)
             int[] indices = array(samples, fill = 0)
@@ -1721,34 +1721,34 @@ class BatchNorm
                 int offset = sample % inner
                 indices[sample] = ((outer * features + feature) * inner) + offset
 
-            tensor<float32> feature_values = value.gather(indices, [samples])
-            tensor<float32> mean
-            tensor<float32> variance
+            tensor<real32> feature_values = value.gather(indices, [samples])
+            tensor<real32> mean
+            tensor<real32> variance
 
             if training
                 mean = internal.mean_all(feature_values).reshape([1])
-                tensor<float32> centered = feature_values - mean
+                tensor<real32> centered = feature_values - mean
                 variance = internal.mean_all(centered * centered).reshape([1])
 
-                tensor<float32> old_mean = running_mean.raw().gather(
+                tensor<real32> old_mean = running_mean.raw().gather(
                     [feature], [1]
                 )
-                tensor<float32> old_variance = running_variance.raw().gather(
+                tensor<real32> old_variance = running_variance.raw().gather(
                     [feature], [1]
                 )
-                tensor<float32> updated_mean = (
-                    old_mean * (float32(1) - running_momentum)
+                tensor<real32> updated_mean = (
+                    old_mean * (real32(1) - running_momentum)
                     + mean.untrack() * running_momentum
                 )
-                tensor<float32> updated_variance = (
-                    old_variance * (float32(1) - running_momentum)
+                tensor<real32> updated_variance = (
+                    old_variance * (real32(1) - running_momentum)
                     + variance.untrack() * running_momentum
                 )
 
-                tensor<float32> mean_piece = updated_mean.scatter(
+                tensor<real32> mean_piece = updated_mean.scatter(
                     [feature], [features]
                 )
-                tensor<float32> variance_piece = updated_variance.scatter(
+                tensor<real32> variance_piece = updated_variance.scatter(
                     [feature], [features]
                 )
                 next_running_mean = next_running_mean + mean_piece
@@ -1757,19 +1757,19 @@ class BatchNorm
                 mean = running_mean.raw().gather([feature], [1])
                 variance = running_variance.raw().gather([feature], [1])
 
-            tensor<float32> denominator = math.exp(
-                math.log(variance + variance_epsilon) * float32(0.5)
+            tensor<real32> denominator = math.exp(
+                math.log(variance + variance_epsilon) * real32(0.5)
             )
-            tensor<float32> feature_scale = parameter_scale.gather(
+            tensor<real32> feature_scale = parameter_scale.gather(
                 [feature], [1]
             )
-            tensor<float32> feature_bias = parameter_bias.gather(
+            tensor<real32> feature_bias = parameter_bias.gather(
                 [feature], [1]
             )
-            tensor<float32> normalized = (
+            tensor<real32> normalized = (
                 (feature_values - mean) / denominator
             ) * feature_scale + feature_bias
-            tensor<float32> piece = normalized.scatter(indices, shape)
+            tensor<real32> piece = normalized.scatter(indices, shape)
             output = output + piece
 
         if training
@@ -1777,10 +1777,10 @@ class BatchNorm
             running_variance.replace(next_running_variance)
         return output
 
-    tensor<float32> forward(tensor<float32> value)
+    tensor<real32> forward(tensor<real32> value)
         return normalize_value(value, true)
 
-    tensor<float32> infer(tensor<float32> value)
+    tensor<real32> infer(tensor<real32> value)
         return normalize_value(value, false)
 
     // Compiler-private inference fusion targets. Core sees only the generic
@@ -1788,34 +1788,34 @@ class BatchNorm
     // Keep the Conv2D side input as an ordinary value parameter. Its body-only
     // use is inferred as borrowed, matching the implicit method-receiver
     // contract of Conv2D.forward without introducing an explicit reference ABI.
-    private tensor<float32> infer_conv(
+    private tensor<real32> infer_conv(
         Conv2D convolution,
-        tensor<float32> value
+        tensor<real32> value
     )
         value = convolution.forward(value)
         return normalize_value(value, false)
 
-    private tensor<float32> infer_conv_relu(
+    private tensor<real32> infer_conv_relu(
         Conv2D convolution,
-        tensor<float32> value
+        tensor<real32> value
     )
         value = convolution.forward(value)
         return relu(normalize_value(value, false))
 
-    private tensor<float32> infer_conv_gelu(
+    private tensor<real32> infer_conv_gelu(
         Conv2D convolution,
-        tensor<float32> value
+        tensor<real32> value
     )
         value = convolution.forward(value)
         return gelu(normalize_value(value, false))
 
 class Dropout
-    float drop_rate
+    real64 drop_rate
     random.Generator rng
     bool inverted_scaling
 
     Dropout | error construct(
-        float rate,
+        real64 rate,
         int seed = 0,
         bool inverted = true
     )
@@ -1825,7 +1825,7 @@ class Dropout
         rng = random.generator(seed = seed)
         inverted_scaling = inverted
 
-    tensor<float32> forward(tensor<float32> value)
+    tensor<real32> forward(tensor<real32> value)
         if drop_rate == 0.0
             return value
 
@@ -1838,145 +1838,145 @@ class Dropout
                 error("nn.Dropout tensor is too large")
             count = count * shape[axis]
 
-        tensor<float32> mask = (value.untrack() * float32(0)).reshape([count])
-        float scale = 1.0
+        tensor<real32> mask = (value.untrack() * real32(0)).reshape([count])
+        real64 scale = 1.0
         if inverted_scaling
             scale = 1.0 / (1.0 - drop_rate)
         for index in range(count)
-            if rng.float() < drop_rate
-                mask[index] = float32(0)
+            if rng.real64() < drop_rate
+                mask[index] = real32(0)
             else
-                mask[index] = float32(scale)
+                mask[index] = real32(scale)
 
         return value * mask.reshape(shape)
 
-    tensor<float32> infer(tensor<float32> value)
+    tensor<real32> infer(tensor<real32> value)
         if inverted_scaling
             return value
-        float32 keep = float32(1.0 - drop_rate)
+        real32 keep = real32(1.0 - drop_rate)
         return value * keep
 
 // ReLU is the expression (x + |x|) / 2 and GELU is
 // x * 0.5 * (1 + nn.tanh(0.7978845608028654 * (x + 0.044715 * x^3))).
 // internal.qui keeps both source expressions; on CPU and Metal they run as
 // one fused package-native kernel with custom autograd.
-tensor<float32> relu(tensor<float32> value)
+tensor<real32> relu(tensor<real32> value)
     return internal.relu_fused(value)
 
-tensor<float32> tanh(tensor<float32> value)
-    tensor<float32> lifted = (value - 20.0 + math.abs(value + 20.0)) / 2.0
-    tensor<float32> limited = (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
-    tensor<float32> exponent = math.exp(limited * 2.0)
+tensor<real32> tanh(tensor<real32> value)
+    tensor<real32> lifted = (value - 20.0 + math.abs(value + 20.0)) / 2.0
+    tensor<real32> limited = (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
+    tensor<real32> exponent = math.exp(limited * 2.0)
     return (exponent - 1.0) / (exponent + 1.0)
 
-tensor<float32> sigmoid(tensor<float32> value)
+tensor<real32> sigmoid(tensor<real32> value)
     return (tanh(value * 0.5) + 1.0) * 0.5
 
-tensor<float32> softmax(tensor<float32> value)
-    tensor<float32> shifted = value - math.max_last(value)
-    tensor<float32> weights = math.exp(shifted)
+tensor<real32> softmax(tensor<real32> value)
+    tensor<real32> shifted = value - math.max_last(value)
+    tensor<real32> weights = math.exp(shifted)
     return weights / math.sum_last(weights)
 
-tensor<float32> gelu(tensor<float32> value)
+tensor<real32> gelu(tensor<real32> value)
     return internal.gelu_fused(value)
 
-tensor<float32> mse(tensor<float32> prediction, tensor<float32> target)
-    tensor<float32> difference = prediction - target
+tensor<real32> mse(tensor<real32> prediction, tensor<real32> target)
+    tensor<real32> difference = prediction - target
     return internal.mean_all(difference * difference)
 
-tensor<float32> binary_cross_entropy(
-    tensor<float32> prediction,
-    tensor<float32> target
+tensor<real32> binary_cross_entropy(
+    tensor<real32> prediction,
+    tensor<real32> target
 )
-    tensor<float32> lifted = (
-        prediction + float32(0.000001)
-        + math.abs(prediction - float32(0.000001))
+    tensor<real32> lifted = (
+        prediction + real32(0.000001)
+        + math.abs(prediction - real32(0.000001))
     ) / 2.0
-    tensor<float32> limited = (
-        lifted + float32(0.999999)
-        - math.abs(lifted - float32(0.999999))
+    tensor<real32> limited = (
+        lifted + real32(0.999999)
+        - math.abs(lifted - real32(0.999999))
     ) / 2.0
-    tensor<float32> first = target * math.log(limited)
-    tensor<float32> second = (1.0 - target) * math.log(1.0 - limited)
+    tensor<real32> first = target * math.log(limited)
+    tensor<real32> second = (1.0 - target) * math.log(1.0 - limited)
     return internal.mean_all(0.0 - first - second)
 
-tensor<float32> binary_cross_entropy_with_logits(
-    tensor<float32> logits,
-    tensor<float32> target
+tensor<real32> binary_cross_entropy_with_logits(
+    tensor<real32> logits,
+    tensor<real32> target
 )
-    tensor<float32> magnitude = math.abs(logits)
-    tensor<float32> positive = (logits + magnitude) / 2.0
-    tensor<float32> tail = math.log(1.0 + math.exp(0.0 - magnitude))
+    tensor<real32> magnitude = math.abs(logits)
+    tensor<real32> positive = (logits + magnitude) / 2.0
+    tensor<real32> tail = math.log(1.0 + math.exp(0.0 - magnitude))
     return internal.mean_all(positive - logits * target + tail)
 
-tensor<float32> cross_entropy(
-    tensor<float32> logits,
-    tensor<float32> target
+tensor<real32> cross_entropy(
+    tensor<real32> logits,
+    tensor<real32> target
 )
-    tensor<float32> shifted = logits - math.max_last(logits)
-    tensor<float32> total = math.sum_last(math.exp(shifted))
-    tensor<float32> log_probabilities = shifted - math.log(total)
-    tensor<float32> per_class = target * log_probabilities
+    tensor<real32> shifted = logits - math.max_last(logits)
+    tensor<real32> total = math.sum_last(math.exp(shifted))
+    tensor<real32> log_probabilities = shifted - math.log(total)
+    tensor<real32> per_class = target * log_probabilities
     return internal.mean_all(0.0 - math.sum_last(per_class))
 
 
 
 
 class SGD
-    float learning_rate
+    real64 learning_rate
     private int iteration
 
-    SGD | error construct(float rate = 0.01)
+    SGD | error construct(real64 rate = 0.01)
         if not math.is_finite(rate) or rate <= 0.0
             return error("nn.SGD rate must be finite and positive")
         learning_rate = rate
         iteration = 0
 
     void zero_grad<M>(M &model)
-        Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
+        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
         for parameter in parameters32
             parameter.clear_grad()
-        Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
+        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
         for parameter in parameters64
             parameter.clear_grad()
 
     void step<M>(M &model)
         iteration = iteration + int(1)
-        Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
-        float32 rate32 = float32(learning_rate)
+        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
+        real32 rate32 = real32(learning_rate)
         for parameter in parameters32
             if parameter.has_grad()
-                tensor<float32> gradient = parameter.gradient().untrack()
+                tensor<real32> gradient = parameter.gradient().untrack()
                 parameter.replace(parameter.raw() - gradient * rate32)
 
-        Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
+        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
         for parameter in parameters64
             if parameter.has_grad()
-                tensor<float> gradient = parameter.gradient().untrack()
+                tensor<real64> gradient = parameter.gradient().untrack()
                 parameter.replace(parameter.raw() - gradient * learning_rate)
 
 class Adam
-    float learning_rate
-    float first_decay
-    float second_decay
-    float stability
+    real64 learning_rate
+    real64 first_decay
+    real64 second_decay
+    real64 stability
     private int iteration
     // Stable bias-correction state: c_t = 1 - beta^t. Updating c directly
     // avoids repeated pow() and subtraction from one for beta close to one.
-    private float first_correction
-    private float second_correction
-    private Parameter<float32>[] bound32
-    private tensor<float32>[] first32
-    private tensor<float32>[] second32
-    private Parameter<float>[] bound64
-    private tensor<float>[] first64
-    private tensor<float>[] second64
+    private real64 first_correction
+    private real64 second_correction
+    private Parameter<real32>[] bound32
+    private tensor<real32>[] first32
+    private tensor<real32>[] second32
+    private Parameter<real64>[] bound64
+    private tensor<real64>[] first64
+    private tensor<real64>[] second64
 
     Adam | error construct(
-        float rate = 0.001,
-        float beta1 = 0.9,
-        float beta2 = 0.999,
-        float epsilon = 0.00000001
+        real64 rate = 0.001,
+        real64 beta1 = 0.9,
+        real64 beta2 = 0.999,
+        real64 epsilon = 0.00000001
     )
         if not math.is_finite(rate) or rate <= 0.0
             return error("nn.Adam rate must be finite and positive")
@@ -2001,14 +2001,14 @@ class Adam
         second64 = []
 
     void | error save<M>(M model, string path)
-        Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
-        Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
-        State<float32>[] states32 = reflect.collect<State<float32>>(model)
-        State<float>[] states64 = reflect.collect<State<float>>(model)
-        string[] parameter_paths32 = reflect.paths<Parameter<float32>>(model)
-        string[] parameter_paths64 = reflect.paths<Parameter<float>>(model)
-        string[] state_paths32 = reflect.paths<State<float32>>(model)
-        string[] state_paths64 = reflect.paths<State<float>>(model)
+        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
+        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
+        State<real32>[] states32 = reflect.collect<State<real32>>(model)
+        State<real64>[] states64 = reflect.collect<State<real64>>(model)
+        string[] parameter_paths32 = reflect.paths<Parameter<real32>>(model)
+        string[] parameter_paths64 = reflect.paths<Parameter<real64>>(model)
+        string[] state_paths32 = reflect.paths<State<real32>>(model)
+        string[] state_paths64 = reflect.paths<State<real64>>(model)
 
         if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
             return error("nn.Adam.save reflection metadata does not match collected state")
@@ -2027,14 +2027,14 @@ class Adam
                 return error("nn.Adam.save optimizer state is not bound to the supplied model")
             for index in range(len(parameters32))
                 if not parameters32[index].same(bound32[index])
-                    return error("nn.Adam.save optimizer Parameter<float32> binding does not match the supplied model")
+                    return error("nn.Adam.save optimizer Parameter<real32> binding does not match the supplied model")
                 if first32[index].shape() != parameters32[index].raw().shape() or second32[index].shape() != parameters32[index].raw().shape()
-                    return error("nn.Adam.save float32 moment shape does not match the supplied model")
+                    return error("nn.Adam.save real32 moment shape does not match the supplied model")
             for index in range(len(parameters64))
                 if not parameters64[index].same(bound64[index])
-                    return error("nn.Adam.save optimizer Parameter<float> binding does not match the supplied model")
+                    return error("nn.Adam.save optimizer Parameter<real64> binding does not match the supplied model")
                 if first64[index].shape() != parameters64[index].raw().shape() or second64[index].shape() != parameters64[index].raw().shape()
-                    return error("nn.Adam.save float moment shape does not match the supplied model")
+                    return error("nn.Adam.save real64 moment shape does not match the supplied model")
 
         file.Handle output = try file.create(path)
         internal.StateChecksum checksum = internal.StateChecksum()
@@ -2049,22 +2049,22 @@ class Adam
 
         for index in range(len(parameters32))
             try internal.write_state_entry(
-                &output, &checksum, "Parameter", "float32",
+                &output, &checksum, "Parameter", "real32",
                 parameter_paths32[index], parameters32[index].raw()
             )
         for index in range(len(parameters64))
             try internal.write_state_entry(
-                &output, &checksum, "Parameter", "float",
+                &output, &checksum, "Parameter", "real64",
                 parameter_paths64[index], parameters64[index].raw()
             )
         for index in range(len(states32))
             try internal.write_state_entry(
-                &output, &checksum, "State", "float32",
+                &output, &checksum, "State", "real32",
                 state_paths32[index], states32[index].raw()
             )
         for index in range(len(states64))
             try internal.write_state_entry(
-                &output, &checksum, "State", "float",
+                &output, &checksum, "State", "real64",
                 state_paths64[index], states64[index].raw()
             )
 
@@ -2080,38 +2080,38 @@ class Adam
         try internal.write_checked_line(&output, &checksum, len(parameters64).string())
 
         for index in range(len(parameters32))
-            tensor<float32> first
-            tensor<float32> second
+            tensor<real32> first
+            tensor<real32> second
             if pristine
-                first = tensor.zeros<float32>(parameters32[index].raw().shape())
-                second = tensor.zeros<float32>(parameters32[index].raw().shape())
+                first = tensor.zeros<real32>(parameters32[index].raw().shape())
+                second = tensor.zeros<real32>(parameters32[index].raw().shape())
             else
                 first = first32[index]
                 second = second32[index]
             try internal.write_state_entry(
-                &output, &checksum, "AdamFirst", "float32",
+                &output, &checksum, "AdamFirst", "real32",
                 parameter_paths32[index], first
             )
             try internal.write_state_entry(
-                &output, &checksum, "AdamSecond", "float32",
+                &output, &checksum, "AdamSecond", "real32",
                 parameter_paths32[index], second
             )
 
         for index in range(len(parameters64))
-            tensor<float> first
-            tensor<float> second
+            tensor<real64> first
+            tensor<real64> second
             if pristine
-                first = tensor.zeros<float>(parameters64[index].raw().shape())
-                second = tensor.zeros<float>(parameters64[index].raw().shape())
+                first = tensor.zeros<real64>(parameters64[index].raw().shape())
+                second = tensor.zeros<real64>(parameters64[index].raw().shape())
             else
                 first = first64[index]
                 second = second64[index]
             try internal.write_state_entry(
-                &output, &checksum, "AdamFirst", "float",
+                &output, &checksum, "AdamFirst", "real64",
                 parameter_paths64[index], first
             )
             try internal.write_state_entry(
-                &output, &checksum, "AdamSecond", "float",
+                &output, &checksum, "AdamSecond", "real64",
                 parameter_paths64[index], second
             )
 
@@ -2119,14 +2119,14 @@ class Adam
         return
 
     void | error load<M>(M &model, string path)
-        Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
-        Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
-        State<float32>[] states32 = reflect.collect<State<float32>>(model)
-        State<float>[] states64 = reflect.collect<State<float>>(model)
-        string[] parameter_paths32 = reflect.paths<Parameter<float32>>(model)
-        string[] parameter_paths64 = reflect.paths<Parameter<float>>(model)
-        string[] state_paths32 = reflect.paths<State<float32>>(model)
-        string[] state_paths64 = reflect.paths<State<float>>(model)
+        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
+        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
+        State<real32>[] states32 = reflect.collect<State<real32>>(model)
+        State<real64>[] states64 = reflect.collect<State<real64>>(model)
+        string[] parameter_paths32 = reflect.paths<Parameter<real32>>(model)
+        string[] parameter_paths64 = reflect.paths<Parameter<real64>>(model)
+        string[] state_paths32 = reflect.paths<State<real32>>(model)
+        string[] state_paths64 = reflect.paths<State<real64>>(model)
         if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
             return error("nn.Adam.load reflection metadata does not match collected state")
 
@@ -2146,48 +2146,48 @@ class Adam
             return error("nn.Adam.load root model type does not match the target model")
 
         int model_count32 = try internal.parse_nonnegative_state_int(
-            try internal.read_checked_line(&input, &checksum, "Parameter<float32> count"),
-            "Parameter<float32> count"
+            try internal.read_checked_line(&input, &checksum, "Parameter<real32> count"),
+            "Parameter<real32> count"
         )
         int model_count64 = try internal.parse_nonnegative_state_int(
-            try internal.read_checked_line(&input, &checksum, "Parameter<float> count"),
-            "Parameter<float> count"
+            try internal.read_checked_line(&input, &checksum, "Parameter<real64> count"),
+            "Parameter<real64> count"
         )
         int state_count32 = try internal.parse_nonnegative_state_int(
-            try internal.read_checked_line(&input, &checksum, "State<float32> count"),
-            "State<float32> count"
+            try internal.read_checked_line(&input, &checksum, "State<real32> count"),
+            "State<real32> count"
         )
         int state_count64 = try internal.parse_nonnegative_state_int(
-            try internal.read_checked_line(&input, &checksum, "State<float> count"),
-            "State<float> count"
+            try internal.read_checked_line(&input, &checksum, "State<real64> count"),
+            "State<real64> count"
         )
         if model_count32 != len(parameters32) or model_count64 != len(parameters64) or state_count32 != len(states32) or state_count64 != len(states64)
             return error("nn.Adam.load model schema does not match the target model")
 
-        tensor<float32>[] loaded_parameters32 = []
-        tensor<float>[] loaded_parameters64 = []
-        tensor<float32>[] loaded_states32 = []
-        tensor<float>[] loaded_states64 = []
+        tensor<real32>[] loaded_parameters32 = []
+        tensor<real64>[] loaded_parameters64 = []
+        tensor<real32>[] loaded_states32 = []
+        tensor<real64>[] loaded_states64 = []
         for index in range(len(parameters32))
-            tensor<float32> value = try internal.read_state_entry32(
+            tensor<real32> value = try internal.read_state_entry32(
                 &input, &checksum, "Parameter", parameter_paths32[index],
                 parameters32[index].raw().shape()
             )
             loaded_parameters32 = loaded_parameters32.append(value)
         for index in range(len(parameters64))
-            tensor<float> value = try internal.read_state_entry64(
+            tensor<real64> value = try internal.read_state_entry64(
                 &input, &checksum, "Parameter", parameter_paths64[index],
                 parameters64[index].raw().shape()
             )
             loaded_parameters64 = loaded_parameters64.append(value)
         for index in range(len(states32))
-            tensor<float32> value = try internal.read_state_entry32(
+            tensor<real32> value = try internal.read_state_entry32(
                 &input, &checksum, "State", state_paths32[index],
                 states32[index].raw().shape()
             )
             loaded_states32 = loaded_states32.append(value)
         for index in range(len(states64))
-            tensor<float> value = try internal.read_state_entry64(
+            tensor<real64> value = try internal.read_state_entry64(
                 &input, &checksum, "State", state_paths64[index],
                 states64[index].raw().shape()
             )
@@ -2197,42 +2197,42 @@ class Adam
         if optimizer_kind != "Adam"
             return error("nn.Adam.load optimizer kind does not match")
 
-        float loaded_learning_rate = try float.parse(
+        real64 loaded_learning_rate = try real64.parse(
             try internal.read_checked_line(&input, &checksum, "Adam learning rate")
         )
-        float loaded_first_decay = try float.parse(
+        real64 loaded_first_decay = try real64.parse(
             try internal.read_checked_line(&input, &checksum, "Adam beta1")
         )
-        float loaded_second_decay = try float.parse(
+        real64 loaded_second_decay = try real64.parse(
             try internal.read_checked_line(&input, &checksum, "Adam beta2")
         )
-        float loaded_stability = try float.parse(
+        real64 loaded_stability = try real64.parse(
             try internal.read_checked_line(&input, &checksum, "Adam epsilon")
         )
         int loaded_iteration = try internal.parse_nonnegative_state_int(
             try internal.read_checked_line(&input, &checksum, "Adam iteration"),
             "Adam iteration"
         )
-        float loaded_first_correction = 0.0
-        float loaded_second_correction = 0.0
+        real64 loaded_first_correction = 0.0
+        real64 loaded_second_correction = 0.0
         if version == "3"
-            loaded_first_correction = try float.parse(
+            loaded_first_correction = try real64.parse(
                 try internal.read_checked_line(
                     &input, &checksum, "Adam beta1 correction"
                 )
             )
-            loaded_second_correction = try float.parse(
+            loaded_second_correction = try real64.parse(
                 try internal.read_checked_line(
                     &input, &checksum, "Adam beta2 correction"
                 )
             )
         int count32 = try internal.parse_nonnegative_state_int(
-            try internal.read_checked_line(&input, &checksum, "Adam Parameter<float32> count"),
-            "Adam Parameter<float32> count"
+            try internal.read_checked_line(&input, &checksum, "Adam Parameter<real32> count"),
+            "Adam Parameter<real32> count"
         )
         int count64 = try internal.parse_nonnegative_state_int(
-            try internal.read_checked_line(&input, &checksum, "Adam Parameter<float> count"),
-            "Adam Parameter<float> count"
+            try internal.read_checked_line(&input, &checksum, "Adam Parameter<real64> count"),
+            "Adam Parameter<real64> count"
         )
         if not math.is_finite(loaded_learning_rate) or loaded_learning_rate <= 0.0
             return error("nn.Adam.load learning rate must be finite and positive")
@@ -2248,10 +2248,10 @@ class Adam
             // the stable recurrence and v3 checkpoints preserve it exactly.
             if loaded_iteration > 0
                 loaded_first_correction = (
-                    1.0 - math.pow(loaded_first_decay, float(loaded_iteration))
+                    1.0 - math.pow(loaded_first_decay, real64(loaded_iteration))
                 )
                 loaded_second_correction = (
-                    1.0 - math.pow(loaded_second_decay, float(loaded_iteration))
+                    1.0 - math.pow(loaded_second_decay, real64(loaded_iteration))
                 )
         if not math.is_finite(loaded_first_correction) or not math.is_finite(loaded_second_correction)
             return error("nn.Adam.load bias correction must be finite")
@@ -2264,27 +2264,27 @@ class Adam
         if count32 != len(parameters32) or count64 != len(parameters64)
             return error("nn.Adam.load optimizer parameter binding does not match the target model")
 
-        tensor<float32>[] loaded_first32 = []
-        tensor<float32>[] loaded_second32 = []
-        tensor<float>[] loaded_first64 = []
-        tensor<float>[] loaded_second64 = []
+        tensor<real32>[] loaded_first32 = []
+        tensor<real32>[] loaded_second32 = []
+        tensor<real64>[] loaded_first64 = []
+        tensor<real64>[] loaded_second64 = []
         for index in range(len(parameters32))
-            tensor<float32> first = try internal.read_state_entry32(
+            tensor<real32> first = try internal.read_state_entry32(
                 &input, &checksum, "AdamFirst", parameter_paths32[index],
                 parameters32[index].raw().shape()
             )
-            tensor<float32> second = try internal.read_state_entry32(
+            tensor<real32> second = try internal.read_state_entry32(
                 &input, &checksum, "AdamSecond", parameter_paths32[index],
                 parameters32[index].raw().shape()
             )
             loaded_first32 = loaded_first32.append(first)
             loaded_second32 = loaded_second32.append(second)
         for index in range(len(parameters64))
-            tensor<float> first = try internal.read_state_entry64(
+            tensor<real64> first = try internal.read_state_entry64(
                 &input, &checksum, "AdamFirst", parameter_paths64[index],
                 parameters64[index].raw().shape()
             )
-            tensor<float> second = try internal.read_state_entry64(
+            tensor<real64> second = try internal.read_state_entry64(
                 &input, &checksum, "AdamSecond", parameter_paths64[index],
                 parameters64[index].raw().shape()
             )
@@ -2317,29 +2317,29 @@ class Adam
         second64 = loaded_second64
         return
 
-    // NN's element-wise Adam update of float32 Parameter `index` (the
+    // NN's element-wise Adam update of real32 Parameter `index` (the
     // portable path for devices without a fused kernel).
     private void element_update32(
         int index,
-        Parameter<float32> parameter,
-        tensor<float32> gradient,
-        float32 beta1_32,
-        float32 beta2_32,
-        float32 one_minus_beta1_32,
-        float32 one_minus_beta2_32,
-        float32 adjusted_epsilon32,
-        float32 step_scale32
+        Parameter<real32> parameter,
+        tensor<real32> gradient,
+        real32 beta1_32,
+        real32 beta2_32,
+        real32 one_minus_beta1_32,
+        real32 one_minus_beta2_32,
+        real32 adjusted_epsilon32,
+        real32 step_scale32
     )
-        tensor<float32> raw = parameter.raw()
-        tensor<float32> first = (
+        tensor<real32> raw = parameter.raw()
+        tensor<real32> first = (
             first32[index] * beta1_32
             + gradient * one_minus_beta1_32
         )
-        tensor<float32> second = (
+        tensor<real32> second = (
             second32[index] * beta2_32
             + gradient * gradient * one_minus_beta2_32
         )
-        tensor<float32> denominator = (
+        tensor<real32> denominator = (
             math.sqrt(second) + adjusted_epsilon32
         )
         parameter.replace(
@@ -2354,19 +2354,19 @@ class Adam
     // the commit fails, nothing it produced is used: each of those
     // Parameters takes the element-wise update from its unchanged state.
     private void finish_metal_batch32(
-        Parameter<float32>[] parameters32,
+        Parameter<real32>[] parameters32,
         int32 batch,
         int[] indices,
-        tensor<float32>[] next_parameters,
-        tensor<float32>[] next_first,
-        tensor<float32>[] next_second,
-        tensor<float32>[] gradients,
-        float32 beta1_32,
-        float32 beta2_32,
-        float32 one_minus_beta1_32,
-        float32 one_minus_beta2_32,
-        float32 adjusted_epsilon32,
-        float32 step_scale32
+        tensor<real32>[] next_parameters,
+        tensor<real32>[] next_first,
+        tensor<real32>[] next_second,
+        tensor<real32>[] gradients,
+        real32 beta1_32,
+        real32 beta2_32,
+        real32 one_minus_beta1_32,
+        real32 one_minus_beta2_32,
+        real32 adjusted_epsilon32,
+        real32 step_scale32
     )
         int32 status = native.adam_metal_commit(int(batch), len(indices))
         if status == int32(0)
@@ -2391,16 +2391,16 @@ class Adam
             )
 
     void zero_grad<M>(M &model)
-        Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
+        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
         for parameter in parameters32
             parameter.clear_grad()
-        Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
+        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
         for parameter in parameters64
             parameter.clear_grad()
 
     void step<M>(M &model)
-        Parameter<float32>[] parameters32 = reflect.collect<Parameter<float32>>(model)
-        Parameter<float>[] parameters64 = reflect.collect<Parameter<float>>(model)
+        Parameter<real32>[] parameters32 = reflect.collect<Parameter<real32>>(model)
+        Parameter<real64>[] parameters64 = reflect.collect<Parameter<real64>>(model)
 
         bool changed = len(parameters32) != len(bound32) or len(parameters64) != len(bound64)
         if not changed
@@ -2416,7 +2416,7 @@ class Adam
             first32 = []
             second32 = []
             for parameter in parameters32
-                tensor<float32> zero = parameter.raw() * float32(0)
+                tensor<real32> zero = parameter.raw() * real32(0)
                 first32 = first32.append(zero)
                 second32 = second32.append(zero)
 
@@ -2424,7 +2424,7 @@ class Adam
             first64 = []
             second64 = []
             for parameter in parameters64
-                tensor<float> zero = parameter.raw() * 0.0
+                tensor<real64> zero = parameter.raw() * 0.0
                 first64 = first64.append(zero)
                 second64 = second64.append(zero)
             iteration = 0
@@ -2433,8 +2433,8 @@ class Adam
 
         if len(parameters32) > 0 or len(parameters64) > 0
             iteration = iteration + int(1)
-            float one_minus_beta1 = 1.0 - first_decay
-            float one_minus_beta2 = 1.0 - second_decay
+            real64 one_minus_beta1 = 1.0 - first_decay
+            real64 one_minus_beta2 = 1.0 - second_decay
             first_correction = (
                 first_correction
                 + (1.0 - first_correction) * one_minus_beta1
@@ -2448,18 +2448,18 @@ class Adam
             // lr * (m/c1) / (sqrt(v/c2) + eps)
             // == (lr*sqrt(c2)/c1) * m / (sqrt(v) + eps*sqrt(c2)).
             // c1/c2 are maintained by a stable recurrence rather than pow().
-            float correction2_root = math.sqrt(second_correction)
-            float step_scale = (
+            real64 correction2_root = math.sqrt(second_correction)
+            real64 step_scale = (
                 learning_rate * correction2_root / first_correction
             )
-            float adjusted_epsilon = stability * correction2_root
+            real64 adjusted_epsilon = stability * correction2_root
 
-            float32 beta1_32 = float32(first_decay)
-            float32 beta2_32 = float32(second_decay)
-            float32 one_minus_beta1_32 = float32(1.0 - first_decay)
-            float32 one_minus_beta2_32 = float32(1.0 - second_decay)
-            float32 adjusted_epsilon32 = float32(adjusted_epsilon)
-            float32 step_scale32 = float32(step_scale)
+            real32 beta1_32 = real32(first_decay)
+            real32 beta2_32 = real32(second_decay)
+            real32 one_minus_beta1_32 = real32(1.0 - first_decay)
+            real32 one_minus_beta2_32 = real32(1.0 - second_decay)
+            real32 adjusted_epsilon32 = real32(adjusted_epsilon)
+            real32 step_scale32 = real32(step_scale)
             // Metal Parameters are updated by NN's fused kernel, batched into
             // one command buffer per step (one GPU round trip). The batch
             // token belongs to this call, the batch keeps every encoded
@@ -2472,29 +2472,29 @@ class Adam
             // such a repeat is encoded.
             int32 batch = native.adam_metal_begin()
             int[] batched_indices = []
-            tensor<float32>[] batched_parameters = []
-            tensor<float32>[] batched_first = []
-            tensor<float32>[] batched_second = []
-            tensor<float32>[] batched_gradients = []
+            tensor<real32>[] batched_parameters = []
+            tensor<real32>[] batched_first = []
+            tensor<real32>[] batched_second = []
+            tensor<real32>[] batched_gradients = []
             for index in range(len(parameters32))
-                Parameter<float32> parameter = parameters32[index]
+                Parameter<real32> parameter = parameters32[index]
                 if parameter.has_grad()
-                    tensor<float32> gradient = parameter.gradient().untrack()
-                    tensor<float32> raw = parameter.raw()
-                    tensor<float32> previous_first = first32[index]
-                    tensor<float32> previous_second = second32[index]
+                    tensor<real32> gradient = parameter.gradient().untrack()
+                    tensor<real32> raw = parameter.raw()
+                    tensor<real32> previous_first = first32[index]
+                    tensor<real32> previous_second = second32[index]
                     bool native_updated = false
-                    if native.is_cpu_floating<float32>(&raw) == int32(1)
-                        tensor<float32> next_parameter = tensor.zeros<float32>(
+                    if native.is_cpu_floating<real32>(&raw) == int32(1)
+                        tensor<real32> next_parameter = tensor.zeros<real32>(
                             raw.shape()
                         )
-                        tensor<float32> next_first = tensor.zeros<float32>(
+                        tensor<real32> next_first = tensor.zeros<real32>(
                             raw.shape()
                         )
-                        tensor<float32> next_second = tensor.zeros<float32>(
+                        tensor<real32> next_second = tensor.zeros<real32>(
                             raw.shape()
                         )
-                        int32 native_status = native.adam_step<float32>(
+                        int32 native_status = native.adam_step<real32>(
                             &raw,
                             &gradient,
                             &previous_first,
@@ -2551,9 +2551,9 @@ class Adam
                             // the device; the values do not change.
                             if not gradient.is_contiguous()
                                 gradient = gradient.contiguous()
-                            tensor<float32> next_parameter = tensor.zeros<float32>(raw.shape(), gpu = metal_index)
-                            tensor<float32> next_first = tensor.zeros<float32>(raw.shape(), gpu = metal_index)
-                            tensor<float32> next_second = tensor.zeros<float32>(raw.shape(), gpu = metal_index)
+                            tensor<real32> next_parameter = tensor.zeros<real32>(raw.shape(), gpu = metal_index)
+                            tensor<real32> next_first = tensor.zeros<real32>(raw.shape(), gpu = metal_index)
+                            tensor<real32> next_second = tensor.zeros<real32>(raw.shape(), gpu = metal_index)
                             int32 encode_status = native.adam_metal_encode(
                                 int(batch),
                                 &raw,
@@ -2609,24 +2609,24 @@ class Adam
                 )
 
             for index in range(len(parameters64))
-                Parameter<float> parameter = parameters64[index]
+                Parameter<real64> parameter = parameters64[index]
                 if parameter.has_grad()
-                    tensor<float> gradient = parameter.gradient().untrack()
-                    tensor<float> raw = parameter.raw()
-                    tensor<float> previous_first = first64[index]
-                    tensor<float> previous_second = second64[index]
+                    tensor<real64> gradient = parameter.gradient().untrack()
+                    tensor<real64> raw = parameter.raw()
+                    tensor<real64> previous_first = first64[index]
+                    tensor<real64> previous_second = second64[index]
                     bool native_updated = false
-                    if native.is_cpu_floating<float>(&raw) == int32(1)
-                        tensor<float> next_parameter = tensor.zeros<float>(
+                    if native.is_cpu_floating<real64>(&raw) == int32(1)
+                        tensor<real64> next_parameter = tensor.zeros<real64>(
                             raw.shape()
                         )
-                        tensor<float> next_first = tensor.zeros<float>(
+                        tensor<real64> next_first = tensor.zeros<real64>(
                             raw.shape()
                         )
-                        tensor<float> next_second = tensor.zeros<float>(
+                        tensor<real64> next_second = tensor.zeros<real64>(
                             raw.shape()
                         )
-                        int32 native_status = native.adam_step<float>(
+                        int32 native_status = native.adam_step<real64>(
                             &raw,
                             &gradient,
                             &previous_first,
@@ -2648,15 +2648,15 @@ class Adam
                             native_updated = true
 
                     if not native_updated
-                        tensor<float> first = (
+                        tensor<real64> first = (
                             previous_first * first_decay
                             + gradient * one_minus_beta1
                         )
-                        tensor<float> second = (
+                        tensor<real64> second = (
                             previous_second * second_decay
                             + gradient * gradient * one_minus_beta2
                         )
-                        tensor<float> denominator = (
+                        tensor<real64> denominator = (
                             math.sqrt(second) + adjusted_epsilon
                         )
                         parameter.replace(

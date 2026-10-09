@@ -7,22 +7,22 @@ import native = "./native.qui"
 
 // NN's exact ReLU and GELU source expressions. They define the activation
 // semantics; fused kernels must reproduce them.
-tensor<float32> relu_expression(tensor<float32> value)
+tensor<real32> relu_expression(tensor<real32> value)
     return (value + math.abs(value)) / 2.0
 
-tensor<float32> gelu_expression(tensor<float32> value)
-    tensor<float32> cubic = value * value * value
-    tensor<float32> inner = (
-        value + cubic * float32(0.044715)
-    ) * float32(0.7978845608028654)
-    tensor<float32> lifted = (
+tensor<real32> gelu_expression(tensor<real32> value)
+    tensor<real32> cubic = value * value * value
+    tensor<real32> inner = (
+        value + cubic * real32(0.044715)
+    ) * real32(0.7978845608028654)
+    tensor<real32> lifted = (
         inner - 20.0 + math.abs(inner + 20.0)
     ) / 2.0
-    tensor<float32> limited = (
+    tensor<real32> limited = (
         lifted + 20.0 - math.abs(lifted - 20.0)
     ) / 2.0
-    tensor<float32> exponent = math.exp(limited * 2.0)
-    tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
+    tensor<real32> exponent = math.exp(limited * 2.0)
+    tensor<real32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
     return value * 0.5 * (1.0 + hyperbolic)
 
 // Core hands a custom native backward the upstream gradient unchanged, and
@@ -32,30 +32,30 @@ tensor<float32> gelu_expression(tensor<float32> value)
 // reshape view: Core's reshape backward always passes a dense gradient on
 // (the same buffer when it is already dense, one device copy otherwise).
 // Host gradients are always dense, so CPU outputs need no view.
-tensor<float32> dense_device_gradient(tensor<float32> output)
+tensor<real32> dense_device_gradient(tensor<real32> output)
     if output.is_tracked()
         return output.reshape(output.shape())
     return output
 
-// Fused activation for CPU and Metal float32 tensors, tracked or not: one
+// Fused activation for CPU and Metal real32 tensors, tracked or not: one
 // package-native kernel plus one custom autograd node with first- and
 // second-order callbacks. A tracked non-contiguous tensor is never
 // materialized (that would cut its graph); it and every other backend keep
 // the compositional expression.
-tensor<float32> fused_activation(tensor<float32> value, int activation)
+tensor<real32> fused_activation(tensor<real32> value, int activation)
     int32 device = native.fused_device_f32(&value)
     if device >= int32(-1)
-        tensor<float32> input = value
+        tensor<real32> input = value
         bool dense = input.is_contiguous()
         if not dense and not input.is_tracked()
             input = input.contiguous()
             dense = true
         if dense
-            tensor<float32> output
+            tensor<real32> output
             if device == int32(-1)
-                output = tensor.zeros<float32>(input.shape())
+                output = tensor.zeros<real32>(input.shape())
             else
-                output = tensor.zeros<float32>(input.shape(), gpu = int(device))
+                output = tensor.zeros<real32>(input.shape(), gpu = int(device))
             if native.activation_f32(&input, &output, activation) == int32(0)
                 if device >= int32(0)
                     return dense_device_gradient(output)
@@ -64,17 +64,17 @@ tensor<float32> fused_activation(tensor<float32> value, int activation)
         return relu_expression(value)
     return gelu_expression(value)
 
-tensor<float32> relu_fused(tensor<float32> value)
+tensor<real32> relu_fused(tensor<real32> value)
     return fused_activation(value, 1)
 
-tensor<float32> gelu_fused(tensor<float32> value)
+tensor<real32> gelu_fused(tensor<real32> value)
     return fused_activation(value, 2)
 
 // Compiler-selected last-use target. Core proves ownership/liveness only;
 // NN owns the ReLU semantics and the actual in-place package-native mutation.
 // CPU uses the native loop; CUDA uses NN's exact package-owned PTX epilogue.
 // Other devices and tracked values stay compositional.
-tensor<float32> relu_reuse(tensor<float32> value)
+tensor<real32> relu_reuse(tensor<real32> value)
     if value.is_tracked() or not value.is_contiguous()
         return relu_fused(value)
     if native.is_cpu_f32(&value) == int32(1)
@@ -89,19 +89,19 @@ tensor<float32> relu_reuse(tensor<float32> value)
     return relu_fused(value)
 
 // Compiler-selected training target for statically-known tracked contiguous
-// CPU float32 tensors. NN owns the activation and custom-autograd semantics;
+// CPU real32 tensors. NN owns the activation and custom-autograd semantics;
 // Core only proves the generic replacement constraints.
-tensor<float32> relu_training(tensor<float32> value)
-    tensor<float32> input = value
+tensor<real32> relu_training(tensor<real32> value)
+    tensor<real32> input = value
     if not input.is_tracked() or not input.is_contiguous() or native.is_cpu_f32(&input) != int32(1)
         return relu_fused(input)
-    tensor<float32> output = tensor.zeros<float32>(input.shape())
+    tensor<real32> output = tensor.zeros<real32>(input.shape())
     int32 status = native.relu_training_f32(&input, &output)
     if status != int32(0)
         error("nn compiler training ReLU target failed")
     return output
 
-tensor<float32> mean_all(tensor<float32> value)
+tensor<real32> mean_all(tensor<real32> value)
     int[] shape = value.shape()
     int count = 1
     for dimension in shape
@@ -126,7 +126,7 @@ class StateChecksum
         second = 0
 
     void update(string text)
-        uint8[] bytes = uint8[](text.utf8())
+        nat8[] bytes = nat8[](text.utf8())
         for byte in bytes
             first = (first + int(byte)) % 65521
             second = (second + first) % 65521
@@ -211,7 +211,7 @@ void | error write_state_entry<T: floating>(
         )
     return
 
-tensor<float32> | error read_state_entry32(
+tensor<real32> | error read_state_entry32(
     file.Handle &input,
     StateChecksum &checksum,
     string expected_kind,
@@ -228,9 +228,9 @@ tensor<float32> | error read_state_entry32(
     string path = try read_checked_line(&input, &checksum, "field path")
     if kind != expected_kind
         return error("nn.load state field kind does not match target schema")
-    if field_type != expected_kind + "<float32>"
+    if field_type != expected_kind + "<real32>"
         return error("nn.load state field type does not match target schema")
-    if dtype != "float32"
+    if dtype != "real32"
         return error("nn.load state field dtype does not match target schema")
     if path != expected_path
         return error("nn.load state field path does not match target schema")
@@ -260,18 +260,18 @@ tensor<float32> | error read_state_entry32(
     if count != expected_count
         return error("nn.load tensor element count does not match its shape")
 
-    tensor<float32> value = tensor.zeros<float32>(expected_shape)
-    tensor<float32> flat = value.reshape([count])
+    tensor<real32> value = tensor.zeros<real32>(expected_shape)
+    tensor<real32> flat = value.reshape([count])
     for index in range(count)
         string value_text = try read_checked_line(
             &input,
             &checksum,
             "tensor value"
         )
-        flat[index] = try float32.parse(value_text)
+        flat[index] = try real32.parse(value_text)
     return flat.reshape(expected_shape)
 
-tensor<float> | error read_state_entry64(
+tensor<real64> | error read_state_entry64(
     file.Handle &input,
     StateChecksum &checksum,
     string expected_kind,
@@ -288,9 +288,9 @@ tensor<float> | error read_state_entry64(
     string path = try read_checked_line(&input, &checksum, "field path")
     if kind != expected_kind
         return error("nn.load state field kind does not match target schema")
-    if field_type != expected_kind + "<float>"
+    if field_type != expected_kind + "<real64>"
         return error("nn.load state field type does not match target schema")
-    if dtype != "float"
+    if dtype != "real64"
         return error("nn.load state field dtype does not match target schema")
     if path != expected_path
         return error("nn.load state field path does not match target schema")
@@ -320,15 +320,15 @@ tensor<float> | error read_state_entry64(
     if count != expected_count
         return error("nn.load tensor element count does not match its shape")
 
-    tensor<float> value = tensor.zeros<float>(expected_shape)
-    tensor<float> flat = value.reshape([count])
+    tensor<real64> value = tensor.zeros<real64>(expected_shape)
+    tensor<real64> flat = value.reshape([count])
     for index in range(count)
         string value_text = try read_checked_line(
             &input,
             &checksum,
             "tensor value"
         )
-        flat[index] = try float.parse(value_text)
+        flat[index] = try real64.parse(value_text)
     return flat.reshape(expected_shape)
 
 void | error finish_state_write(

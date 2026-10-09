@@ -16,10 +16,10 @@ import math
 
 int | error compile_device_surface()
     nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<float32> direct = tensor.zeros<float32>([1, 2], gpu = 0)
-    tensor<float32> transferred = tensor.ones<float32>([1, 2]).gpu(0)
-    tensor<float32> roundtrip = transferred.cpu()
-    tensor<float32> output = layer.forward(direct)
+    tensor<real32> direct = tensor.zeros<real32>([1, 2], gpu = 0)
+    tensor<real32> transferred = tensor.ones<real32>([1, 2]).gpu(0)
+    tensor<real32> roundtrip = transferred.cpu()
+    tensor<real32> output = layer.forward(direct)
     print(roundtrip.shape()[1])
     print(NL)
     print(output.shape()[1])
@@ -30,7 +30,7 @@ QUI
 QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" check "$TMP/device-check.qui" >/dev/null
 
 cat > "$TMP/no-fallback-create.qui" <<'QUI'
-tensor<float32> value = tensor.zeros<float32>([1], gpu = 2147483647)
+tensor<real32> value = tensor.zeros<real32>([1], gpu = 2147483647)
 print(value.shape()[0])
 print(NL)
 QUI
@@ -50,8 +50,8 @@ if ! grep -Fq "gpu(2147483647) is not available" "$TMP/create.err"; then
 fi
 
 cat > "$TMP/no-fallback-transfer.qui" <<'QUI'
-tensor<float32> cpu = tensor.ones<float32>([1])
-tensor<float32> value = cpu.gpu(2147483647)
+tensor<real32> cpu = tensor.ones<real32>([1])
+tensor<real32> value = cpu.gpu(2147483647)
 print(value.shape()[0])
 print(NL)
 QUI
@@ -101,8 +101,8 @@ import math
 
 int | error run()
     nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<float32> samples_gpu = tensor.ones<float32>([1, 2], gpu = 0)
-    tensor<float32> output = layer.forward(samples_gpu)
+    tensor<real32> samples_gpu = tensor.ones<real32>([1, 2], gpu = 0)
+    tensor<real32> output = layer.forward(samples_gpu)
     print(output.shape()[1])
     print(NL)
     return 0
@@ -122,10 +122,10 @@ import nn
 import math
 
 nn.FC layer
-layer.weight = nn.Parameter<float32>( value = tensor.ones<float32>([1, 2], gpu = 0) )
-layer.bias = nn.Parameter<float32>( value = tensor.zeros<float32>([1], gpu = 0) )
-tensor<float32> samples = tensor.ones<float32>([1, 2], gpu = 0)
-tensor<float32> output = layer.forward(samples)
+layer.weight = nn.Parameter<real32>( value = tensor.ones<real32>([1, 2], gpu = 0) )
+layer.bias = nn.Parameter<real32>( value = tensor.zeros<real32>([1], gpu = 0) )
+tensor<real32> samples = tensor.ones<real32>([1, 2], gpu = 0)
+tensor<real32> output = layer.forward(samples)
 print(output.shape()[0])
 print(NL)
 print(output.shape()[1])
@@ -133,32 +133,32 @@ print(NL)
 print(output[0, 0].item())
 print(NL)
 
-tensor<float32> values = tensor.zeros<float32>([1, 2], gpu = 0)
-values[0, 0] = float32(-1)
-values[0, 1] = float32(1)
-tensor<float32> activated = nn.relu(values)
-tensor<float32> probabilities = nn.softmax(values)
+tensor<real32> values = tensor.zeros<real32>([1, 2], gpu = 0)
+values[0, 0] = real32(-1)
+values[0, 1] = real32(1)
+tensor<real32> activated = nn.relu(values)
+tensor<real32> probabilities = nn.softmax(values)
 print(activated[0, 0].item())
 print(NL)
 print(activated[0, 1].item())
 print(NL)
-float32 probability_total = probabilities[0, 0].item() + probabilities[0, 1].item()
-print(probability_total > float32(0.9999) and probability_total < float32(1.0001))
+real32 probability_total = probabilities[0, 0].item() + probabilities[0, 1].item()
+print(probability_total > real32(0.9999) and probability_total < real32(1.0001))
 print(NL)
 
 nn.BatchNorm normalization
-normalization.scale = nn.Parameter<float32>( value = tensor.ones<float32>([2], gpu = 0) )
-normalization.bias = nn.Parameter<float32>( value = tensor.zeros<float32>([2], gpu = 0) )
-normalization.running_mean = nn.State<float32>(value = tensor.zeros<float32>([2], gpu = 0))
-normalization.running_variance = nn.State<float32>(value = tensor.ones<float32>([2], gpu = 0))
+normalization.scale = nn.Parameter<real32>( value = tensor.ones<real32>([2], gpu = 0) )
+normalization.bias = nn.Parameter<real32>( value = tensor.zeros<real32>([2], gpu = 0) )
+normalization.running_mean = nn.State<real32>(value = tensor.zeros<real32>([2], gpu = 0))
+normalization.running_variance = nn.State<real32>(value = tensor.ones<real32>([2], gpu = 0))
 normalization.running_momentum = 0.1
 normalization.variance_epsilon = 0.00001
-tensor<float32> normalized = normalization.infer(
-    tensor.ones<float32>([1, 2], gpu = 0)
+tensor<real32> normalized = normalization.infer(
+    tensor.ones<real32>([1, 2], gpu = 0)
 )
 print(normalized.shape()[1])
 print(NL)
-print(normalized[0, 0].item() > float32(0.9))
+print(normalized[0, 0].item() > real32(0.9))
 print(NL)
 QUI
 
@@ -174,15 +174,15 @@ cat > "$TMP/convolution-gpu.qui" <<'QUI'
 import nn
 import math
 
-tensor<float32> kernel = tensor.zeros<float32>([1, 1, 1, 1], gpu = 0)
-kernel[0, 0, 0, 0] = float32(2)
+tensor<real32> kernel = tensor.zeros<real32>([1, 1, 1, 1], gpu = 0)
+kernel[0, 0, 0, 0] = real32(2)
 nn.Conv2D convolution
-convolution.weight = nn.Parameter<float32>(value = kernel)
-convolution.bias = nn.Parameter<float32>( value = tensor.zeros<float32>([1], gpu = 0) )
+convolution.weight = nn.Parameter<real32>(value = kernel)
+convolution.bias = nn.Parameter<real32>( value = tensor.zeros<real32>([1], gpu = 0) )
 convolution.step = 1
 convolution.border = 0
-tensor<float32> pixels = tensor.ones<float32>([1, 1, 2, 2], gpu = 0)
-tensor<float32> filtered = convolution.forward(pixels)
+tensor<real32> pixels = tensor.ones<real32>([1, 1, 2, 2], gpu = 0)
+tensor<real32> filtered = convolution.forward(pixels)
 print(filtered.shape()[2])
 print(NL)
 print(filtered.shape()[3])
@@ -207,30 +207,30 @@ class Model
 
 int | error run()
     nn.FC layer
-    layer.weight = nn.Parameter<float32>( value = tensor.ones<float32>([1, 2], gpu = 0) )
-    layer.bias = nn.Parameter<float32>( value = tensor.zeros<float32>([1], gpu = 0) )
+    layer.weight = nn.Parameter<real32>( value = tensor.ones<real32>([1, 2], gpu = 0) )
+    layer.bias = nn.Parameter<real32>( value = tensor.zeros<real32>([1], gpu = 0) )
     Model model
     model.dense = layer
-    tensor<float32> samples = tensor.ones<float32>([1, 2], gpu = 0)
-    tensor<float32> target = tensor.zeros<float32>([1, 1], gpu = 0)
+    tensor<real32> samples = tensor.ones<real32>([1, 2], gpu = 0)
+    tensor<real32> target = tensor.zeros<real32>([1, 1], gpu = 0)
 
-    tensor<float32> tracked = samples.track()
-    tensor<float32> prediction = model.dense.forward(tracked)
-    tensor<float32> loss = nn.mse(prediction, target)
+    tensor<real32> tracked = samples.track()
+    tensor<real32> prediction = model.dense.forward(tracked)
+    tensor<real32> loss = nn.mse(prediction, target)
     print(prediction.untrack()[0, 0].item())
     print(NL)
     print(loss.item())
     print(NL)
 
-    float32 before = model.dense.weight.raw()[0, 0].item()
+    real32 before = model.dense.weight.raw()[0, 0].item()
     nn.SGD optimizer = try nn.SGD(rate = 0.1)
     optimizer.zero_grad(&model)
     loss.backward(&model)
     optimizer.step(&model)
-    float32 after = model.dense.weight.raw()[0, 0].item()
+    real32 after = model.dense.weight.raw()[0, 0].item()
     print(after < before)
     print(NL)
-    print(after > float32(0.59) and after < float32(0.61))
+    print(after > real32(0.59) and after < real32(0.61))
     print(NL)
     return 0
 
@@ -264,25 +264,25 @@ class FCModel
     nn.FC dense
 
 class ParameterModel
-    nn.Parameter<float32> value
+    nn.Parameter<real32> value
 
 class Parameter64Model
-    nn.Parameter<float> value
+    nn.Parameter<real64> value
 
 int | error run()
-    tensor<float32> kernel = tensor.ones<float32>([1, 1, 1, 1], gpu = 0)
+    tensor<real32> kernel = tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
     nn.Conv2D convolution
-    convolution.weight = nn.Parameter<float32>(value = kernel)
-    convolution.bias = nn.Parameter<float32>( value = tensor.zeros<float32>([1], gpu = 0) )
+    convolution.weight = nn.Parameter<real32>(value = kernel)
+    convolution.bias = nn.Parameter<real32>( value = tensor.zeros<real32>([1], gpu = 0) )
     convolution.step = 1
     convolution.border = 0
     ConvModel conv_model
     conv_model.convolution = convolution
-    tensor<float32> pixels = tensor.ones<float32>([1, 1, 2, 2], gpu = 0)
-    tensor<float32> zero_image = tensor.zeros<float32>([1, 1, 2, 2], gpu = 0)
-    tensor<float32> conv_prediction = conv_model.convolution.forward(pixels.track())
-    tensor<float32> conv_loss = nn.mse(conv_prediction, zero_image)
-    float32 conv_before = conv_model.convolution.weight.raw()[0, 0, 0, 0].item()
+    tensor<real32> pixels = tensor.ones<real32>([1, 1, 2, 2], gpu = 0)
+    tensor<real32> zero_image = tensor.zeros<real32>([1, 1, 2, 2], gpu = 0)
+    tensor<real32> conv_prediction = conv_model.convolution.forward(pixels.track())
+    tensor<real32> conv_loss = nn.mse(conv_prediction, zero_image)
+    real32 conv_before = conv_model.convolution.weight.raw()[0, 0, 0, 0].item()
     nn.SGD sgd = nn.SGD(rate = 0.1)
     sgd.zero_grad(&conv_model)
     conv_loss.backward(&conv_model)
@@ -291,15 +291,15 @@ int | error run()
     print(NL)
 
     nn.BatchNorm normalization
-    normalization.scale = nn.Parameter<float32>( value = tensor.ones<float32>([2], gpu = 0) )
-    normalization.bias = nn.Parameter<float32>( value = tensor.zeros<float32>([2], gpu = 0) )
-    normalization.running_mean = nn.State<float32>(value = tensor.zeros<float32>([2], gpu = 0))
-    normalization.running_variance = nn.State<float32>(value = tensor.ones<float32>([2], gpu = 0))
+    normalization.scale = nn.Parameter<real32>( value = tensor.ones<real32>([2], gpu = 0) )
+    normalization.bias = nn.Parameter<real32>( value = tensor.zeros<real32>([2], gpu = 0) )
+    normalization.running_mean = nn.State<real32>(value = tensor.zeros<real32>([2], gpu = 0))
+    normalization.running_variance = nn.State<real32>(value = tensor.ones<real32>([2], gpu = 0))
     normalization.running_momentum = 0.1
     normalization.variance_epsilon = 0.00001
-    tensor<float32> norm_values = tensor.ones<float32>([2, 2], gpu = 0)
-    tensor<float32> normalized = normalization.forward(norm_values.track())
-    tensor<float32> norm_loss = math.mean((normalized * normalized))
+    tensor<real32> norm_values = tensor.ones<real32>([2, 2], gpu = 0)
+    tensor<real32> normalized = normalization.forward(norm_values.track())
+    tensor<real32> norm_loss = math.mean((normalized * normalized))
     norm_loss.backward(&normalization)
     print(normalized.shape()[1])
     print(NL)
@@ -307,28 +307,28 @@ int | error run()
     print(NL)
 
     nn.Dropout dropout = try nn.Dropout(rate = 0.5, seed = 17)
-    tensor<float32> dropped = dropout.forward(norm_values.track())
-    tensor<float32> dropout_loss = math.mean((dropped * dropped))
+    tensor<real32> dropped = dropout.forward(norm_values.track())
+    tensor<real32> dropout_loss = math.mean((dropped * dropped))
     dropout_loss.backward(&norm_values)
     print(dropped.shape()[0])
     print(NL)
-    print(dropout.infer(norm_values)[0, 0].item() == float32(1))
+    print(dropout.infer(norm_values)[0, 0].item() == real32(1))
     print(NL)
 
     ParameterModel cpu_dropout_model
-    cpu_dropout_model.value = nn.Parameter<float32>( value = tensor.ones<float32>([2, 2]) )
+    cpu_dropout_model.value = nn.Parameter<real32>( value = tensor.ones<real32>([2, 2]) )
     ParameterModel gpu_dropout_model
-    gpu_dropout_model.value = nn.Parameter<float32>( value = tensor.ones<float32>([2, 2], gpu = 0) )
+    gpu_dropout_model.value = nn.Parameter<real32>( value = tensor.ones<real32>([2, 2], gpu = 0) )
     nn.Dropout cpu_dropout_backward = try nn.Dropout(rate = 0.5, seed = 29)
     nn.Dropout gpu_dropout_backward = try nn.Dropout(rate = 0.5, seed = 29)
-    tensor<float32> cpu_dropout_output = cpu_dropout_backward.forward(
+    tensor<real32> cpu_dropout_output = cpu_dropout_backward.forward(
         cpu_dropout_model.value.track()
     )
-    tensor<float32> gpu_dropout_output = gpu_dropout_backward.forward(
+    tensor<real32> gpu_dropout_output = gpu_dropout_backward.forward(
         gpu_dropout_model.value.track()
     )
-    tensor<float32> cpu_dropout_loss = math.mean(cpu_dropout_output)
-    tensor<float32> gpu_dropout_loss = math.mean(gpu_dropout_output)
+    tensor<real32> cpu_dropout_loss = math.mean(cpu_dropout_output)
+    tensor<real32> gpu_dropout_loss = math.mean(gpu_dropout_output)
     nn.SGD cpu_dropout_sgd = nn.SGD(rate = 0.1)
     nn.SGD gpu_dropout_sgd = nn.SGD(rate = 0.1)
     cpu_dropout_sgd.zero_grad(&cpu_dropout_model)
@@ -337,7 +337,7 @@ int | error run()
     gpu_dropout_loss.backward(&gpu_dropout_model)
     cpu_dropout_sgd.step(&cpu_dropout_model)
     gpu_dropout_sgd.step(&gpu_dropout_model)
-    tensor<float32> gpu_dropout_weight = gpu_dropout_model.value.raw().cpu()
+    tensor<real32> gpu_dropout_weight = gpu_dropout_model.value.raw().cpu()
     print(
         cpu_dropout_model.value.raw()[0, 0].item() == gpu_dropout_weight[0, 0].item()
         and cpu_dropout_model.value.raw()[0, 1].item() == gpu_dropout_weight[0, 1].item()
@@ -347,23 +347,23 @@ int | error run()
     print(NL)
 
     ParameterModel accumulation_model
-    accumulation_model.value = nn.Parameter<float32>( value = tensor.ones<float32>([1], gpu = 0) )
-    tensor<float32> accumulation_value = accumulation_model.value.track()
-    tensor<float32> accumulation_loss = math.mean((accumulation_value + accumulation_value))
+    accumulation_model.value = nn.Parameter<real32>( value = tensor.ones<real32>([1], gpu = 0) )
+    tensor<real32> accumulation_value = accumulation_model.value.track()
+    tensor<real32> accumulation_loss = math.mean((accumulation_value + accumulation_value))
     nn.SGD accumulation_sgd = nn.SGD(rate = 0.1)
     accumulation_sgd.zero_grad(&accumulation_model)
     accumulation_loss.backward(&accumulation_model)
     accumulation_sgd.step(&accumulation_model)
-    float32 accumulation_after = accumulation_model.value.raw()[0].item()
+    real32 accumulation_after = accumulation_model.value.raw()[0].item()
     print(
-        accumulation_after > float32(0.7999)
-        and accumulation_after < float32(0.8001)
+        accumulation_after > real32(0.7999)
+        and accumulation_after < real32(0.8001)
     )
     print(NL)
 
     nn.FC dense
-    dense.weight = nn.Parameter<float32>( value = tensor.ones<float32>([1, 1], gpu = 0) )
-    dense.bias = nn.Parameter<float32>( value = tensor.zeros<float32>([1], gpu = 0) )
+    dense.weight = nn.Parameter<real32>( value = tensor.ones<real32>([1, 1], gpu = 0) )
+    dense.bias = nn.Parameter<real32>( value = tensor.zeros<real32>([1], gpu = 0) )
     FCModel model
     model.dense = dense
     nn.Adam adam = nn.Adam(
@@ -372,21 +372,21 @@ int | error run()
         beta2 = 0.999,
         epsilon = 0.00000001
     )
-    tensor<float32> sample = tensor.ones<float32>([1, 1], gpu = 0)
-    tensor<float32> target = tensor.zeros<float32>([1, 1], gpu = 0)
-    float32 before = model.dense.weight.raw()[0, 0].item()
-    tensor<float32> prediction = model.dense.forward(sample.track())
-    tensor<float32> loss = nn.mse(prediction, target)
+    tensor<real32> sample = tensor.ones<real32>([1, 1], gpu = 0)
+    tensor<real32> target = tensor.zeros<real32>([1, 1], gpu = 0)
+    real32 before = model.dense.weight.raw()[0, 0].item()
+    tensor<real32> prediction = model.dense.forward(sample.track())
+    tensor<real32> loss = nn.mse(prediction, target)
     adam.zero_grad(&model)
     loss.backward(&model)
     adam.step(&model)
     print(model.dense.weight.raw()[0, 0].item() != before)
     print(NL)
-    float32 first_after = model.dense.weight.raw()[0, 0].item()
+    real32 first_after = model.dense.weight.raw()[0, 0].item()
     print(first_after < before)
     print(NL)
-    tensor<float32> second_prediction = model.dense.forward(sample.track())
-    tensor<float32> second_loss = nn.mse(second_prediction, target)
+    tensor<real32> second_prediction = model.dense.forward(sample.track())
+    tensor<real32> second_loss = nn.mse(second_prediction, target)
     adam.zero_grad(&model)
     second_loss.backward(&model)
     adam.step(&model)
@@ -396,29 +396,29 @@ int | error run()
     print(NL)
 
     ParameterModel zero_adam_model
-    zero_adam_model.value = nn.Parameter<float32>(
-        value = tensor.ones<float32>([1], gpu = 0) * float32(3)
+    zero_adam_model.value = nn.Parameter<real32>(
+        value = tensor.ones<real32>([1], gpu = 0) * real32(3)
     )
     nn.Adam zero_adam = nn.Adam(rate = 0.1)
-    tensor<float32> zero_tracked = zero_adam_model.value.track()
-    tensor<float32> zero_loss = math.mean((zero_tracked * float32(0)))
+    tensor<real32> zero_tracked = zero_adam_model.value.track()
+    tensor<real32> zero_loss = math.mean((zero_tracked * real32(0)))
     zero_adam.zero_grad(&zero_adam_model)
     zero_loss.backward(&zero_adam_model)
-    float32 zero_before = zero_adam_model.value.raw()[0].item()
+    real32 zero_before = zero_adam_model.value.raw()[0].item()
     zero_adam.step(&zero_adam_model)
     print(zero_adam_model.value.raw()[0].item() == zero_before)
     print(NL)
 
     Parameter64Model zero_adam_model64
-    zero_adam_model64.value = nn.Parameter<float>(
-        value = tensor.ones<float>([1], gpu = 0) * 3.0
+    zero_adam_model64.value = nn.Parameter<real64>(
+        value = tensor.ones<real64>([1], gpu = 0) * 3.0
     )
     nn.Adam zero_adam64 = nn.Adam(rate = 0.1)
-    tensor<float> zero_tracked64 = zero_adam_model64.value.track()
-    tensor<float> zero_loss64 = math.mean((zero_tracked64 * 0.0))
+    tensor<real64> zero_tracked64 = zero_adam_model64.value.track()
+    tensor<real64> zero_loss64 = math.mean((zero_tracked64 * 0.0))
     zero_adam64.zero_grad(&zero_adam_model64)
     zero_loss64.backward(&zero_adam_model64)
-    float zero_before64 = zero_adam_model64.value.raw()[0].item()
+    real64 zero_before64 = zero_adam_model64.value.raw()[0].item()
     zero_adam64.step(&zero_adam_model64)
     print(zero_adam_model64.value.raw()[0].item() == zero_before64)
     print(NL)
@@ -454,30 +454,30 @@ import nn
 import math
 
 int | error run()
-    tensor<float32> first = tensor.ones<float32>([2], gpu = 0)
-    tensor<float32> second = (tensor.ones<float32>([2]) * float32(2)).gpu(1)
-    tensor<float32>[] values = [first, second]
+    tensor<real32> first = tensor.ones<real32>([2], gpu = 0)
+    tensor<real32> second = (tensor.ones<real32>([2]) * real32(2)).gpu(1)
+    tensor<real32>[] values = [first, second]
     try nn.all_reduce_sum(&values, [0, 1])
-    tensor<float32> reduced0 = values[0].cpu()
-    tensor<float32> reduced1 = values[1].cpu()
-    print(reduced0[0].item() == float32(3))
+    tensor<real32> reduced0 = values[0].cpu()
+    tensor<real32> reduced1 = values[1].cpu()
+    print(reduced0[0].item() == real32(3))
     print(NL)
-    print(reduced1[1].item() == float32(3))
+    print(reduced1[1].item() == real32(3))
     print(NL)
 
-    tensor<float32>[] cpu_values = [
-        tensor.ones<float32>([1]),
-        tensor.ones<float32>([1]) * float32(4)
+    tensor<real32>[] cpu_values = [
+        tensor.ones<real32>([1]),
+        tensor.ones<real32>([1]) * real32(4)
     ]
     try nn.all_reduce_sum(&cpu_values, [-1, -1])
-    print(cpu_values[0][0].item() == float32(5))
+    print(cpu_values[0][0].item() == real32(5))
     print(NL)
-    print(cpu_values[1][0].item() == float32(5))
+    print(cpu_values[1][0].item() == real32(5))
     print(NL)
 
-    tensor<float32>[] tracked = [
-        tensor.ones<float32>([1]).track(),
-        tensor.ones<float32>([1])
+    tensor<real32>[] tracked = [
+        tensor.ones<real32>([1]).track(),
+        tensor.ones<real32>([1])
     ]
     void | error tracked_result = nn.all_reduce_sum(&tracked, [-1, -1])
     bool tracked_rejected = false
@@ -489,9 +489,9 @@ int | error run()
     print(tracked_rejected)
     print(NL)
 
-    tensor<float32>[] mismatched = [
-        tensor.ones<float32>([1]),
-        tensor.ones<float32>([2])
+    tensor<real32>[] mismatched = [
+        tensor.ones<real32>([1]),
+        tensor.ones<real32>([2])
     ]
     void | error shape_result = nn.all_reduce_sum(&mismatched, [-1, -1])
     bool shape_rejected = false

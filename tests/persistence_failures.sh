@@ -11,58 +11,58 @@ cat > "$TMP/make-state.qui" <<QUI
 import nn
 
 class Leaf
-    nn.Parameter<float32> weight
-    nn.State<float32> running
+    nn.Parameter<real32> weight
+    nn.State<real32> running
 
 class Model
     Leaf[] layers
-    nn.Parameter<float> scale
-    nn.State<float> total
+    nn.Parameter<real64> scale
+    nn.State<real64> total
 
 Model make_model()
     Leaf first
-    first.weight = nn.Parameter<float32>(
-        value = tensor.ones<float32>([1]) * float32(2)
+    first.weight = nn.Parameter<real32>(
+        value = tensor.ones<real32>([1]) * real32(2)
     )
-    first.running = nn.State<float32>(
-        value = tensor.ones<float32>([1]) * float32(3)
+    first.running = nn.State<real32>(
+        value = tensor.ones<real32>([1]) * real32(3)
     )
     Leaf second
-    second.weight = nn.Parameter<float32>(
-        value = tensor.ones<float32>([1]) * float32(4)
+    second.weight = nn.Parameter<real32>(
+        value = tensor.ones<real32>([1]) * real32(4)
     )
-    second.running = nn.State<float32>(
-        value = tensor.ones<float32>([1]) * float32(5)
+    second.running = nn.State<real32>(
+        value = tensor.ones<real32>([1]) * real32(5)
     )
     Model model
     model.layers = [first, second]
-    model.scale = nn.Parameter<float>(
-        value = tensor.ones<float>([1]) * 6.0
+    model.scale = nn.Parameter<real64>(
+        value = tensor.ones<real64>([1]) * 6.0
     )
-    model.total = nn.State<float>(
-        value = tensor.ones<float>([1]) * 7.0
+    model.total = nn.State<real64>(
+        value = tensor.ones<real64>([1]) * 7.0
     )
     return model
 
 Model model = make_model()
-nn.Parameter<float32> first_identity = model.layers[0].weight
-nn.State<float32> state_identity = model.layers[0].running
+nn.Parameter<real32> first_identity = model.layers[0].weight
+nn.State<real32> state_identity = model.layers[0].running
 nn.save(model, path = "$TMP/model-base.dnn")
 
-model.layers[0].weight.replace(tensor.zeros<float32>([1]))
-model.layers[0].running.replace(tensor.zeros<float32>([1]))
-model.layers[1].weight.replace(tensor.zeros<float32>([1]))
-model.layers[1].running.replace(tensor.zeros<float32>([1]))
-model.scale.replace(tensor.zeros<float>([1]))
-model.total.replace(tensor.zeros<float>([1]))
+model.layers[0].weight.replace(tensor.zeros<real32>([1]))
+model.layers[0].running.replace(tensor.zeros<real32>([1]))
+model.layers[1].weight.replace(tensor.zeros<real32>([1]))
+model.layers[1].running.replace(tensor.zeros<real32>([1]))
+model.scale.replace(tensor.zeros<real64>([1]))
+model.total.replace(tensor.zeros<real64>([1]))
 nn.load(&model, path = "$TMP/model-base.dnn")
-print(model.layers[0].weight.raw()[0].item() == float32(2))
+print(model.layers[0].weight.raw()[0].item() == real32(2))
 print(NL)
-print(model.layers[0].running.raw()[0].item() == float32(3))
+print(model.layers[0].running.raw()[0].item() == real32(3))
 print(NL)
-print(model.layers[1].weight.raw()[0].item() == float32(4))
+print(model.layers[1].weight.raw()[0].item() == real32(4))
 print(NL)
-print(model.layers[1].running.raw()[0].item() == float32(5))
+print(model.layers[1].running.raw()[0].item() == real32(5))
 print(NL)
 print(model.scale.raw()[0].item() == 6.0)
 print(NL)
@@ -103,8 +103,8 @@ assert model[0] == "QUIDRA_DNN_STATE"
 assert model[1] == "2"
 assert model[2] == "model"
 assert model[8] == "Parameter"
-assert model[9] == "Parameter<float32>"
-assert model[10] == "float32"
+assert model[9] == "Parameter<real32>"
+assert model[10] == "real32"
 assert model[12] == "1"
 assert model[13] == "1"
 assert model[14] == "1"
@@ -116,8 +116,8 @@ x = model.copy(); x[0] = "BROKEN_MAGIC"; cases["wrong-magic"] = x
 x = model.copy(); x[1] = "999"; cases["unsupported-version"] = x
 x = model.copy(); x[3] = "OtherModel"; cases["wrong-root"] = x
 x = model.copy(); x[8] = "State"; cases["wrong-kind"] = x
-x = model.copy(); x[9] = "State<float32>"; cases["wrong-field-type"] = x
-x = model.copy(); x[10] = "float"; cases["wrong-dtype"] = x
+x = model.copy(); x[9] = "State<real32>"; cases["wrong-field-type"] = x
+x = model.copy(); x[10] = "real64"; cases["wrong-dtype"] = x
 x = model.copy(); x[11] = "wrong.path"; cases["wrong-path"] = x
 
 x = model.copy()
@@ -160,7 +160,7 @@ save("checkpoint-wrong-binding.dnn", x)
 
 first = checkpoint.index("AdamFirst", adam + 1)
 x = checkpoint.copy()
-x[first + 2] = "float"
+x[first + 2] = "real64"
 save("checkpoint-wrong-moment-dtype.dnn", x)
 
 x = checkpoint.copy()
@@ -200,36 +200,36 @@ write_model_failure_program() {
 import nn
 
 class Leaf
-    nn.Parameter<float32> weight
-    nn.State<float32> running
+    nn.Parameter<real32> weight
+    nn.State<real32> running
 
 class Model
     Leaf[] layers
-    nn.Parameter<float> scale
-    nn.State<float> total
+    nn.Parameter<real64> scale
+    nn.State<real64> total
 
 Model make_model()
     Leaf first
-    first.weight = nn.Parameter<float32>(
-        value = tensor.ones<float32>([1]) * float32(2)
+    first.weight = nn.Parameter<real32>(
+        value = tensor.ones<real32>([1]) * real32(2)
     )
-    first.running = nn.State<float32>(
-        value = tensor.ones<float32>([1]) * float32(3)
+    first.running = nn.State<real32>(
+        value = tensor.ones<real32>([1]) * real32(3)
     )
     Leaf second
-    second.weight = nn.Parameter<float32>(
-        value = tensor.ones<float32>([1]) * float32(4)
+    second.weight = nn.Parameter<real32>(
+        value = tensor.ones<real32>([1]) * real32(4)
     )
-    second.running = nn.State<float32>(
-        value = tensor.ones<float32>([1]) * float32(5)
+    second.running = nn.State<real32>(
+        value = tensor.ones<real32>([1]) * real32(5)
     )
     Model model
     model.layers = [first, second]
-    model.scale = nn.Parameter<float>(
-        value = tensor.ones<float>([1]) * 6.0
+    model.scale = nn.Parameter<real64>(
+        value = tensor.ones<real64>([1]) * 6.0
     )
-    model.total = nn.State<float>(
-        value = tensor.ones<float>([1]) * 7.0
+    model.total = nn.State<real64>(
+        value = tensor.ones<real64>([1]) * 7.0
     )
     return model
 
@@ -271,36 +271,36 @@ write_checkpoint_failure_program() {
 import nn
 
 class Leaf
-    nn.Parameter<float32> weight
-    nn.State<float32> running
+    nn.Parameter<real32> weight
+    nn.State<real32> running
 
 class Model
     Leaf[] layers
-    nn.Parameter<float> scale
-    nn.State<float> total
+    nn.Parameter<real64> scale
+    nn.State<real64> total
 
 Model make_model()
     Leaf first
-    first.weight = nn.Parameter<float32>(
-        value = tensor.ones<float32>([1]) * float32(2)
+    first.weight = nn.Parameter<real32>(
+        value = tensor.ones<real32>([1]) * real32(2)
     )
-    first.running = nn.State<float32>(
-        value = tensor.ones<float32>([1]) * float32(3)
+    first.running = nn.State<real32>(
+        value = tensor.ones<real32>([1]) * real32(3)
     )
     Leaf second
-    second.weight = nn.Parameter<float32>(
-        value = tensor.ones<float32>([1]) * float32(4)
+    second.weight = nn.Parameter<real32>(
+        value = tensor.ones<real32>([1]) * real32(4)
     )
-    second.running = nn.State<float32>(
-        value = tensor.ones<float32>([1]) * float32(5)
+    second.running = nn.State<real32>(
+        value = tensor.ones<real32>([1]) * real32(5)
     )
     Model model
     model.layers = [first, second]
-    model.scale = nn.Parameter<float>(
-        value = tensor.ones<float>([1]) * 6.0
+    model.scale = nn.Parameter<real64>(
+        value = tensor.ones<real64>([1]) * 6.0
     )
-    model.total = nn.State<float>(
-        value = tensor.ones<float>([1]) * 7.0
+    model.total = nn.State<real64>(
+        value = tensor.ones<real64>([1]) * 7.0
     )
     return model
 

@@ -18,10 +18,10 @@ int | error run()
     nn.FC dense = try nn.FC(features_in = 2, features_out = 1)
     Model model
     model.dense = dense
-    tensor<float32> samples = tensor.ones<float32>([1, 2])
-    tensor<float32> targets = tensor.zeros<float32>([1, 1])
-    tensor<float32> prediction = nn.relu(model.dense.forward(samples.track()))
-    tensor<float32> loss = nn.mse(prediction, targets)
+    tensor<real32> samples = tensor.ones<real32>([1, 2])
+    tensor<real32> targets = tensor.zeros<real32>([1, 1])
+    tensor<real32> prediction = nn.relu(model.dense.forward(samples.track()))
+    tensor<real32> loss = nn.mse(prediction, targets)
     nn.SGD optimizer = try nn.SGD(rate = 0.1)
     optimizer.zero_grad(&model)
     loss.backward(&model)
@@ -32,10 +32,10 @@ int | error run()
     print(NL)
 
     nn.Conv2D conv = try nn.Conv2D(1, 1, 1)
-    conv.weight.replace(tensor.ones<float32>([1, 1, 1, 1]))
-    conv.bias.replace(tensor.zeros<float32>([1]))
-    tensor<float32> image = tensor.ones<float32>([1, 1, 2, 2])
-    tensor<float32> activated = nn.relu(conv.forward(image))
+    conv.weight.replace(tensor.ones<real32>([1, 1, 1, 1]))
+    conv.bias.replace(tensor.zeros<real32>([1]))
+    tensor<real32> image = tensor.ones<real32>([1, 1, 2, 2])
+    tensor<real32> activated = nn.relu(conv.forward(image))
     int[] activated_shape = activated.shape()
     print(
         len(activated_shape) == 4
@@ -47,7 +47,7 @@ int | error run()
     print(NL)
 
     nn.BatchNorm norm = try nn.BatchNorm(1)
-    tensor<float32> normalized = norm.infer(activated)
+    tensor<real32> normalized = norm.infer(activated)
     int[] normalized_shape = normalized.shape()
     print(
         len(normalized_shape) == 4
@@ -59,7 +59,7 @@ int | error run()
     print(NL)
 
     nn.Dropout dropout = try nn.Dropout(0.5, seed = 1)
-    tensor<float32> inference = dropout.infer(activated)
+    tensor<real32> inference = dropout.infer(activated)
     print(inference[0, 0, 0, 0].item() == activated[0, 0, 0, 0].item())
     print(NL)
     return 0

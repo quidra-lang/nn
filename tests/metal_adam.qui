@@ -29,7 +29,7 @@ cli args
 // |reference| for every element after every step; the run prints the
 // largest differences it saw.
 //   Fused Metal vs element-wise Metal: the same operations in the same order
-//   with the same float32 roundings (Core/Math compile their element-wise
+//   with the same real32 roundings (Core/Math compile their element-wise
 //   kernels with fast math, and the fused kernel uses the same square root
 //   and division), so bitwise equality is required.
 //   Metal vs CPU: the same formula and state transitions, but the CPU
@@ -38,10 +38,10 @@ cli args
 //   for this scenario's shapes, gradient scales and Adam settings, also over
 //   runs much longer than the default 60 steps.
 class Tolerance
-    float atol
-    float rtol
+    real64 atol
+    real64 rtol
 
-Tolerance tolerance(float atol, float rtol)
+Tolerance tolerance(real64 atol, real64 rtol)
     Tolerance limit
     limit.atol = atol
     limit.rtol = rtol
@@ -71,28 +71,28 @@ Tolerance cpu_second()
     return tolerance(0.000000000001, 0.000005)
 
 class Model
-    nn.Parameter<float32> a
-    nn.Parameter<float32> b
-    nn.Parameter<float32> c
-    nn.Parameter<float32> d
+    nn.Parameter<real32> a
+    nn.Parameter<real32> b
+    nn.Parameter<real32> c
+    nn.Parameter<real32> d
 
 void report(string name, bool passed)
     print("{name} {passed}{NL}")
 
-int element_count(tensor<float32> value)
+int element_count(tensor<real32> value)
     int count = 1
     for extent in value.shape()
         count = count * extent
     return count
 
-tensor<float32> uniform(int[] shape, float scale, int seed)
+tensor<real32> uniform(int[] shape, real64 scale, int seed)
     int count = 1
     for extent in shape
         count = count * extent
-    tensor<float32> samples = nn.uniform_weights(count, scale, seed)
+    tensor<real32> samples = nn.uniform_weights(count, scale, seed)
     return samples.reshape(shape)
 
-tensor<float32> host_vector(tensor<float32> value)
+tensor<real32> host_vector(tensor<real32> value)
     return value.cpu().reshape([element_count(value)])
 
 // The GPU of this run for task.all operations, which take no arguments.
@@ -104,27 +104,27 @@ int test_device()
         none
             return 0
 
-tensor<float32> place(tensor<float32> value, int device)
+tensor<real32> place(tensor<real32> value, int device)
     if device >= 0
         return value.gpu(device)
     return value
 
 Model make_model(int device)
     Model model
-    model.a = nn.Parameter<float32>(value = place(uniform([16, 9], 1.0, 11), device))
-    model.b = nn.Parameter<float32>(value = place(uniform([37], 1.0, 12), device))
-    model.c = nn.Parameter<float32>(value = place(uniform([2, 4], 1.0, 13), device))
-    model.d = nn.Parameter<float32>(value = place(uniform([3, 5], 1.0, 14), device))
+    model.a = nn.Parameter<real32>(value = place(uniform([16, 9], 1.0, 11), device))
+    model.b = nn.Parameter<real32>(value = place(uniform([37], 1.0, 12), device))
+    model.c = nn.Parameter<real32>(value = place(uniform([2, 4], 1.0, 13), device))
+    model.d = nn.Parameter<real32>(value = place(uniform([3, 5], 1.0, 14), device))
     return model
 
 // The gradients of step `step`: large, tiny (v ~ 1e-6), partly zero (v
 // stays exactly 0, the update must stay 0) and the transpose of d's.
-tensor<float32>[] step_gradients(int step)
-    tensor<float32> mask = tensor.zeros<float32>([2, 4])
-    mask[0, 0] = float32(1)
-    mask[0, 2] = float32(1)
-    mask[1, 1] = float32(1)
-    mask[1, 3] = float32(1)
+tensor<real32>[] step_gradients(int step)
+    tensor<real32> mask = tensor.zeros<real32>([2, 4])
+    mask[0, 0] = real32(1)
+    mask[0, 2] = real32(1)
+    mask[1, 1] = real32(1)
+    mask[1, 3] = real32(1)
     return [
         uniform([16, 9], 3.0, 1000 + step),
         uniform([37], 0.001, 2000 + step),
@@ -132,13 +132,13 @@ tensor<float32>[] step_gradients(int step)
         uniform([5, 3], 0.5, 4000 + step)
     ]
 
-void train_step(Model &model, nn.Adam &optimizer, tensor<float32>[] gradients, int device)
-    tensor<float32> a = model.a.track()
-    tensor<float32> b = model.b.track()
-    tensor<float32> c = model.c.track()
-    tensor<float32> d = model.d.track()
+void train_step(Model &model, nn.Adam &optimizer, tensor<real32>[] gradients, int device)
+    tensor<real32> a = model.a.track()
+    tensor<real32> b = model.b.track()
+    tensor<real32> c = model.c.track()
+    tensor<real32> d = model.d.track()
     // d's gradient is gradients[3] transposed: a strided view.
-    tensor<float32> loss = (
+    tensor<real32> loss = (
         math.sum(a * place(gradients[0], device))
         + math.sum(b * place(gradients[1], device))
         + math.sum(c * place(gradients[2], device))
@@ -149,14 +149,14 @@ void train_step(Model &model, nn.Adam &optimizer, tensor<float32>[] gradients, i
     optimizer.step(&model)
 
 // The element-wise Adam update exactly as nn.Adam writes it (bias correction
-// recurrence, folded coefficients, float32 expressions), on `device`.
+// recurrence, folded coefficients, real32 expressions), on `device`.
 class Replica
-    tensor<float32>[] parameters
-    tensor<float32>[] first
-    tensor<float32>[] second
+    tensor<real32>[] parameters
+    tensor<real32>[] first
+    tensor<real32>[] second
     int iteration
-    float first_correction
-    float second_correction
+    real64 first_correction
+    real64 second_correction
 
 Replica make_replica(Model model)
     Replica replica
@@ -164,7 +164,7 @@ Replica make_replica(Model model)
     replica.first = []
     replica.second = []
     for parameter in replica.parameters
-        tensor<float32> zero = parameter * float32(0)
+        tensor<real32> zero = parameter * real32(0)
         replica.first = replica.first.append(zero)
         replica.second = replica.second.append(zero)
     replica.iteration = 0
@@ -172,13 +172,13 @@ Replica make_replica(Model model)
     replica.second_correction = 0.0
     return replica
 
-void replica_step(Replica &replica, tensor<float32>[] gradients, float rate, int device)
-    float first_decay = 0.9
-    float second_decay = 0.999
-    float stability = 0.00000001
+void replica_step(Replica &replica, tensor<real32>[] gradients, real64 rate, int device)
+    real64 first_decay = 0.9
+    real64 second_decay = 0.999
+    real64 stability = 0.00000001
     replica.iteration = replica.iteration + 1
-    float one_minus_beta1 = 1.0 - first_decay
-    float one_minus_beta2 = 1.0 - second_decay
+    real64 one_minus_beta1 = 1.0 - first_decay
+    real64 one_minus_beta2 = 1.0 - second_decay
     replica.first_correction = (
         replica.first_correction
         + (1.0 - replica.first_correction) * one_minus_beta1
@@ -187,28 +187,28 @@ void replica_step(Replica &replica, tensor<float32>[] gradients, float rate, int
         replica.second_correction
         + (1.0 - replica.second_correction) * one_minus_beta2
     )
-    float correction2_root = math.sqrt(replica.second_correction)
-    float step_scale = rate * correction2_root / replica.first_correction
-    float adjusted_epsilon = stability * correction2_root
-    float32 beta1_32 = float32(first_decay)
-    float32 beta2_32 = float32(second_decay)
-    float32 one_minus_beta1_32 = float32(1.0 - first_decay)
-    float32 one_minus_beta2_32 = float32(1.0 - second_decay)
-    float32 adjusted_epsilon32 = float32(adjusted_epsilon)
-    float32 step_scale32 = float32(step_scale)
+    real64 correction2_root = math.sqrt(replica.second_correction)
+    real64 step_scale = rate * correction2_root / replica.first_correction
+    real64 adjusted_epsilon = stability * correction2_root
+    real32 beta1_32 = real32(first_decay)
+    real32 beta2_32 = real32(second_decay)
+    real32 one_minus_beta1_32 = real32(1.0 - first_decay)
+    real32 one_minus_beta2_32 = real32(1.0 - second_decay)
+    real32 adjusted_epsilon32 = real32(adjusted_epsilon)
+    real32 step_scale32 = real32(step_scale)
     for index in range(len(replica.parameters))
-        tensor<float32> gradient = place(gradients[index], device)
+        tensor<real32> gradient = place(gradients[index], device)
         if index == 3
             gradient = gradient.transpose(0, 1)
-        tensor<float32> first = (
+        tensor<real32> first = (
             replica.first[index] * beta1_32
             + gradient * one_minus_beta1_32
         )
-        tensor<float32> second = (
+        tensor<real32> second = (
             replica.second[index] * beta2_32
             + gradient * gradient * one_minus_beta2_32
         )
-        tensor<float32> denominator = (
+        tensor<real32> denominator = (
             math.sqrt(second) + adjusted_epsilon32
         )
         replica.parameters[index] = (
@@ -219,21 +219,21 @@ void replica_step(Replica &replica, tensor<float32>[] gradients, float rate, int
 
 // Adam state as written by nn.Adam.save (round-trip decimal text).
 class AdamState
-    tensor<float32>[] parameters
-    tensor<float32>[] first
-    tensor<float32>[] second
+    tensor<real32>[] parameters
+    tensor<real32>[] first
+    tensor<real32>[] second
     int iteration
-    float first_correction
-    float second_correction
+    real64 first_correction
+    real64 second_correction
 
-tensor<float32> | error read_block(string[] lines, int start)
+tensor<real32> | error read_block(string[] lines, int start)
     // kind, type, dtype, path, rank, extents..., count, values...
     int rank = try int.parse(lines[start + 4])
     int count = try int.parse(lines[start + 5 + rank])
-    tensor<float32> samples = tensor.zeros<float32>([count])
+    tensor<real32> samples = tensor.zeros<real32>([count])
     int first_value = start + 6 + rank
     for index in range(count)
-        samples[index] = float32(try float.parse(lines[first_value + index]))
+        samples[index] = real32(try real64.parse(lines[first_value + index]))
     return samples
 
 AdamState | error read_state(string path)
@@ -259,16 +259,16 @@ AdamState | error read_state(string path)
     for index in range(len(lines) - 1)
         string kind = lines[index]
         string type_name = lines[index + 1]
-        if kind == "Parameter" and type_name == "Parameter<float32>"
+        if kind == "Parameter" and type_name == "Parameter<real32>"
             state.parameters = state.parameters.append(try read_block(lines, index))
-        elif kind == "AdamFirst" and type_name == "AdamFirst<float32>"
+        elif kind == "AdamFirst" and type_name == "AdamFirst<real32>"
             state.first = state.first.append(try read_block(lines, index))
-        elif kind == "AdamSecond" and type_name == "AdamSecond<float32>"
+        elif kind == "AdamSecond" and type_name == "AdamSecond<real32>"
             state.second = state.second.append(try read_block(lines, index))
         elif kind == "Adam" and index + 7 < len(lines)
             state.iteration = try int.parse(lines[index + 5])
-            state.first_correction = try float.parse(lines[index + 6])
-            state.second_correction = try float.parse(lines[index + 7])
+            state.first_correction = try real64.parse(lines[index + 6])
+            state.second_correction = try real64.parse(lines[index + 7])
     return state
 
 AdamState | error saved_state(Model model, nn.Adam optimizer, string path)
@@ -276,23 +276,23 @@ AdamState | error saved_state(Model model, nn.Adam optimizer, string path)
     return try read_state(path)
 
 class Difference
-    float absolute
-    float relative
+    real64 absolute
+    real64 relative
 
-float max_abs(tensor<float32> left, tensor<float32> right)
-    return float(math.max_all(math.abs(host_vector(left) - host_vector(right))).item())
+real64 max_abs(tensor<real32> left, tensor<real32> right)
+    return real64(math.max_all(math.abs(host_vector(left) - host_vector(right))).item())
 
 // Largest |x - reference| - rtol * |reference| over all elements; a value is
 // within tolerance when this is <= atol.
-float excess(tensor<float32> value, tensor<float32> reference, float rtol)
-    tensor<float32> x = host_vector(value)
-    tensor<float32> r = host_vector(reference)
-    float32 factor = float32(rtol)
-    return float(math.max_all(math.abs(x - r) - math.abs(r) * factor).item())
+real64 excess(tensor<real32> value, tensor<real32> reference, real64 rtol)
+    tensor<real32> x = host_vector(value)
+    tensor<real32> r = host_vector(reference)
+    real32 factor = real32(rtol)
+    return real64(math.max_all(math.abs(x - r) - math.abs(r) * factor).item())
 
-bool identical(tensor<float32> left, tensor<float32> right)
-    tensor<float32> a = host_vector(left)
-    tensor<float32> b = host_vector(right)
+bool identical(tensor<real32> left, tensor<real32> right)
+    tensor<real32> a = host_vector(left)
+    tensor<real32> b = host_vector(right)
     if element_count(a) != element_count(b)
         return false
     for index in range(element_count(a))
@@ -304,9 +304,9 @@ class Tally
     Tolerance parameter_limit
     Tolerance first_limit
     Tolerance second_limit
-    float parameter_abs
-    float first_abs
-    float second_abs
+    real64 parameter_abs
+    real64 first_abs
+    real64 second_abs
     bool within
     int mismatched_steps
 
@@ -322,12 +322,12 @@ Tally make_tally(Tolerance parameter_limit, Tolerance first_limit, Tolerance sec
     tally.mismatched_steps = 0
     return tally
 
-bool within(tensor<float32> value, tensor<float32> reference, float atol, float rtol)
+bool within(tensor<real32> value, tensor<real32> reference, real64 atol, real64 rtol)
     if atol == 0.0 and rtol == 0.0
         return identical(value, reference)
     return excess(value, reference, rtol) <= atol
 
-void add(Tally &tally, tensor<float32>[] parameters, tensor<float32>[] first, tensor<float32>[] second, AdamState reference)
+void add(Tally &tally, tensor<real32>[] parameters, tensor<real32>[] first, tensor<real32>[] second, AdamState reference)
     bool bitwise_step = true
     for index in range(len(parameters))
         tally.parameter_abs = math.max(tally.parameter_abs, max_abs(parameters[index], reference.parameters[index]))
@@ -343,7 +343,7 @@ void add(Tally &tally, tensor<float32>[] parameters, tensor<float32>[] first, te
         tally.mismatched_steps = tally.mismatched_steps + 1
 
 void | error state_checks(int device, int steps, string scratch)
-    float rate = 0.01
+    real64 rate = 0.01
     Model host = make_model(-1)
     Model metal = make_model(device)
     Model again = make_model(device)
@@ -356,9 +356,9 @@ void | error state_checks(int device, int steps, string scratch)
     bool bookkeeping = true
     bool deterministic = true
     bool zero_gradient_fixed = true
-    tensor<float32> c_initial = metal.c.raw().cpu()
+    tensor<real32> c_initial = metal.c.raw().cpu()
     for step in range(steps)
-        tensor<float32>[] gradients = step_gradients(step)
+        tensor<real32>[] gradients = step_gradients(step)
         train_step(&host, &host_optimizer, gradients, -1)
         train_step(&metal, &metal_optimizer, gradients, device)
         train_step(&again, &again_optimizer, gradients, device)
@@ -386,7 +386,7 @@ void | error state_checks(int device, int steps, string scratch)
             deterministic = deterministic and identical(metal_state.first[index], again_state.first[index])
             deterministic = deterministic and identical(metal_state.second[index], again_state.second[index])
         // Entries whose gradient is always 0 keep m = v = 0 and never move.
-        tensor<float32> c_now = metal.c.raw().cpu()
+        tensor<real32> c_now = metal.c.raw().cpu()
         zero_gradient_fixed = zero_gradient_fixed and c_now[0, 1].item() == c_initial[0, 1].item() and c_now[1, 2].item() == c_initial[1, 2].item()
 
     print("adam metal-fused vs metal-elementwise over {steps} steps: max abs parameter {versus_elementwise.parameter_abs} m {versus_elementwise.first_abs} v {versus_elementwise.second_abs}; steps not bitwise {versus_elementwise.mismatched_steps}{NL}")
@@ -401,41 +401,41 @@ void | error state_checks(int device, int steps, string scratch)
 // Independent optimizers stepping at the same time must not see each other's
 // batches: the parallel results equal the serial ones bit for bit.
 class Small
-    nn.Parameter<float32> a
-    nn.Parameter<float32> b
+    nn.Parameter<real32> a
+    nn.Parameter<real32> b
 
-float train_small(int seed)
+real64 train_small(int seed)
     int device = test_device()
     Small model
-    model.a = nn.Parameter<float32>(value = uniform([64], 1.0, seed).gpu(device))
-    model.b = nn.Parameter<float32>(value = uniform([16], 1.0, seed + 1).gpu(device))
+    model.a = nn.Parameter<real32>(value = uniform([64], 1.0, seed).gpu(device))
+    model.b = nn.Parameter<real32>(value = uniform([16], 1.0, seed + 1).gpu(device))
     nn.Adam optimizer = nn.Adam(rate = 0.01)
     for step in range(60)
-        tensor<float32> a = model.a.track()
-        tensor<float32> b = model.b.track()
-        tensor<float32> loss = math.sum(a * a) + math.sum(b * b * b * b)
+        tensor<real32> a = model.a.track()
+        tensor<real32> b = model.b.track()
+        tensor<real32> loss = math.sum(a * a) + math.sum(b * b * b * b)
         optimizer.zero_grad(&model)
         loss.backward(&model)
         optimizer.step(&model)
-    return float(math.sum(model.a.raw()).cpu().item()) + float(math.sum(model.b.raw()).cpu().item())
+    return real64(math.sum(model.a.raw()).cpu().item()) + real64(math.sum(model.b.raw()).cpu().item())
 
-float train1()
+real64 train1()
     return train_small(11)
 
-float train2()
+real64 train2()
     return train_small(21)
 
-float train3()
+real64 train3()
     return train_small(31)
 
-float train4()
+real64 train4()
     return train_small(41)
 
 void concurrency_check()
-    float[] serial = [train1(), train2(), train3(), train4()]
+    real64[] serial = [train1(), train2(), train3(), train4()]
     bool same = true
     for round in range(3)
-        float[] parallel = task.all([train1, train2, train3, train4])
+        real64[] parallel = task.all([train1, train2, train3, train4])
         for index in range(4)
             same = same and parallel[index] == serial[index]
     report("metal adam concurrent optimizers", same)
@@ -443,26 +443,26 @@ void concurrency_check()
 // One Parameter reached through two fields is updated once per occurrence,
 // each reading the previous occurrence's result (the sequential update).
 class Tied
-    nn.Parameter<float32> first
-    nn.Parameter<float32> second
+    nn.Parameter<real32> first
+    nn.Parameter<real32> second
 
-tensor<float32> train_tied(int device)
-    nn.Parameter<float32> shared = nn.Parameter<float32>(value = place(uniform([8], 1.0, 5), device))
+tensor<real32> train_tied(int device)
+    nn.Parameter<real32> shared = nn.Parameter<real32>(value = place(uniform([8], 1.0, 5), device))
     Tied model
     model.first = shared
     model.second = shared
     nn.Adam optimizer = nn.Adam(rate = 0.1)
     for step in range(5)
-        tensor<float32> value = model.first.track()
-        tensor<float32> loss = math.sum(value * value)
+        tensor<real32> value = model.first.track()
+        tensor<real32> loss = math.sum(value * value)
         optimizer.zero_grad(&model)
         loss.backward(&model)
         optimizer.step(&model)
     return model.first.raw().cpu()
 
 void tied_check(int device)
-    tensor<float32> host = train_tied(-1)
-    tensor<float32> metal = train_tied(device)
+    tensor<real32> host = train_tied(-1)
+    tensor<real32> metal = train_tied(device)
     report("metal adam tied parameters", max_abs(host, metal) <= 0.000001)
 
 void | error run(int device, int steps, string scratch)

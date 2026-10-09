@@ -80,9 +80,9 @@ match bad_adam
 print(adam_rejected)
 print(NL)
 
-float zero = 0.0
-float nan_value = zero / zero
-float infinity = 1.0 / zero
+real64 zero = 0.0
+real64 nan_value = zero / zero
+real64 infinity = 1.0 / zero
 
 bool dropout_nan_rejected = false
 nn.Dropout | error nan_dropout = nn.Dropout(rate = nan_value)
@@ -105,11 +105,11 @@ print(adam_nan_rejected)
 print(NL)
 
 bool initializer_bound_rejected = false
-tensor<float32> | error bad_bound = nn.uniform_weights(
+tensor<real32> | error bad_bound = nn.uniform_weights(
     count = 1, bound = infinity, seed = 1
 )
 match bad_bound
-    tensor<float32>
+    tensor<real32>
         initializer_bound_rejected = false
     error
         initializer_bound_rejected = true
@@ -123,9 +123,9 @@ nn.FC dense = nn.normal_fc(
     bias_value = 1.0,
     seed = 5
 )
-print(dense.weight.raw()[0, 0].item() == float32(0))
+print(dense.weight.raw()[0, 0].item() == real32(0))
 print(NL)
-print(dense.bias.raw()[0].item() == float32(1))
+print(dense.bias.raw()[0].item() == real32(1))
 print(NL)
 
 nn.Conv2D convolution = nn.normal_conv2d(
@@ -136,9 +136,9 @@ nn.Conv2D convolution = nn.normal_conv2d(
     bias_value = 1.0,
     seed = 5
 )
-print(convolution.weight.raw()[0, 0, 0, 0].item() == float32(0))
+print(convolution.weight.raw()[0, 0, 0, 0].item() == real32(0))
 print(NL)
-print(convolution.bias.raw()[0].item() == float32(1))
+print(convolution.bias.raw()[0].item() == real32(1))
 print(NL)
 QUI
 
@@ -154,10 +154,10 @@ cat > "$TMP/const-sgd-step.qui" <<'QUI'
 import nn
 
 class Model
-    nn.Parameter<float32> weight
+    nn.Parameter<real32> weight
 
 Model model
-model.weight = nn.Parameter<float32>(value = tensor.ones<float32>([1]))
+model.weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
 const nn.SGD optimizer = nn.SGD()
 optimizer.step(&model)
 QUI

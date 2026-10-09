@@ -19,15 +19,15 @@ int | error run()
         channels_out = 1,
         kernel = 1
     )
-    layer.weight.replace(tensor.ones<float32>([1, 1, 1, 1]))
-    tensor<float32> bias = tensor.zeros<float32>([1])
-    bias[0] = float32(-2)
+    layer.weight.replace(tensor.ones<real32>([1, 1, 1, 1]))
+    tensor<real32> bias = tensor.zeros<real32>([1])
+    bias[0] = real32(-2)
     layer.bias.replace(bias)
-    tensor<float32> input = tensor.ones<float32>([1, 1, 1, 1])
-    tensor<float32> output = nn.relu(layer.forward(input))
+    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1])
+    tensor<real32> output = nn.relu(layer.forward(input))
     print(output.shape()[1] == 1)
     print(NL)
-    print(output[0, 0, 0, 0].item() == float32(0))
+    print(output[0, 0, 0, 0].item() == real32(0))
     print(NL)
     return 0
 
@@ -79,96 +79,96 @@ import nn
 
 int | error conv_cpu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> output = layer.forward(
-        tensor.ones<float32>([1, 1, 1, 1])
+    tensor<real32> output = layer.forward(
+        tensor.ones<real32>([1, 1, 1, 1])
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error conv_gpu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> output = layer.forward(
-        tensor.ones<float32>([1, 1, 1, 1], gpu = 0)
+    tensor<real32> output = layer.forward(
+        tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error conv_gpu_fast_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> input = tensor.ones<float32>([1, 1, 1, 1], gpu = 0)
+    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
     nn.mode.fast()
-    tensor<float32> output = layer.forward(input)
+    tensor<real32> output = layer.forward(input)
     int ignored = output.shape()[0]
     return 0
 
 int | error conv_gpu_deterministic_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> input = tensor.ones<float32>([1, 1, 1, 1], gpu = 0)
+    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
     nn.mode.deterministic()
-    tensor<float32> output = layer.forward(input)
+    tensor<real32> output = layer.forward(input)
     int ignored = output.shape()[0]
     return 0
 
 int | error conv_relu_cpu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> output = nn.relu(
-        layer.forward(tensor.ones<float32>([1, 1, 1, 1]))
+    tensor<real32> output = nn.relu(
+        layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error conv_relu_gpu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> output = nn.relu(
-        layer.forward(tensor.ones<float32>([1, 1, 1, 1], gpu = 0))
+    tensor<real32> output = nn.relu(
+        layer.forward(tensor.ones<real32>([1, 1, 1, 1], gpu = 0))
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error fc_relu_cpu_probe()
     nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<float32> output = nn.relu(
-        layer.forward(tensor.ones<float32>([1, 2]))
+    tensor<real32> output = nn.relu(
+        layer.forward(tensor.ones<real32>([1, 2]))
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error fc_relu_gpu_probe()
     nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<float32> output = nn.relu(
-        layer.forward(tensor.ones<float32>([1, 2], gpu = 0))
+    tensor<real32> output = nn.relu(
+        layer.forward(tensor.ones<real32>([1, 2], gpu = 0))
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error fc_gelu_cpu_probe()
     nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<float32> output = nn.gelu(
-        layer.forward(tensor.ones<float32>([1, 2]))
+    tensor<real32> output = nn.gelu(
+        layer.forward(tensor.ones<real32>([1, 2]))
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error fc_gelu_gpu_probe()
     nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<float32> output = nn.gelu(
-        layer.forward(tensor.ones<float32>([1, 2], gpu = 0))
+    tensor<real32> output = nn.gelu(
+        layer.forward(tensor.ones<real32>([1, 2], gpu = 0))
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error conv_gelu_cpu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> output = nn.gelu(
-        layer.forward(tensor.ones<float32>([1, 1, 1, 1]))
+    tensor<real32> output = nn.gelu(
+        layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
     )
     int ignored = output.shape()[0]
     return 0
 
 int | error conv_gelu_gpu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> output = nn.gelu(
-        layer.forward(tensor.ones<float32>([1, 1, 1, 1], gpu = 0))
+    tensor<real32> output = nn.gelu(
+        layer.forward(tensor.ones<real32>([1, 1, 1, 1], gpu = 0))
     )
     int ignored = output.shape()[0]
     return 0
@@ -176,8 +176,8 @@ int | error conv_gelu_gpu_probe()
 int | error conv_batchnorm_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
     nn.BatchNorm normalizer = try nn.BatchNorm(1)
-    tensor<float32> output = normalizer.infer(
-        layer.forward(tensor.ones<float32>([1, 1, 1, 1]))
+    tensor<real32> output = normalizer.infer(
+        layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
     )
     int ignored = output.shape()[0]
     return 0
@@ -185,9 +185,9 @@ int | error conv_batchnorm_probe()
 int | error conv_batchnorm_relu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
     nn.BatchNorm normalizer = try nn.BatchNorm(1)
-    tensor<float32> output = nn.relu(
+    tensor<real32> output = nn.relu(
         normalizer.infer(
-            layer.forward(tensor.ones<float32>([1, 1, 1, 1]))
+            layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
         )
     )
     int ignored = output.shape()[0]
@@ -196,9 +196,9 @@ int | error conv_batchnorm_relu_probe()
 int | error conv_batchnorm_gelu_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
     nn.BatchNorm normalizer = try nn.BatchNorm(1)
-    tensor<float32> output = nn.gelu(
+    tensor<real32> output = nn.gelu(
         normalizer.infer(
-            layer.forward(tensor.ones<float32>([1, 1, 1, 1]))
+            layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
         )
     )
     int ignored = output.shape()[0]
@@ -206,8 +206,8 @@ int | error conv_batchnorm_gelu_probe()
 
 int | error tracked_fusion_probe()
     nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<float32> input = tensor.ones<float32>([1, 1, 1, 1]).track()
-    tensor<float32> output = nn.relu(layer.forward(input))
+    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1]).track()
+    tensor<real32> output = nn.relu(layer.forward(input))
     int ignored = output.shape()[0]
     return 0
 QUI
@@ -252,24 +252,24 @@ cat > "$TMP/memory.qui" <<'QUI'
 import nn
 
 int unique_probe()
-    tensor<float32> output = nn.relu(tensor.ones<float32>([4]))
-    print(output[0].item() == float32(1))
+    tensor<real32> output = nn.relu(tensor.ones<real32>([4]))
+    print(output[0].item() == real32(1))
     print(NL)
     return 0
 
 int alias_probe()
-    tensor<float32> values = tensor.ones<float32>([2])
-    values[0] = float32(-1)
-    tensor<float32> output = nn.relu(values)
-    print(output[0].item() == float32(0))
+    tensor<real32> values = tensor.ones<real32>([2])
+    values[0] = real32(-1)
+    tensor<real32> output = nn.relu(values)
+    print(output[0].item() == real32(0))
     print(NL)
-    print(values[0].item() == float32(-1))
+    print(values[0].item() == real32(-1))
     print(NL)
     return 0
 
 int tracked_probe()
-    tensor<float32> values = tensor.ones<float32>([2]).track()
-    tensor<float32> output = nn.relu(values)
+    tensor<real32> values = tensor.ones<real32>([2]).track()
+    tensor<real32> output = nn.relu(values)
     int ignored = output.shape()[0]
     return 0
 
@@ -309,12 +309,12 @@ import nn
 import math
 
 int run()
-    tensor<float32> seed = tensor.zeros<float32>([1])
-    tensor<float32> optimized = seed.track()
-    tensor<float32> reference = seed.track()
+    tensor<real32> seed = tensor.zeros<real32>([1])
+    tensor<real32> optimized = seed.track()
+    tensor<real32> reference = seed.track()
 
-    tensor<float32> optimized_output = nn.relu(optimized)
-    tensor<float32> reference_output = (
+    tensor<real32> optimized_output = nn.relu(optimized)
+    tensor<real32> reference_output = (
         reference + math.abs(reference)
     ) / 2.0
     print(
@@ -325,8 +325,8 @@ int run()
 
     math.mean(optimized_output).backward(&optimized, track = true)
     math.mean(reference_output).backward(&reference, track = true)
-    tensor<float32> optimized_first = optimized.grad
-    tensor<float32> reference_first = reference.grad
+    tensor<real32> optimized_first = optimized.grad
+    tensor<real32> reference_first = reference.grad
     print(optimized_first.is_tracked())
     print(NL)
     print(reference_first.is_tracked())

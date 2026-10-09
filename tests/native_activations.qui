@@ -3,28 +3,28 @@
 import nn
 import math
 
-tensor<float32> relu_reference(tensor<float32> value)
+tensor<real32> relu_reference(tensor<real32> value)
     return (value + math.abs(value)) / 2.0
 
-tensor<float32> gelu_reference(tensor<float32> value)
-    tensor<float32> cubic = value * value * value
-    tensor<float32> inner = (value + cubic * float32(0.044715)) * float32(0.7978845608028654)
-    tensor<float32> lifted = (inner - 20.0 + math.abs(inner + 20.0)) / 2.0
-    tensor<float32> limited = (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
-    tensor<float32> exponent = math.exp(limited * 2.0)
-    tensor<float32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
+tensor<real32> gelu_reference(tensor<real32> value)
+    tensor<real32> cubic = value * value * value
+    tensor<real32> inner = (value + cubic * real32(0.044715)) * real32(0.7978845608028654)
+    tensor<real32> lifted = (inner - 20.0 + math.abs(inner + 20.0)) / 2.0
+    tensor<real32> limited = (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
+    tensor<real32> exponent = math.exp(limited * 2.0)
+    tensor<real32> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
     return value * 0.5 * (1.0 + hyperbolic)
 
 // The same expression in float64 is the well-conditioned derivative
-// reference: the float32 graph's second derivative cancels catastrophically
+// reference: the real32 graph's second derivative cancels catastrophically
 // once tanh saturates.
-tensor<float> gelu_reference64(tensor<float> value)
-    tensor<float> cubic = value * value * value
-    tensor<float> inner = (value + cubic * float(float32(0.044715))) * float(float32(0.7978845608028654))
-    tensor<float> lifted = (inner - 20.0 + math.abs(inner + 20.0)) / 2.0
-    tensor<float> limited = (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
-    tensor<float> exponent = math.exp(limited * 2.0)
-    tensor<float> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
+tensor<real64> gelu_reference64(tensor<real64> value)
+    tensor<real64> cubic = value * value * value
+    tensor<real64> inner = (value + cubic * real64(real32(0.044715))) * real64(real32(0.7978845608028654))
+    tensor<real64> lifted = (inner - 20.0 + math.abs(inner + 20.0)) / 2.0
+    tensor<real64> limited = (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
+    tensor<real64> exponent = math.exp(limited * 2.0)
+    tensor<real64> hyperbolic = (exponent - 1.0) / (exponent + 1.0)
     return value * 0.5 * (1.0 + hyperbolic)
 
 void report(string name, bool passed)
@@ -34,17 +34,17 @@ void report(string name, bool passed)
 // cubic overflow to NaN plus inf and NaN) followed by uniform values in
 // [-9, 9]. Gradient checks use finite values only: one non-finite element
 // would make every gradient of the summed loss NaN.
-tensor<float32> activation_inputs(int random_count, bool non_finite)
-    float32 zero = float32(0)
-    float32[] special = [zero, float32(-0.0), float32(1), float32(-1), float32(0.5), float32(-0.5), float32(3), float32(-3), float32(5.9), float32(-5.9), float32(30), float32(-30), float32(1000), float32(-1000), float32(0.000001), float32(-0.000001)]
+tensor<real32> activation_inputs(int random_count, bool non_finite)
+    real32 zero = real32(0)
+    real32[] special = [zero, real32(-0.0), real32(1), real32(-1), real32(0.5), real32(-0.5), real32(3), real32(-3), real32(5.9), real32(-5.9), real32(30), real32(-30), real32(1000), real32(-1000), real32(0.000001), real32(-0.000001)]
     if non_finite
-        special = special.append(float32(10000000000000))
-        special = special.append(float32(1) / zero)
-        special = special.append(float32(-1) / zero)
+        special = special.append(real32(10000000000000))
+        special = special.append(real32(1) / zero)
+        special = special.append(real32(-1) / zero)
         special = special.append(zero / zero)
-    tensor<float32> random_values = nn.uniform_weights(random_count, 9.0, 3)
+    tensor<real32> random_values = nn.uniform_weights(random_count, 9.0, 3)
     int count = len(special) + random_count
-    tensor<float32> values = tensor.zeros<float32>([count])
+    tensor<real32> values = tensor.zeros<real32>([count])
     for index in range(count)
         if index < len(special)
             values[index] = special[index]
@@ -53,75 +53,75 @@ tensor<float32> activation_inputs(int random_count, bool non_finite)
     return values
 
 // Elementwise bit equality, treating NaN as equal to NaN.
-bool identical(tensor<float32> left, tensor<float32> right)
-    tensor<float32> a = left.untrack().cpu()
-    tensor<float32> b = right.untrack().cpu()
+bool identical(tensor<real32> left, tensor<real32> right)
+    tensor<real32> a = left.untrack().cpu()
+    tensor<real32> b = right.untrack().cpu()
     if a.shape() != b.shape()
         return false
     for index in range(a.shape()[0])
-        float32 x = a[index].item()
-        float32 y = b[index].item()
+        real32 x = a[index].item()
+        real32 y = b[index].item()
         if not (x != x and y != y) and x != y
             return false
     return true
 
-bool close64(tensor<float32> actual, tensor<float> expected, float tolerance)
-    tensor<float32> a = actual.untrack().cpu()
-    tensor<float> b = expected.untrack()
+bool close64(tensor<real32> actual, tensor<real64> expected, real64 tolerance)
+    tensor<real32> a = actual.untrack().cpu()
+    tensor<real64> b = expected.untrack()
     for index in range(a.shape()[0])
-        float x = float(a[index].item())
-        float y = b[index].item()
+        real64 x = real64(a[index].item())
+        real64 y = b[index].item()
         if math.abs(x - y) > tolerance * (1.0 + math.abs(y))
             return false
     return true
 
 // Largest |actual - expected| / (1 + |expected|).
-float max_error64(tensor<float32> actual, tensor<float> expected)
-    tensor<float32> a = actual.untrack().cpu()
-    tensor<float> b = expected.untrack()
-    float worst = 0.0
+real64 max_error64(tensor<real32> actual, tensor<real64> expected)
+    tensor<real32> a = actual.untrack().cpu()
+    tensor<real64> b = expected.untrack()
+    real64 worst = 0.0
     for index in range(a.shape()[0])
-        float x = float(a[index].item())
-        float y = b[index].item()
+        real64 x = real64(a[index].item())
+        real64 y = b[index].item()
         worst = math.max(worst, math.abs(x - y) / (1.0 + math.abs(y)))
     return worst
 
-tensor<float> widen(tensor<float32> value)
-    tensor<float32> source = value.untrack().cpu()
+tensor<real64> widen(tensor<real32> value)
+    tensor<real32> source = value.untrack().cpu()
     int count = source.shape()[0]
-    tensor<float> result = tensor.zeros<float>([count])
+    tensor<real64> result = tensor.zeros<real64>([count])
     for index in range(count)
-        result[index] = float(source[index].item())
+        result[index] = real64(source[index].item())
     return result
 
 // Tolerances of the fused GELU derivatives for inputs with a finite forward
 // value (|x| <= 6.9815e12), unit upstream gradient, metric per element
 // |fused - reference| / (1 + |reference|).
-//   First derivative vs the composed float32 graph (gelu_reference, the
-//   package source expression): the graph differentiates the float32
+//   First derivative vs the composed real32 graph (gelu_reference, the
+//   package source expression): the graph differentiates the real32
 //   composition and cancels where tanh saturates (|x| around 7.3, which the
 //   dense inputs cover), while the fused kernel evaluates the analytic
 //   derivative. The bound leaves headroom for a different libm exp in the
 //   graph (the fused kernel does not use libm).
-float gelu_graph_bound()
+real64 gelu_graph_bound()
     return 0.00001
 
 //   First / second derivative vs the analytic float64 derivatives of the
 //   same expression (gelu_derivatives64): the fused CPU kernels use only
-//   IEEE float32 operations without contraction and their own exp
-//   polynomial, so their error is a few float32 roundings, the same on
+//   IEEE real32 operations without contraction and their own exp
+//   polynomial, so their error is a few real32 roundings, the same on
 //   every platform.
-float gelu_analytic_bound()
+real64 gelu_analytic_bound()
     return 0.000001
 
 class SecondOrder
-    tensor<float32> first
-    tensor<float32> second
+    tensor<real32> first
+    tensor<real32> second
 
 // first = d/dx sum(f(x) * u), second = d/dx sum(first * w).
-SecondOrder second_order(tensor<float32> base, tensor<float32> upstream, tensor<float32> weights, int activation, bool fused)
-    tensor<float32> x = base.track()
-    tensor<float32> y
+SecondOrder second_order(tensor<real32> base, tensor<real32> upstream, tensor<real32> weights, int activation, bool fused)
+    tensor<real32> x = base.track()
+    tensor<real32> y
     if activation == 1
         if fused
             y = nn.relu(x)
@@ -132,7 +132,7 @@ SecondOrder second_order(tensor<float32> base, tensor<float32> upstream, tensor<
     else
         y = gelu_reference(x)
     math.sum(y * upstream).backward(&x, track = true)
-    tensor<float32> first = x.grad
+    tensor<real32> first = x.grad
     x.clear_grad()
     math.sum(first * weights).backward(&x)
     SecondOrder result
@@ -141,32 +141,32 @@ SecondOrder second_order(tensor<float32> base, tensor<float32> upstream, tensor<
     return result
 
 void activation_checks()
-    tensor<float32> special = activation_inputs(2000, true)
+    tensor<real32> special = activation_inputs(2000, true)
     report("relu forward is the source expression", identical(nn.relu(special), relu_reference(special)))
     report("gelu forward is the source expression", identical(nn.gelu(special), gelu_reference(special)))
 
-    tensor<float32> values = activation_inputs(2000, false)
+    tensor<real32> values = activation_inputs(2000, false)
 
     int count = values.shape()[0]
-    tensor<float32> upstream = nn.uniform_weights(count, 1.0, 5)
-    tensor<float32> weights = nn.uniform_weights(count, 1.0, 6)
+    tensor<real32> upstream = nn.uniform_weights(count, 1.0, 5)
+    tensor<real32> weights = nn.uniform_weights(count, 1.0, 6)
     SecondOrder relu_fused = second_order(values, upstream, weights, 1, true)
     SecondOrder relu_graph = second_order(values, upstream, weights, 1, false)
     // abs'(0) = 0, so the derivative at 0 is exactly 1/2.
-    report("relu first derivative matches the graph", identical(relu_fused.first, relu_graph.first) and relu_fused.first.untrack()[0].item() == upstream[0].item() * float32(0.5))
+    report("relu first derivative matches the graph", identical(relu_fused.first, relu_graph.first) and relu_fused.first.untrack()[0].item() == upstream[0].item() * real32(0.5))
     report("relu second derivative matches the graph", identical(relu_fused.second, relu_graph.second))
 
     // Finite inputs only: the derivative references are finite there.
-    tensor<float32> finite = nn.uniform_weights(2000, 9.0, 8)
-    tensor<float32> finite_upstream = nn.uniform_weights(2000, 1.0, 9)
-    tensor<float32> finite_weights = nn.uniform_weights(2000, 1.0, 10)
+    tensor<real32> finite = nn.uniform_weights(2000, 9.0, 8)
+    tensor<real32> finite_upstream = nn.uniform_weights(2000, 1.0, 9)
+    tensor<real32> finite_weights = nn.uniform_weights(2000, 1.0, 10)
     SecondOrder gelu_fused = second_order(finite, finite_upstream, finite_weights, 2, true)
     SecondOrder gelu_graph = second_order(finite, finite_upstream, finite_weights, 2, false)
-    tensor<float> x64 = widen(finite).track()
-    tensor<float> upstream64 = widen(finite_upstream)
-    tensor<float> weights64 = widen(finite_weights)
+    tensor<real64> x64 = widen(finite).track()
+    tensor<real64> upstream64 = widen(finite_upstream)
+    tensor<real64> weights64 = widen(finite_weights)
     math.sum(gelu_reference64(x64) * upstream64).backward(&x64, track = true)
-    tensor<float> first64 = x64.grad
+    tensor<real64> first64 = x64.grad
     x64.clear_grad()
     math.sum(first64 * weights64).backward(&x64)
     report("gelu first derivative matches float64", close64(gelu_fused.first, first64, 0.00001))
@@ -174,32 +174,32 @@ void activation_checks()
     report("gelu first derivative matches the graph", close64(gelu_fused.first, widen(gelu_graph.first), gelu_graph_bound()))
     report("gelu second derivative matches float64", close64(gelu_fused.second, x64.grad, 0.00001))
     // The fused derivatives are the analytic derivatives of the exact GELU
-    // expression; the composed graph differentiates the float32
+    // expression; the composed graph differentiates the real32
     // composition, whose second derivative cancels badly once tanh
     // saturates. Both errors against float64 are printed: the fused second
     // derivative must be no less accurate than the graph's.
-    float first_to_graph = max_error64(gelu_fused.first, widen(gelu_graph.first))
-    float fused_second_error = max_error64(gelu_fused.second, x64.grad)
-    float graph_second_error = max_error64(gelu_graph.second, x64.grad)
+    real64 first_to_graph = max_error64(gelu_fused.first, widen(gelu_graph.first))
+    real64 fused_second_error = max_error64(gelu_fused.second, x64.grad)
+    real64 graph_second_error = max_error64(gelu_graph.second, x64.grad)
     print("gelu derivative differences (|d| / (1 + |reference|)): first fused vs graph {first_to_graph}, second fused vs float64 {fused_second_error}, second graph vs float64 {graph_second_error}{NL}")
     report("gelu second derivative no less accurate than the graph", fused_second_error <= graph_second_error)
 
     // Layout handling: untracked views are densified, tracked views keep the
     // compositional graph (never materialized behind the graph's back).
-    tensor<float32> matrix_values = nn.uniform_weights(24, 4.0, 11)
-    tensor<float32> matrix = matrix_values.reshape([4, 6])
-    tensor<float32> view = matrix.transpose(0, 1)
+    tensor<real32> matrix_values = nn.uniform_weights(24, 4.0, 11)
+    tensor<real32> matrix = matrix_values.reshape([4, 6])
+    tensor<real32> view = matrix.transpose(0, 1)
     report("untracked strided activation", identical(nn.gelu(view).contiguous().reshape([24]), gelu_reference(view).contiguous().reshape([24])))
-    tensor<float32> tracked = matrix.track()
-    tensor<float32> tracked_view = tracked.transpose(0, 1)
+    tensor<real32> tracked = matrix.track()
+    tensor<real32> tracked_view = tracked.transpose(0, 1)
     math.sum(nn.gelu(tracked_view)).backward(&tracked)
-    tensor<float32> view_gradient = tracked.grad.untrack().reshape([24])
-    tensor<float32> reference_input = matrix.track()
+    tensor<real32> view_gradient = tracked.grad.untrack().reshape([24])
+    tensor<real32> reference_input = matrix.track()
     math.sum(gelu_reference(reference_input.transpose(0, 1))).backward(&reference_input)
     report("tracked strided activation", identical(view_gradient, reference_input.grad.untrack().reshape([24])))
 
-float power2(int exponent)
-    float result = 1.0
+real64 power2(int exponent)
+    real64 result = 1.0
     for step in range(math.abs(exponent))
         if exponent > 0
             result = result * 2.0
@@ -208,136 +208,136 @@ float power2(int exponent)
     return result
 
 // Dense GELU derivative inputs, every one with a finite forward value:
-//   - every float32 in +-[7.32, 7.37]: both clamp boundaries inner = +-20
+//   - every real32 in +-[7.32, 7.37]: both clamp boundaries inner = +-20
 //     and the largest first-derivative difference to the graph;
 //   - [5, 7.32) in steps of 2^-12, where tanh saturates;
 //   - [-12, 12] in steps of 2^-8;
 //   - +-2^e (1 + k/32) for e in [-149, 42]: subnormals, tiny values, the
-//     range where the float32 clamp no longer gives exactly +-20 (from
+//     range where the real32 clamp no longer gives exactly +-20 (from
 //     x = 1234.4 and x = -13.95) and cancels to 0 (|x| > 2468.8), and
 //     1.3128e10 <= |x| <= 6.9815e12, where inner_derivative^2 overflows
-//     float32 (the fused second derivative must stay finite there, the
+//     real32 (the fused second derivative must stay finite there, the
 //     graph's is 0);
 //   - +-0, the largest subnormal, the smallest normal, x = 7.30049419
 //     (where the Metal kernel's first derivative is farthest from the
 //     graph), and the exact ends of that overflow range.
-float32[] dense_gelu_values()
-    float32[] values = [float32(0), float32(-0.0)]
-    float32[] edges = [float32(1.1754942106924411e-38), float32(1.1754943508222875e-38), float32(7.30049419), float32(13128121344.0), float32(13128122368.0), float32(6981463048192.0)]
+real32[] dense_gelu_values()
+    real32[] values = [real32(0), real32(-0.0)]
+    real32[] edges = [real32(1.1754942106924411e-38), real32(1.1754943508222875e-38), real32(7.30049419), real32(13128121344.0), real32(13128122368.0), real32(6981463048192.0)]
     for value in edges
         values = values.append(value)
         values = values.append(-value)
-    float boundary_start = float(float32(7.32))
-    float boundary_ulp = power2(-21)
+    real64 boundary_start = real64(real32(7.32))
+    real64 boundary_ulp = power2(-21)
     for index in range(104858)
-        float32 value = float32(boundary_start + float(index) * boundary_ulp)
+        real32 value = real32(boundary_start + real64(index) * boundary_ulp)
         values = values.append(value)
         values = values.append(-value)
     for index in range(9503)
-        float32 value = float32(5.0 + float(index) / 4096.0)
+        real32 value = real32(5.0 + real64(index) / 4096.0)
         values = values.append(value)
         values = values.append(-value)
     for index in range(6145)
-        values = values.append(float32(-12.0 + float(index) / 256.0))
+        values = values.append(real32(-12.0 + real64(index) / 256.0))
     for exponent in range(-149, 43)
-        float scale = power2(exponent)
+        real64 scale = power2(exponent)
         for step in range(32)
-            float32 value = float32(scale * (1.0 + float(step) / 32.0))
-            if float(value) <= 6981463048192.0
+            real32 value = real32(scale * (1.0 + real64(step) / 32.0))
+            if real64(value) <= 6981463048192.0
                 values = values.append(value)
                 values = values.append(-value)
     return values
 
-float clamp_side(float32 value)
-    if value > float32(0)
+real64 clamp_side(real32 value)
+    if value > real32(0)
         return 1.0
-    if value < float32(0)
+    if value < real32(0)
         return 0.0
     return 0.5
 
 class Derivatives
-    float first
-    float second
+    real64 first
+    real64 second
 
 // Analytic float64 first and second derivatives of the GELU expression,
-// with nn.tanh's clamp decided by the expression's own float32 operations
+// with nn.tanh's clamp decided by the expression's own real32 operations
 // (1 inside, 0 outside, 1/2 on a boundary). Outside the clamp the
 // expression is x/2 * (1 + tanh(limited)) with a constant limited, so the
 // second derivative is exactly 0.
-Derivatives gelu_derivatives64(float32 x)
-    float32 c1 = float32(0.7978845608028654)
-    float32 c2 = float32(0.044715)
-    float32 square = x * x
-    float32 cubic = square * x
-    float32 inner = (x + cubic * c2) * c1
-    float32 lower = inner + float32(20)
-    float32 lifted = ((inner - float32(20)) + math.abs(lower)) * float32(0.5)
-    float32 upper = lifted - float32(20)
-    float32 limited = ((lifted + float32(20)) - math.abs(upper)) * float32(0.5)
-    float clamp = clamp_side(lower) * clamp_side(-upper)
-    float value = float(x)
-    float scale = float(c1)
-    float cubic_scale = float(c2)
-    float z = float(limited)
+Derivatives gelu_derivatives64(real32 x)
+    real32 c1 = real32(0.7978845608028654)
+    real32 c2 = real32(0.044715)
+    real32 square = x * x
+    real32 cubic = square * x
+    real32 inner = (x + cubic * c2) * c1
+    real32 lower = inner + real32(20)
+    real32 lifted = ((inner - real32(20)) + math.abs(lower)) * real32(0.5)
+    real32 upper = lifted - real32(20)
+    real32 limited = ((lifted + real32(20)) - math.abs(upper)) * real32(0.5)
+    real64 clamp = clamp_side(lower) * clamp_side(-upper)
+    real64 value = real64(x)
+    real64 scale = real64(c1)
+    real64 cubic_scale = real64(c2)
+    real64 z = real64(limited)
     if clamp > 0.0
         z = scale * (value + cubic_scale * value * value * value)
     // tanh and its derivative 4 e / (e + 1)^2 without cancellation.
-    float exponent = math.exp(2.0 * z)
-    float hyperbolic = (exponent - 1.0) / (exponent + 1.0)
-    float slope = 4.0 * exponent / ((exponent + 1.0) * (exponent + 1.0))
-    float inner_derivative = scale * (1.0 + 3.0 * cubic_scale * value * value)
+    real64 exponent = math.exp(2.0 * z)
+    real64 hyperbolic = (exponent - 1.0) / (exponent + 1.0)
+    real64 slope = 4.0 * exponent / ((exponent + 1.0) * (exponent + 1.0))
+    real64 inner_derivative = scale * (1.0 + 3.0 * cubic_scale * value * value)
     Derivatives result
     result.first = 0.5 * (1.0 + hyperbolic)
     result.second = 0.0
     if clamp > 0.0
-        float limited_derivative = clamp * inner_derivative
+        real64 limited_derivative = clamp * inner_derivative
         result.first = result.first + 0.5 * value * slope * limited_derivative
         result.second = slope * limited_derivative + 0.5 * value * (-2.0 * hyperbolic * slope * limited_derivative * limited_derivative + slope * clamp * scale * 6.0 * cubic_scale * value)
     return result
 
-bool all_nan(tensor<float32> value)
-    tensor<float32> host = value.untrack().cpu()
+bool all_nan(tensor<real32> value)
+    tensor<real32> host = value.untrack().cpu()
     return (host != host).all()
 
 // Fused first and second derivatives with unit upstream gradients over the
 // dense inputs, against the composed graph and the float64 derivatives.
 void dense_gelu_checks()
-    float32[] values = dense_gelu_values()
+    real32[] values = dense_gelu_values()
     int count = len(values)
-    tensor<float32> base = tensor.zeros<float32>([count])
+    tensor<real32> base = tensor.zeros<real32>([count])
     for index in range(count)
         base[index] = values[index]
-    tensor<float32> ones = tensor.ones<float32>([count])
+    tensor<real32> ones = tensor.ones<real32>([count])
     SecondOrder fused = second_order(base, ones, ones, 2, true)
     SecondOrder graph = second_order(base, ones, ones, 2, false)
-    tensor<float32> fused_first = fused.first.untrack()
-    tensor<float32> fused_second = fused.second.untrack()
-    tensor<float32> graph_first = graph.first.untrack()
-    tensor<float32> graph_second = graph.second.untrack()
-    float first_to_graph = 0.0
-    float first_to_graph_absolute = 0.0
-    float first_to_float64 = 0.0
-    float second_to_float64 = 0.0
+    tensor<real32> fused_first = fused.first.untrack()
+    tensor<real32> fused_second = fused.second.untrack()
+    tensor<real32> graph_first = graph.first.untrack()
+    tensor<real32> graph_second = graph.second.untrack()
+    real64 first_to_graph = 0.0
+    real64 first_to_graph_absolute = 0.0
+    real64 first_to_float64 = 0.0
+    real64 second_to_float64 = 0.0
     bool finite = true
     bool overflow_range = true
     int overflow_count = 0
     for index in range(count)
-        float32 x = values[index]
-        float first = float(fused_first[index].item())
-        float second = float(fused_second[index].item())
-        float graph_value = float(graph_first[index].item())
+        real32 x = values[index]
+        real64 first = real64(fused_first[index].item())
+        real64 second = real64(fused_second[index].item())
+        real64 graph_value = real64(graph_first[index].item())
         finite = finite and math.is_finite(first) and math.is_finite(second)
         Derivatives expected = gelu_derivatives64(x)
-        float difference = math.abs(first - graph_value)
+        real64 difference = math.abs(first - graph_value)
         first_to_graph = math.max(first_to_graph, difference / (1.0 + math.abs(graph_value)))
         first_to_graph_absolute = math.max(first_to_graph_absolute, difference)
         first_to_float64 = math.max(first_to_float64, math.abs(first - expected.first) / (1.0 + math.abs(expected.first)))
         second_to_float64 = math.max(second_to_float64, math.abs(second - expected.second) / (1.0 + math.abs(expected.second)))
-        if math.abs(float(x)) >= 13128122368.0
-            // The graph's values there: f' = 1/2 (the float32 clamp has
+        if math.abs(real64(x)) >= 13128122368.0
+            // The graph's values there: f' = 1/2 (the real32 clamp has
             // cancelled to 0) and f'' = 0.
             overflow_count = overflow_count + 1
-            overflow_range = overflow_range and second == 0.0 and graph_second[index].item() == float32(0) and first == graph_value
+            overflow_range = overflow_range and second == 0.0 and graph_second[index].item() == real32(0) and first == graph_value
     print("gelu dense sweep over {count} inputs (|d| / (1 + |reference|)): first fused vs graph {first_to_graph} (max |d| {first_to_graph_absolute}), first fused vs float64 {first_to_float64}, second fused vs float64 {second_to_float64}{NL}")
     report("gelu dense derivatives finite", finite)
     report("gelu dense derivatives where inner_derivative^2 overflows", overflow_range and overflow_count > 0)
@@ -348,14 +348,14 @@ void dense_gelu_checks()
     // the derivatives are NaN there, as in the graph. One element at a
     // time: a NaN forward value would make every gradient of a summed loss
     // NaN.
-    float32 zero = float32(0)
-    float32[] extremes = [float32(6981463572480.0), float32(10000000000000.0), float32(100000000000000000000.0), float32(340282346638528859811704183484516925440.0), float32(1) / zero, zero / zero]
+    real32 zero = real32(0)
+    real32[] extremes = [real32(6981463572480.0), real32(10000000000000.0), real32(100000000000000000000.0), real32(340282346638528859811704183484516925440.0), real32(1) / zero, zero / zero]
     bool nan_beyond = true
     for magnitude in extremes
-        for sign in [float32(1), float32(-1)]
-            tensor<float32> single = tensor.zeros<float32>([1])
+        for sign in [real32(1), real32(-1)]
+            tensor<real32> single = tensor.zeros<real32>([1])
             single[0] = magnitude * sign
-            tensor<float32> one = tensor.ones<float32>([1])
+            tensor<real32> one = tensor.ones<real32>([1])
             SecondOrder fused_single = second_order(single, one, one, 2, true)
             SecondOrder graph_single = second_order(single, one, one, 2, false)
             nan_beyond = nan_beyond and all_nan(fused_single.first) and all_nan(fused_single.second) and all_nan(graph_single.first) and all_nan(graph_single.second)
@@ -372,10 +372,10 @@ bool fusion_case(int activation)
     fused.convolution = nn.Conv2D(2, 3, 3, stride = 2, padding = 1, seed = 4)
     ConvModel separate
     separate.convolution = nn.Conv2D(2, 3, 3, stride = 2, padding = 1, seed = 4)
-    tensor<float32> image_values = nn.uniform_weights(2 * 2 * 7 * 6, 1.0, 12)
-    tensor<float32> image = image_values.reshape([2, 2, 7, 6])
-    tensor<float32> fused_output
-    tensor<float32> separate_output
+    tensor<real32> image_values = nn.uniform_weights(2 * 2 * 7 * 6, 1.0, 12)
+    tensor<real32> image = image_values.reshape([2, 2, 7, 6])
+    tensor<real32> fused_output
+    tensor<real32> separate_output
     if activation == 1
         fused_output = nn.relu(fused.convolution.forward(image.track()))
         separate_output = relu_reference(separate.convolution.forward(image.track()))
@@ -387,21 +387,21 @@ bool fusion_case(int activation)
     optimizer.zero_grad(&separate)
     math.mean(fused_output).backward(&fused)
     math.mean(separate_output).backward(&separate)
-    tensor<float32> fused_gradient = fused.convolution.weight.gradient().untrack().reshape([54])
-    tensor<float32> separate_gradient = separate.convolution.weight.gradient().untrack().reshape([54])
+    tensor<real32> fused_gradient = fused.convolution.weight.gradient().untrack().reshape([54])
+    tensor<real32> separate_gradient = separate.convolution.weight.gradient().untrack().reshape([54])
     return identical(fused_output.reshape([72]), separate_output.reshape([72])) and close64(fused_gradient, widen(separate_gradient), 0.00001)
 
 // Empty tensors: forward, first- and second-order backward produce empty
 // results, as the compositional graph does.
 bool empty_case(int activation)
-    tensor<float32> x = tensor.zeros<float32>([0, 3]).track()
-    tensor<float32> y
+    tensor<real32> x = tensor.zeros<real32>([0, 3]).track()
+    tensor<real32> y
     if activation == 1
         y = nn.relu(x)
     else
         y = nn.gelu(x)
     math.sum(y * y).backward(&x, track = true)
-    tensor<float32> first = x.grad
+    tensor<real32> first = x.grad
     x.clear_grad()
     math.sum(first * first).backward(&x)
     return y.shape()[0] == 0 and first.shape()[1] == 3 and x.grad.shape()[0] == 0 and x.grad.shape()[1] == 3

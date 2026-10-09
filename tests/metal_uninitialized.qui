@@ -22,9 +22,9 @@ class Net
     nn.Conv2D convolution
 
 // Only element [0, 0, 0, 0] is written.
-tensor<float32> partial(int device)
-    tensor<float32> value = tensor<float32>([1, 1, 4, 4], gpu = device)
-    value[0, 0, 0, 0] = float32(1)
+tensor<real32> partial(int device)
+    tensor<real32> value = tensor<real32>([1, 1, 4, 4], gpu = device)
+    value[0, 0, 0, 0] = real32(1)
     return value
 
 Net net_on(int device)
@@ -34,8 +34,8 @@ Net net_on(int device)
     net.convolution.bias.replace(net.convolution.bias.raw().gpu(device))
     return net
 
-tensor<float32> run(int device, int scenario)
-    tensor<float32> input = partial(device)
+tensor<real32> run(int device, int scenario)
+    tensor<real32> input = partial(device)
     if scenario == 0
         return nn.gelu(input)
     if scenario == 1
@@ -45,10 +45,10 @@ tensor<float32> run(int device, int scenario)
     Net net = net_on(device)
     return net.convolution.forward(input)
 
-float leading_value(tensor<float32> value)
+real64 leading_value(tensor<real32> value)
     int count = 1
     for extent in value.shape()
         count = count * extent
-    return float(value.cpu().reshape([count])[0].item())
+    return real64(value.cpu().reshape([count])[0].item())
 
 print("computed {leading_value(run(args.device, args.scenario))}{NL}")
