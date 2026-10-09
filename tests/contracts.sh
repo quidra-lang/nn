@@ -197,9 +197,9 @@ print(not model.weight.has_grad() and not model.bias.has_grad())
 print(NL)
 QUI
 clear_grad_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/clear-grad.qui")"
-if [[ "$clear_grad_output" != "$(printf 'true\\ntrue\\ntrue')" ]]; then
+if [[ "$clear_grad_output" != "$(printf 'true\ntrue\ntrue')" ]]; then
     echo "unexpected nn.clear_grad output:" >&2
-    printf '%s\\n' "$clear_grad_output" >&2
+    printf '%s\n' "$clear_grad_output" >&2
     exit 1
 fi
 
