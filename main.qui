@@ -1757,8 +1757,9 @@ class BatchNorm
                 mean = running_mean.raw().gather([feature], [1])
                 variance = running_variance.raw().gather([feature], [1])
 
+            tensor<real32> shifted_variance = variance + variance_epsilon
             tensor<real32> denominator = math.exp(
-                math.log(variance + variance_epsilon) * real32(0.5)
+                math.log(shifted_variance) * real32(0.5)
             )
             tensor<real32> feature_scale = parameter_scale.gather(
                 [feature], [1]
