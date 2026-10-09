@@ -94,18 +94,18 @@ void | error all_reduce_sum<T: floating>(
     int[] devices
 )
     if len(values) != len(devices)
-        return error("nn.all_reduce_sum requires one destination device per tensor")
+        return error("nn.all_reduce_sum requires one destination device per tensor", code = "NN_SHAPE")
     if len(values) == 0
         return
 
     int[] shape = values[0].shape()
     for index in range(len(values))
         if values[index].is_tracked()
-            return error("nn.all_reduce_sum requires untracked tensors; reduce gradients after backward or call untrack() explicitly")
+            return error("nn.all_reduce_sum requires untracked tensors; reduce gradients after backward or call untrack() explicitly", code = "NN_TRACKED")
         if values[index].shape() != shape
-            return error("nn.all_reduce_sum requires identical tensor shapes")
+            return error("nn.all_reduce_sum requires identical tensor shapes", code = "NN_SHAPE")
         if devices[index] < -1
-            return error("nn.all_reduce_sum device must be -1 for CPU or a nonnegative GPU index")
+            return error("nn.all_reduce_sum device must be -1 for CPU or a nonnegative GPU index", code = "NN_DEVICE")
 
     bool all_gpu_destinations = len(values) > 1
     for device in devices
@@ -123,7 +123,7 @@ void | error all_reduce_sum<T: floating>(
         if nccl_compatible and native.nccl_commit() == int32(1)
             if native.nccl_group_start() != int32(0)
                 native.nccl_cancel()
-                return error("nn.all_reduce_sum failed to start NCCL collective")
+                return error("nn.all_reduce_sum failed to start NCCL collective", code = "NN_COLLECTIVE")
 
             bool collective_failed = false
             for index in range(len(values))
@@ -134,7 +134,7 @@ void | error all_reduce_sum<T: floating>(
 
             int32 end_status = native.nccl_group_end()
             if collective_failed or end_status != int32(0)
-                return error("nn.all_reduce_sum NCCL collective failed")
+                return error("nn.all_reduce_sum NCCL collective failed", code = "NN_COLLECTIVE")
             return
 
         native.nccl_cancel()
@@ -169,7 +169,7 @@ void | error save<M>(M model, string path)
     string[] state_paths64 = reflect.paths<State<real64>>(model)
 
     if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
-        return error("nn.save reflection metadata does not match collected state")
+        return error("nn.save reflection metadata does not match collected state", code = "NN_INTERNAL")
 
     file.Handle output = try file.create(path)
     internal.StateChecksum checksum = internal.StateChecksum()
@@ -252,7 +252,7 @@ void | error load<M>(M &model, string path)
     string[] state_paths32 = reflect.paths<State<real32>>(model)
     string[] state_paths64 = reflect.paths<State<real64>>(model)
     if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
-        return error("nn.load reflection metadata does not match collected state")
+        return error("nn.load reflection metadata does not match collected state", code = "NN_INTERNAL")
 
     file.Handle input = try file.open(path)
     internal.StateChecksum checksum = internal.StateChecksum()
@@ -262,7 +262,7 @@ void | error load<M>(M &model, string path)
         "magic"
     )
     if magic != "QUIDRA_DNN_STATE"
-        return error("nn.load state file has an unsupported magic")
+        return error("nn.load state file has an unsupported magic", code = "NN_CHECKPOINT_FILE")
 
     string version = try internal.read_checked_line(
         &input,
@@ -270,7 +270,7 @@ void | error load<M>(M &model, string path)
         "format version"
     )
     if version != "2"
-        return error("nn.load state file has an unsupported format version")
+        return error("nn.load state file has an unsupported format version", code = "NN_CHECKPOINT_FILE")
 
     string container_kind = try internal.read_checked_line(
         &input,
@@ -278,7 +278,7 @@ void | error load<M>(M &model, string path)
         "container kind"
     )
     if container_kind != "model"
-        return error("nn.load state file is not a model-only container")
+        return error("nn.load state file is not a model-only container", code = "NN_CHECKPOINT_FILE")
 
     string root_type = try internal.read_checked_line(
         &input,
@@ -286,7 +286,7 @@ void | error load<M>(M &model, string path)
         "root model type"
     )
     if root_type != reflect.type_name(model)
-        return error("nn.load root model type does not match the target model")
+        return error("nn.load root model type does not match the target model", code = "NN_CHECKPOINT")
 
     int count32 = try internal.parse_nonnegative_state_int(
         try internal.read_checked_line(
@@ -321,7 +321,7 @@ void | error load<M>(M &model, string path)
         "State<real64> count"
     )
     if count32 != len(parameters32) or count64 != len(parameters64) or state_count32 != len(states32) or state_count64 != len(states64)
-        return error("nn.load state schema does not match the target model")
+        return error("nn.load state schema does not match the target model", code = "NN_CHECKPOINT")
 
     tensor<real32>[] loaded_parameters32 = []
     tensor<real64>[] loaded_parameters64 = []
@@ -382,9 +382,9 @@ void | error load<M>(M &model, string path)
 
 tensor<real32> | error uniform_weights(int count, real64 bound, int seed)
     if count < 0
-        return error("nn.uniform_weights count must be nonnegative")
+        return error("nn.uniform_weights count must be nonnegative", code = "NN_ARGUMENT")
     if not math.is_finite(bound) or bound < 0.0
-        return error("nn.uniform_weights bound must be finite and nonnegative")
+        return error("nn.uniform_weights bound must be finite and nonnegative", code = "NN_ARGUMENT")
     tensor<real32> values = tensor.zeros<real32>([count])
     random.Generator generator = random.generator(seed = seed)
     for index in range(count)
@@ -398,9 +398,9 @@ tensor<real32> | error normal_weights(
     int seed
 )
     if count < 0
-        return error("nn.normal_weights count must be nonnegative")
+        return error("nn.normal_weights count must be nonnegative", code = "NN_ARGUMENT")
     if not math.is_finite(standard_deviation) or standard_deviation < 0.0
-        return error("nn.normal_weights standard deviation must be finite and nonnegative")
+        return error("nn.normal_weights standard deviation must be finite and nonnegative", code = "NN_ARGUMENT")
     tensor<real32> values = tensor.zeros<real32>([count])
     if standard_deviation == 0.0
         return values
@@ -435,9 +435,9 @@ class FC
 
     FC | error construct(int features_in, int features_out, int seed = 1)
         if features_in <= 0 or features_out <= 0
-            return error("nn.FC requires positive input and output feature counts")
+            return error("nn.FC requires positive input and output feature counts", code = "NN_SHAPE")
         if features_out > 9223372036854775807 / features_in
-            return error("nn.FC dimensions are too large")
+            return error("nn.FC dimensions are too large", code = "NN_SHAPE")
         int weight_count = features_out * features_in
         real64 feature_root = try math.sqrt(real64(features_in))
         real64 bound = 1.0 / feature_root
@@ -454,15 +454,15 @@ class FC
         int[] input_shape = value.shape()
         int rank = len(input_shape)
         if rank < 1
-            error("nn.FC requires input rank >= 1")
+            error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
         int features_in = input_shape[rank - 1]
         int[] weight_shape = weight.raw().shape()
         int[] bias_shape = bias.raw().shape()
         if len(weight_shape) != 2 or len(bias_shape) != 1
-            error("nn.FC requires rank-2 weight and rank-1 bias")
+            error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
         int features_out = weight_shape[0]
         if weight_shape[1] != features_in or bias_shape[0] != features_out
-            error("nn.FC input, weight, and bias dimensions do not match")
+            error("nn.FC input, weight, and bias dimensions do not match", code = "NN_SHAPE")
 
         tensor<real32> parameter_weight
         tensor<real32> parameter_bias
@@ -493,15 +493,15 @@ class FC
             int[] input_shape = value.shape()
             int rank = len(input_shape)
             if rank < 1
-                error("nn.FC requires input rank >= 1")
+                error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
             int features_in = input_shape[rank - 1]
             int[] weight_shape = weight.raw().shape()
             int[] bias_shape = bias.raw().shape()
             if len(weight_shape) != 2 or len(bias_shape) != 1
-                error("nn.FC requires rank-2 weight and rank-1 bias")
+                error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
             int features_out = weight_shape[0]
             if weight_shape[1] != features_in or bias_shape[0] != features_out
-                error("nn.FC input, weight, and bias dimensions do not match")
+                error("nn.FC input, weight, and bias dimensions do not match", code = "NN_SHAPE")
 
             tensor<real32> native_input = value
             tensor<real32> native_weight = weight.raw()
@@ -537,15 +537,15 @@ class FC
             int[] input_shape = value.shape()
             int rank = len(input_shape)
             if rank < 1
-                error("nn.FC requires input rank >= 1")
+                error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
             int features_in = input_shape[rank - 1]
             int[] weight_shape = weight.raw().shape()
             int[] bias_shape = bias.raw().shape()
             if len(weight_shape) != 2 or len(bias_shape) != 1
-                error("nn.FC requires rank-2 weight and rank-1 bias")
+                error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
             int features_out = weight_shape[0]
             if weight_shape[1] != features_in or bias_shape[0] != features_out
-                error("nn.FC input, weight, and bias dimensions do not match")
+                error("nn.FC input, weight, and bias dimensions do not match", code = "NN_SHAPE")
 
             tensor<real32> native_input = value
             tensor<real32> native_weight = weight.raw()
@@ -622,26 +622,26 @@ class Conv2D
         int groups = 1
     )
         if channels_in <= 0 or channels_out <= 0
-            return error("nn.Conv2D requires positive input and output channel counts")
+            return error("nn.Conv2D requires positive input and output channel counts", code = "NN_SHAPE")
         if kernel <= 0
-            return error("nn.Conv2D kernel must be positive")
+            return error("nn.Conv2D kernel must be positive", code = "NN_ARGUMENT")
         if stride <= 0
-            return error("nn.Conv2D stride must be positive")
+            return error("nn.Conv2D stride must be positive", code = "NN_ARGUMENT")
         if padding < 0
-            return error("nn.Conv2D padding must be nonnegative")
+            return error("nn.Conv2D padding must be nonnegative", code = "NN_ARGUMENT")
         if groups <= 0
-            return error("nn.Conv2D groups must be positive")
+            return error("nn.Conv2D groups must be positive", code = "NN_ARGUMENT")
         if channels_in % groups != 0 or channels_out % groups != 0
-            return error("nn.Conv2D input and output channels must be divisible by groups")
+            return error("nn.Conv2D input and output channels must be divisible by groups", code = "NN_SHAPE")
         if kernel > 9223372036854775807 / kernel
-            return error("nn.Conv2D dimensions are too large")
+            return error("nn.Conv2D dimensions are too large", code = "NN_SHAPE")
         int kernel_area = kernel * kernel
         int channels_per_group = channels_in / groups
         if channels_per_group > 9223372036854775807 / kernel_area
-            return error("nn.Conv2D dimensions are too large")
+            return error("nn.Conv2D dimensions are too large", code = "NN_SHAPE")
         int fan_in = channels_per_group * kernel_area
         if channels_out > 9223372036854775807 / fan_in
-            return error("nn.Conv2D dimensions are too large")
+            return error("nn.Conv2D dimensions are too large", code = "NN_SHAPE")
         int weight_count = channels_out * fan_in
         real64 fan_root = try math.sqrt(real64(fan_in))
         real64 bound = 1.0 / fan_root
@@ -681,7 +681,7 @@ class Conv2D
             )
 
         if patch_width > 0 and patch_rows > 9223372036854775807 / patch_width
-            error("nn.Conv2D patch matrix is too large")
+            error("nn.Conv2D patch matrix is too large", code = "NN_SIZE")
         int patch_count = patch_rows * patch_width
 
         // Native patch extraction is NN-owned and CPU-only today. Probe the
@@ -877,9 +877,9 @@ class Conv2D
         int[] weight_shape = weight.raw().shape()
         int[] bias_shape = bias.raw().shape()
         if len(input_shape) != 4
-            error("nn.Conv2D requires NCHW rank-4 input")
+            error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
         if len(weight_shape) != 4 or len(bias_shape) != 1
-            error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias")
+            error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
         int batches = input_shape[0]
         int channels_in = input_shape[1]
@@ -890,26 +890,26 @@ class Conv2D
         int kernel_height = weight_shape[2]
         int kernel_width = weight_shape[3]
         if batches <= 0 or channels_in <= 0 or channels_out <= 0
-            error("nn.Conv2D requires positive batch and channel dimensions")
+            error("nn.Conv2D requires positive batch and channel dimensions", code = "NN_SHAPE")
         if height <= 0 or width <= 0
-            error("nn.Conv2D requires positive spatial dimensions")
+            error("nn.Conv2D requires positive spatial dimensions", code = "NN_SHAPE")
         if group_count <= 0
-            error("nn.Conv2D groups must be positive")
+            error("nn.Conv2D groups must be positive", code = "NN_ARGUMENT")
         if channels_in % group_count != 0 or channels_out % group_count != 0
-            error("nn.Conv2D input and output channels must be divisible by groups")
+            error("nn.Conv2D input and output channels must be divisible by groups", code = "NN_SHAPE")
         if weight_channels != channels_in / group_count
-            error("nn.Conv2D input and grouped weight channel dimensions do not match")
+            error("nn.Conv2D input and grouped weight channel dimensions do not match", code = "NN_SHAPE")
         if kernel_height <= 0 or kernel_width <= 0 or kernel_height != kernel_width
-            error("nn.Conv2D requires a positive square kernel")
+            error("nn.Conv2D requires a positive square kernel", code = "NN_SHAPE")
         if bias_shape[0] != channels_out
-            error("nn.Conv2D bias dimension does not match output channels")
+            error("nn.Conv2D bias dimension does not match output channels", code = "NN_SHAPE")
         if step <= 0 or border < 0
-            error("nn.Conv2D requires stride > 0 and padding >= 0")
+            error("nn.Conv2D requires stride > 0 and padding >= 0", code = "NN_ARGUMENT")
 
         int padded_height = height + border * 2
         int padded_width = width + border * 2
         if padded_height < kernel_height or padded_width < kernel_width
-            error("nn.Conv2D kernel is larger than padded input")
+            error("nn.Conv2D kernel is larger than padded input", code = "NN_SHAPE")
         int output_height = (padded_height - kernel_height) / step + 1
         int output_width = (padded_width - kernel_width) / step + 1
 
@@ -1137,9 +1137,9 @@ class Conv2D
             int[] weight_shape = parameter_weight.shape()
             int[] bias_shape = parameter_bias.shape()
             if len(input_shape) != 4
-                error("nn.Conv2D requires NCHW rank-4 input")
+                error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
             if len(weight_shape) != 4 or len(bias_shape) != 1
-                error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias")
+                error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
             int batches = input_shape[0]
             int channels_in = input_shape[1]
@@ -1150,26 +1150,26 @@ class Conv2D
             int kernel_height = weight_shape[2]
             int kernel_width = weight_shape[3]
             if batches <= 0 or channels_in <= 0 or channels_out <= 0
-                error("nn.Conv2D requires positive batch and channel dimensions")
+                error("nn.Conv2D requires positive batch and channel dimensions", code = "NN_SHAPE")
             if height <= 0 or width <= 0
-                error("nn.Conv2D requires positive spatial dimensions")
+                error("nn.Conv2D requires positive spatial dimensions", code = "NN_SHAPE")
             if group_count <= 0
-                error("nn.Conv2D groups must be positive")
+                error("nn.Conv2D groups must be positive", code = "NN_ARGUMENT")
             if channels_in % group_count != 0 or channels_out % group_count != 0
-                error("nn.Conv2D input and output channels must be divisible by groups")
+                error("nn.Conv2D input and output channels must be divisible by groups", code = "NN_SHAPE")
             if weight_channels != channels_in / group_count
-                error("nn.Conv2D input and grouped weight channel dimensions do not match")
+                error("nn.Conv2D input and grouped weight channel dimensions do not match", code = "NN_SHAPE")
             if kernel_height <= 0 or kernel_width <= 0 or kernel_height != kernel_width
-                error("nn.Conv2D requires a positive square kernel")
+                error("nn.Conv2D requires a positive square kernel", code = "NN_SHAPE")
             if bias_shape[0] != channels_out
-                error("nn.Conv2D bias dimension does not match output channels")
+                error("nn.Conv2D bias dimension does not match output channels", code = "NN_SHAPE")
             if step <= 0 or border < 0
-                error("nn.Conv2D requires stride > 0 and padding >= 0")
+                error("nn.Conv2D requires stride > 0 and padding >= 0", code = "NN_ARGUMENT")
 
             int padded_height = height + border * 2
             int padded_width = width + border * 2
             if padded_height < kernel_height or padded_width < kernel_width
-                error("nn.Conv2D kernel is larger than padded input")
+                error("nn.Conv2D kernel is larger than padded input", code = "NN_SHAPE")
             int output_height = (padded_height - kernel_height) / step + 1
             int output_width = (padded_width - kernel_width) / step + 1
 
@@ -1224,9 +1224,9 @@ class Conv2D
             int[] weight_shape = parameter_weight.shape()
             int[] bias_shape = parameter_bias.shape()
             if len(input_shape) != 4
-                error("nn.Conv2D requires NCHW rank-4 input")
+                error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
             if len(weight_shape) != 4 or len(bias_shape) != 1
-                error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias")
+                error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
             int batches = input_shape[0]
             int channels_in = input_shape[1]
@@ -1237,26 +1237,26 @@ class Conv2D
             int kernel_height = weight_shape[2]
             int kernel_width = weight_shape[3]
             if batches <= 0 or channels_in <= 0 or channels_out <= 0
-                error("nn.Conv2D requires positive batch and channel dimensions")
+                error("nn.Conv2D requires positive batch and channel dimensions", code = "NN_SHAPE")
             if height <= 0 or width <= 0
-                error("nn.Conv2D requires positive spatial dimensions")
+                error("nn.Conv2D requires positive spatial dimensions", code = "NN_SHAPE")
             if group_count <= 0
-                error("nn.Conv2D groups must be positive")
+                error("nn.Conv2D groups must be positive", code = "NN_ARGUMENT")
             if channels_in % group_count != 0 or channels_out % group_count != 0
-                error("nn.Conv2D input and output channels must be divisible by groups")
+                error("nn.Conv2D input and output channels must be divisible by groups", code = "NN_SHAPE")
             if weight_channels != channels_in / group_count
-                error("nn.Conv2D input and grouped weight channel dimensions do not match")
+                error("nn.Conv2D input and grouped weight channel dimensions do not match", code = "NN_SHAPE")
             if kernel_height <= 0 or kernel_width <= 0 or kernel_height != kernel_width
-                error("nn.Conv2D requires a positive square kernel")
+                error("nn.Conv2D requires a positive square kernel", code = "NN_SHAPE")
             if bias_shape[0] != channels_out
-                error("nn.Conv2D bias dimension does not match output channels")
+                error("nn.Conv2D bias dimension does not match output channels", code = "NN_SHAPE")
             if step <= 0 or border < 0
-                error("nn.Conv2D requires stride > 0 and padding >= 0")
+                error("nn.Conv2D requires stride > 0 and padding >= 0", code = "NN_ARGUMENT")
 
             int padded_height = height + border * 2
             int padded_width = width + border * 2
             if padded_height < kernel_height or padded_width < kernel_width
-                error("nn.Conv2D kernel is larger than padded input")
+                error("nn.Conv2D kernel is larger than padded input", code = "NN_SHAPE")
             int output_height = (padded_height - kernel_height) / step + 1
             int output_width = (padded_width - kernel_width) / step + 1
 
@@ -1348,11 +1348,11 @@ FC | error normal_fc(
     int seed = 1
 )
     if features_in <= 0 or features_out <= 0
-        return error("nn.normal_fc requires positive input and output feature counts")
+        return error("nn.normal_fc requires positive input and output feature counts", code = "NN_SHAPE")
     if features_out > 9223372036854775807 / features_in
-        return error("nn.normal_fc dimensions are too large")
+        return error("nn.normal_fc dimensions are too large", code = "NN_SHAPE")
     if not math.is_finite(bias_value)
-        return error("nn.normal_fc bias must be finite")
+        return error("nn.normal_fc bias must be finite", code = "NN_ARGUMENT")
 
     int weight_count = features_out * features_in
     tensor<real32> weight_values = try normal_weights(
@@ -1381,29 +1381,29 @@ Conv2D | error normal_conv2d(
     int groups = 1
 )
     if channels_in <= 0 or channels_out <= 0
-        return error("nn.normal_conv2d requires positive input and output channel counts")
+        return error("nn.normal_conv2d requires positive input and output channel counts", code = "NN_SHAPE")
     if kernel <= 0
-        return error("nn.normal_conv2d kernel must be positive")
+        return error("nn.normal_conv2d kernel must be positive", code = "NN_ARGUMENT")
     if stride <= 0
-        return error("nn.normal_conv2d stride must be positive")
+        return error("nn.normal_conv2d stride must be positive", code = "NN_ARGUMENT")
     if padding < 0
-        return error("nn.normal_conv2d padding must be nonnegative")
+        return error("nn.normal_conv2d padding must be nonnegative", code = "NN_ARGUMENT")
     if groups <= 0
-        return error("nn.normal_conv2d groups must be positive")
+        return error("nn.normal_conv2d groups must be positive", code = "NN_ARGUMENT")
     if channels_in % groups != 0 or channels_out % groups != 0
-        return error("nn.normal_conv2d input and output channels must be divisible by groups")
+        return error("nn.normal_conv2d input and output channels must be divisible by groups", code = "NN_SHAPE")
     if not math.is_finite(bias_value)
-        return error("nn.normal_conv2d bias must be finite")
+        return error("nn.normal_conv2d bias must be finite", code = "NN_ARGUMENT")
     if kernel > 9223372036854775807 / kernel
-        return error("nn.normal_conv2d dimensions are too large")
+        return error("nn.normal_conv2d dimensions are too large", code = "NN_SHAPE")
 
     int kernel_area = kernel * kernel
     int channels_per_group = channels_in / groups
     if channels_per_group > 9223372036854775807 / kernel_area
-        return error("nn.normal_conv2d dimensions are too large")
+        return error("nn.normal_conv2d dimensions are too large", code = "NN_SHAPE")
     int fan_in = channels_per_group * kernel_area
     if channels_out > 9223372036854775807 / fan_in
-        return error("nn.normal_conv2d dimensions are too large")
+        return error("nn.normal_conv2d dimensions are too large", code = "NN_SHAPE")
     int weight_count = channels_out * fan_in
 
     tensor<real32> weight_values = try normal_weights(
@@ -1433,19 +1433,19 @@ tensor<real32> max_pool2d(
 )
     int[] shape = value.shape()
     if len(shape) != 4
-        error("nn.max_pool2d requires NCHW rank-4 input")
+        error("nn.max_pool2d requires NCHW rank-4 input", code = "NN_SHAPE")
     if kernel <= 0 or stride <= 0 or padding < 0
-        error("nn.max_pool2d requires kernel/stride > 0 and padding >= 0")
+        error("nn.max_pool2d requires kernel/stride > 0 and padding >= 0", code = "NN_ARGUMENT")
     int batches = shape[0]
     int channels = shape[1]
     int height = shape[2]
     int width = shape[3]
     if batches <= 0 or channels <= 0 or height <= 0 or width <= 0
-        error("nn.max_pool2d requires positive input dimensions")
+        error("nn.max_pool2d requires positive input dimensions", code = "NN_SHAPE")
     int padded_height = height + padding * 2
     int padded_width = width + padding * 2
     if padded_height < kernel or padded_width < kernel
-        error("nn.max_pool2d kernel is larger than padded input")
+        error("nn.max_pool2d kernel is larger than padded input", code = "NN_SHAPE")
     int output_height = (padded_height - kernel) / stride + 1
     int output_width = (padded_width - kernel) / stride + 1
     int[] output_shape = [batches, channels, output_height, output_width]
@@ -1467,7 +1467,7 @@ tensor<real32> max_pool2d(
                             if source_x >= 0 and source_x < width
                                 valid_count = valid_count + 1
                 if valid_count <= 0
-                    error("nn.max_pool2d produced an empty pooling window")
+                    error("nn.max_pool2d produced an empty pooling window", code = "NN_SHAPE")
 
                 int[] input_indices = array(
                     batches * valid_count, fill = 0
@@ -1510,21 +1510,21 @@ tensor<real32> max_pool2d(
 tensor<real32> global_average_pool2d(tensor<real32> value)
     int[] shape = value.shape()
     if len(shape) != 4
-        error("nn.global_average_pool2d requires NCHW rank-4 input")
+        error("nn.global_average_pool2d requires NCHW rank-4 input", code = "NN_SHAPE")
     int batches = shape[0]
     int channels = shape[1]
     int height = shape[2]
     int width = shape[3]
     if batches <= 0 or channels <= 0 or height <= 0 or width <= 0
-        error("nn.global_average_pool2d requires positive input dimensions")
+        error("nn.global_average_pool2d requires positive input dimensions", code = "NN_SHAPE")
     if height > 9223372036854775807 / width
-        error("nn.global_average_pool2d input is too large")
+        error("nn.global_average_pool2d input is too large", code = "NN_SIZE")
     int count = height * width
     if channels > 9223372036854775807 / count
-        error("nn.global_average_pool2d input is too large")
+        error("nn.global_average_pool2d input is too large", code = "NN_SIZE")
     int batch_count = channels * count
     if batches > 9223372036854775807 / batch_count
-        error("nn.global_average_pool2d input is too large")
+        error("nn.global_average_pool2d input is too large", code = "NN_SIZE")
     int total_count = batches * batch_count
 
     // NN's pooling kernel on CPU and Metal: one pass per plane and one custom
@@ -1575,22 +1575,22 @@ tensor<real32> local_response_normalization(
 )
     int[] shape = value.shape()
     if len(shape) != 4
-        error("nn.local_response_normalization requires NCHW rank-4 input")
+        error("nn.local_response_normalization requires NCHW rank-4 input", code = "NN_SHAPE")
     if size <= 0 or size % 2 == 0
-        error("nn.local_response_normalization size must be positive and odd")
+        error("nn.local_response_normalization size must be positive and odd", code = "NN_ARGUMENT")
     if not math.is_finite(alpha) or alpha < 0.0
-        error("nn.local_response_normalization alpha must be finite and nonnegative")
+        error("nn.local_response_normalization alpha must be finite and nonnegative", code = "NN_ARGUMENT")
     if not math.is_finite(beta) or beta <= 0.0
-        error("nn.local_response_normalization beta must be finite and positive")
+        error("nn.local_response_normalization beta must be finite and positive", code = "NN_ARGUMENT")
     if not math.is_finite(k) or k <= 0.0
-        error("nn.local_response_normalization k must be finite and positive")
+        error("nn.local_response_normalization k must be finite and positive", code = "NN_ARGUMENT")
 
     int batches = shape[0]
     int channels = shape[1]
     int height = shape[2]
     int width = shape[3]
     if batches <= 0 or channels <= 0 or height <= 0 or width <= 0
-        error("nn.local_response_normalization requires positive input dimensions")
+        error("nn.local_response_normalization requires positive input dimensions", code = "NN_SHAPE")
 
     tensor<real32> output = (
         value.untrack().gather([0], [1]) * real32(0)
@@ -1661,11 +1661,11 @@ class BatchNorm
         real64 epsilon = 0.00001
     )
         if features <= 0
-            return error("nn.BatchNorm features must be positive")
+            return error("nn.BatchNorm features must be positive", code = "NN_ARGUMENT")
         if not math.is_finite(momentum) or momentum < 0.0 or momentum >= 1.0
-            return error("nn.BatchNorm momentum must be finite and in [0, 1)")
+            return error("nn.BatchNorm momentum must be finite and in [0, 1)", code = "NN_ARGUMENT")
         if not math.is_finite(epsilon) or epsilon <= 0.0
-            return error("nn.BatchNorm epsilon must be finite and positive")
+            return error("nn.BatchNorm epsilon must be finite and positive", code = "NN_ARGUMENT")
         scale = Parameter<real32>(
             value = tensor.ones<real32>([features])
         )
@@ -1684,38 +1684,38 @@ class BatchNorm
         int[] shape = value.shape()
         int rank = len(shape)
         if rank < 2
-            error("nn.BatchNorm requires rank >= 2 with feature/channel axis 1")
+            error("nn.BatchNorm requires rank >= 2 with feature/channel axis 1", code = "NN_SHAPE")
 
         int features = shape[1]
         if features <= 0
-            error("nn.BatchNorm feature/channel dimension must be positive")
+            error("nn.BatchNorm feature/channel dimension must be positive", code = "NN_SHAPE")
         int[] scale_shape = scale.raw().shape()
         int[] bias_shape = bias.raw().shape()
         int[] mean_shape = running_mean.raw().shape()
         int[] variance_shape = running_variance.raw().shape()
         if len(scale_shape) != 1 or len(bias_shape) != 1
-            error("nn.BatchNorm requires rank-1 scale and bias")
+            error("nn.BatchNorm requires rank-1 scale and bias", code = "NN_SHAPE")
         if len(mean_shape) != 1 or len(variance_shape) != 1
-            error("nn.BatchNorm requires rank-1 running state")
+            error("nn.BatchNorm requires rank-1 running state", code = "NN_SHAPE")
         if scale_shape[0] != features or bias_shape[0] != features
-            error("nn.BatchNorm parameter dimensions do not match input features")
+            error("nn.BatchNorm parameter dimensions do not match input features", code = "NN_SHAPE")
         if mean_shape[0] != features or variance_shape[0] != features
-            error("nn.BatchNorm running state dimensions do not match input features")
+            error("nn.BatchNorm running state dimensions do not match input features", code = "NN_SHAPE")
 
         int inner = 1
         for axis in range(2, rank)
             if shape[axis] < 0
-                error("nn.BatchNorm received an invalid tensor shape")
+                error("nn.BatchNorm received an invalid tensor shape", code = "NN_INTERNAL")
             if shape[axis] != 0 and inner > 9223372036854775807 / shape[axis]
-                error("nn.BatchNorm tensor shape is too large")
+                error("nn.BatchNorm tensor shape is too large", code = "NN_SIZE")
             inner = inner * shape[axis]
         if shape[0] < 0
-            error("nn.BatchNorm received an invalid tensor shape")
+            error("nn.BatchNorm received an invalid tensor shape", code = "NN_INTERNAL")
         if inner != 0 and shape[0] > 9223372036854775807 / inner
-            error("nn.BatchNorm tensor shape is too large")
+            error("nn.BatchNorm tensor shape is too large", code = "NN_SIZE")
         int samples = shape[0] * inner
         if training and samples == 0
-            error("nn.BatchNorm training requires at least one sample per feature")
+            error("nn.BatchNorm training requires at least one sample per feature", code = "NN_SHAPE")
 
         tensor<real32> parameter_scale
         tensor<real32> parameter_bias
@@ -1837,7 +1837,7 @@ class Dropout
         bool inverted = true
     )
         if not math.is_finite(rate) or rate < 0.0 or rate >= 1.0
-            return error("nn.Dropout rate must be finite and in [0, 1)")
+            return error("nn.Dropout rate must be finite and in [0, 1)", code = "NN_ARGUMENT")
         drop_rate = rate
         rng = random.generator(seed = seed)
         inverted_scaling = inverted
@@ -1850,9 +1850,9 @@ class Dropout
         int count = 1
         for axis in range(len(shape))
             if shape[axis] < 0
-                error("nn.Dropout received an invalid tensor shape")
+                error("nn.Dropout received an invalid tensor shape", code = "NN_INTERNAL")
             if shape[axis] != 0 and count > 9223372036854775807 / shape[axis]
-                error("nn.Dropout tensor is too large")
+                error("nn.Dropout tensor is too large", code = "NN_SIZE")
             count = count * shape[axis]
 
         tensor<real32> mask = (value.untrack() * real32(0)).reshape([count])
@@ -1945,7 +1945,7 @@ class SGD
 
     SGD | error construct(real64 rate = 0.01)
         if not math.is_finite(rate) or rate <= 0.0
-            return error("nn.SGD rate must be finite and positive")
+            return error("nn.SGD rate must be finite and positive", code = "NN_ARGUMENT")
         learning_rate = rate
         iteration = 0
 
@@ -1996,13 +1996,13 @@ class Adam
         real64 epsilon = 0.00000001
     )
         if not math.is_finite(rate) or rate <= 0.0
-            return error("nn.Adam rate must be finite and positive")
+            return error("nn.Adam rate must be finite and positive", code = "NN_ARGUMENT")
         if not math.is_finite(beta1) or beta1 < 0.0 or beta1 >= 1.0
-            return error("nn.Adam beta1 must be finite and in [0, 1)")
+            return error("nn.Adam beta1 must be finite and in [0, 1)", code = "NN_ARGUMENT")
         if not math.is_finite(beta2) or beta2 < 0.0 or beta2 >= 1.0
-            return error("nn.Adam beta2 must be finite and in [0, 1)")
+            return error("nn.Adam beta2 must be finite and in [0, 1)", code = "NN_ARGUMENT")
         if not math.is_finite(epsilon) or epsilon <= 0.0
-            return error("nn.Adam epsilon must be finite and positive")
+            return error("nn.Adam epsilon must be finite and positive", code = "NN_ARGUMENT")
         learning_rate = rate
         first_decay = beta1
         second_decay = beta2
@@ -2028,7 +2028,7 @@ class Adam
         string[] state_paths64 = reflect.paths<State<real64>>(model)
 
         if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
-            return error("nn.Adam.save reflection metadata does not match collected state")
+            return error("nn.Adam.save reflection metadata does not match collected state", code = "NN_INTERNAL")
 
         bool pristine = (
             iteration == 0
@@ -2041,17 +2041,17 @@ class Adam
         )
         if not pristine
             if len(bound32) != len(parameters32) or len(first32) != len(parameters32) or len(second32) != len(parameters32) or len(bound64) != len(parameters64) or len(first64) != len(parameters64) or len(second64) != len(parameters64)
-                return error("nn.Adam.save optimizer state is not bound to the supplied model")
+                return error("nn.Adam.save optimizer state is not bound to the supplied model", code = "NN_BINDING")
             for index in range(len(parameters32))
                 if not parameters32[index].same(bound32[index])
-                    return error("nn.Adam.save optimizer Parameter<real32> binding does not match the supplied model")
+                    return error("nn.Adam.save optimizer Parameter<real32> binding does not match the supplied model", code = "NN_BINDING")
                 if first32[index].shape() != parameters32[index].raw().shape() or second32[index].shape() != parameters32[index].raw().shape()
-                    return error("nn.Adam.save real32 moment shape does not match the supplied model")
+                    return error("nn.Adam.save real32 moment shape does not match the supplied model", code = "NN_BINDING")
             for index in range(len(parameters64))
                 if not parameters64[index].same(bound64[index])
-                    return error("nn.Adam.save optimizer Parameter<real64> binding does not match the supplied model")
+                    return error("nn.Adam.save optimizer Parameter<real64> binding does not match the supplied model", code = "NN_BINDING")
                 if first64[index].shape() != parameters64[index].raw().shape() or second64[index].shape() != parameters64[index].raw().shape()
-                    return error("nn.Adam.save real64 moment shape does not match the supplied model")
+                    return error("nn.Adam.save real64 moment shape does not match the supplied model", code = "NN_BINDING")
 
         file.Handle output = try file.create(path)
         internal.StateChecksum checksum = internal.StateChecksum()
@@ -2145,22 +2145,22 @@ class Adam
         string[] state_paths32 = reflect.paths<State<real32>>(model)
         string[] state_paths64 = reflect.paths<State<real64>>(model)
         if len(parameter_paths32) != len(parameters32) or len(parameter_paths64) != len(parameters64) or len(state_paths32) != len(states32) or len(state_paths64) != len(states64)
-            return error("nn.Adam.load reflection metadata does not match collected state")
+            return error("nn.Adam.load reflection metadata does not match collected state", code = "NN_INTERNAL")
 
         file.Handle input = try file.open(path)
         internal.StateChecksum checksum = internal.StateChecksum()
         string magic = try internal.read_checked_line(&input, &checksum, "magic")
         if magic != "QUIDRA_DNN_STATE"
-            return error("nn.Adam.load state file has an unsupported magic")
+            return error("nn.Adam.load state file has an unsupported magic", code = "NN_CHECKPOINT_FILE")
         string version = try internal.read_checked_line(&input, &checksum, "format version")
         if version != "2" and version != "3"
-            return error("nn.Adam.load state file has an unsupported format version")
+            return error("nn.Adam.load state file has an unsupported format version", code = "NN_CHECKPOINT_FILE")
         string container_kind = try internal.read_checked_line(&input, &checksum, "container kind")
         if container_kind != "model+Adam"
-            return error("nn.Adam.load state file is not an Adam checkpoint")
+            return error("nn.Adam.load state file is not an Adam checkpoint", code = "NN_CHECKPOINT")
         string root_type = try internal.read_checked_line(&input, &checksum, "root model type")
         if root_type != reflect.type_name(model)
-            return error("nn.Adam.load root model type does not match the target model")
+            return error("nn.Adam.load root model type does not match the target model", code = "NN_CHECKPOINT")
 
         int model_count32 = try internal.parse_nonnegative_state_int(
             try internal.read_checked_line(&input, &checksum, "Parameter<real32> count"),
@@ -2179,7 +2179,7 @@ class Adam
             "State<real64> count"
         )
         if model_count32 != len(parameters32) or model_count64 != len(parameters64) or state_count32 != len(states32) or state_count64 != len(states64)
-            return error("nn.Adam.load model schema does not match the target model")
+            return error("nn.Adam.load model schema does not match the target model", code = "NN_CHECKPOINT")
 
         tensor<real32>[] loaded_parameters32 = []
         tensor<real64>[] loaded_parameters64 = []
@@ -2212,7 +2212,7 @@ class Adam
 
         string optimizer_kind = try internal.read_checked_line(&input, &checksum, "optimizer kind")
         if optimizer_kind != "Adam"
-            return error("nn.Adam.load optimizer kind does not match")
+            return error("nn.Adam.load optimizer kind does not match", code = "NN_CHECKPOINT")
 
         real64 loaded_learning_rate = try real64.parse(
             try internal.read_checked_line(&input, &checksum, "Adam learning rate")
@@ -2252,13 +2252,13 @@ class Adam
             "Adam Parameter<real64> count"
         )
         if not math.is_finite(loaded_learning_rate) or loaded_learning_rate <= 0.0
-            return error("nn.Adam.load learning rate must be finite and positive")
+            return error("nn.Adam.load learning rate must be finite and positive", code = "NN_CHECKPOINT_FILE")
         if not math.is_finite(loaded_first_decay) or loaded_first_decay < 0.0 or loaded_first_decay >= 1.0
-            return error("nn.Adam.load beta1 must be finite and in [0, 1)")
+            return error("nn.Adam.load beta1 must be finite and in [0, 1)", code = "NN_CHECKPOINT_FILE")
         if not math.is_finite(loaded_second_decay) or loaded_second_decay < 0.0 or loaded_second_decay >= 1.0
-            return error("nn.Adam.load beta2 must be finite and in [0, 1)")
+            return error("nn.Adam.load beta2 must be finite and in [0, 1)", code = "NN_CHECKPOINT_FILE")
         if not math.is_finite(loaded_stability) or loaded_stability <= 0.0
-            return error("nn.Adam.load epsilon must be finite and positive")
+            return error("nn.Adam.load epsilon must be finite and positive", code = "NN_CHECKPOINT_FILE")
         if version == "2"
             // Legacy v2 checkpoints did not persist the recurrence state.
             // Reconstruct it once for compatibility; all subsequent steps use
@@ -2271,15 +2271,15 @@ class Adam
                     1.0 - math.pow(loaded_second_decay, real64(loaded_iteration))
                 )
         if not math.is_finite(loaded_first_correction) or not math.is_finite(loaded_second_correction)
-            return error("nn.Adam.load bias correction must be finite")
+            return error("nn.Adam.load bias correction must be finite", code = "NN_CHECKPOINT_FILE")
         if loaded_iteration == 0
             if loaded_first_correction != 0.0 or loaded_second_correction != 0.0
-                return error("nn.Adam.load zero-iteration correction state is invalid")
+                return error("nn.Adam.load zero-iteration correction state is invalid", code = "NN_CHECKPOINT_FILE")
         else
             if loaded_first_correction <= 0.0 or loaded_first_correction > 1.0 or loaded_second_correction <= 0.0 or loaded_second_correction > 1.0
-                return error("nn.Adam.load bias correction must be in (0, 1]")
+                return error("nn.Adam.load bias correction must be in (0, 1]", code = "NN_CHECKPOINT_FILE")
         if count32 != len(parameters32) or count64 != len(parameters64)
-            return error("nn.Adam.load optimizer parameter binding does not match the target model")
+            return error("nn.Adam.load optimizer parameter binding does not match the target model", code = "NN_BINDING")
 
         tensor<real32>[] loaded_first32 = []
         tensor<real32>[] loaded_second32 = []

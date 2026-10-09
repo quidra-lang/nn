@@ -33,3 +33,23 @@ The state serializer is owned here. For compatibility with the pre-split DNN pac
 ## Development
 
 Development uses the permanent `develop` branch. See [`docs/development.md`](docs/development.md) for the canonical dependency-first release procedure and immutable-release checks.
+
+## Error codes
+
+NN errors preserve their specific message text and carry a stable category
+code. Errors propagated with `try` from Core or Math retain the original
+provider's code.
+
+| Code | Failure category |
+| --- | --- |
+| `NN_ARGUMENT` | Invalid layer, initializer or optimizer hyperparameter |
+| `NN_SHAPE` | Rank, dimension, extent, or incompatible tensor geometry |
+| `NN_SIZE` | Tensor or workspace exceeds an implementation limit |
+| `NN_DEVICE` | Unsupported or invalid device placement |
+| `NN_TRACKED` | A tracked tensor where an untracked input is required |
+| `NN_INTERNAL` | Broken internal invariant or compiler bridge failure |
+| `NN_COLLECTIVE` | Failed distributed collective |
+| `NN_BINDING` | Optimizer bound to a different Parameter structure |
+| `NN_CHECKPOINT` | Checkpoint kind, root model, or schema mismatch |
+| `NN_CHECKPOINT_FILE` | Malformed or unsupported checkpoint contents |
+

@@ -80,7 +80,7 @@ tensor<real32> relu_reuse(tensor<real32> value)
     if native.is_cpu_f32(&value) == int32(1)
         int32 status = native.relu_reuse_f32(&value)
         if status != int32(0)
-            error("nn compiler memory-reuse target failed")
+            error("nn compiler memory-reuse target failed", code = "NN_INTERNAL")
         return value
     if native.cuda_device_f32(&value) >= int32(0)
         int32 status = native.cuda_activation_inplace_f32(&value, 1)
@@ -98,7 +98,7 @@ tensor<real32> relu_training(tensor<real32> value)
     tensor<real32> output = tensor.zeros<real32>(input.shape())
     int32 status = native.relu_training_f32(&input, &output)
     if status != int32(0)
-        error("nn compiler training ReLU target failed")
+        error("nn compiler training ReLU target failed", code = "NN_INTERNAL")
     return output
 
 tensor<real32> mean_all(tensor<real32> value)
@@ -106,12 +106,12 @@ tensor<real32> mean_all(tensor<real32> value)
     int count = 1
     for dimension in shape
         if dimension < 0
-            error("nn internal mean received an invalid tensor shape")
+            error("nn internal mean received an invalid tensor shape", code = "NN_INTERNAL")
         if dimension != 0 and count > 9223372036854775807 / dimension
-            error("nn internal mean element count overflows int")
+            error("nn internal mean element count overflows int", code = "NN_SIZE")
         count = count * dimension
     if count == 0
-        error("nn internal mean is undefined for an empty tensor")
+        error("nn internal mean is undefined for an empty tensor", code = "NN_SHAPE")
 
     // Numerical reduction semantics belong to Math; NN owns only the
     // surrounding model/loss meaning.
@@ -151,7 +151,7 @@ string | error read_required_line(file.Handle &input, string context)
         string
             return line
         none
-            return error("nn.load encountered unexpected end of state file while reading " + context)
+            return error("nn.load encountered unexpected end of state file while reading " + context, code = "NN_CHECKPOINT_FILE")
         error problem
             return problem
 
@@ -167,7 +167,7 @@ string | error read_checked_line(
 int | error parse_nonnegative_state_int(string text, string context)
     int value = try int.parse(text)
     if value < 0
-        return error("nn.load encountered a negative " + context)
+        return error("nn.load encountered a negative " + context, code = "NN_CHECKPOINT_FILE")
     return value
 
 void | error write_state_entry<T: floating>(
@@ -195,9 +195,9 @@ void | error write_state_entry<T: floating>(
     int count = 1
     for dimension in shape
         if dimension < 0
-            return error("nn.save encountered an invalid tensor shape")
+            return error("nn.save encountered an invalid tensor shape", code = "NN_INTERNAL")
         if dimension > 0 and count > 9223372036854775807 / dimension
-            return error("nn.save tensor element count overflows int")
+            return error("nn.save tensor element count overflows int", code = "NN_SIZE")
         try write_checked_line(&output, &checksum, dimension.string())
         count = count * dimension
 
@@ -227,20 +227,20 @@ tensor<real32> | error read_state_entry32(
     string dtype = try read_checked_line(&input, &checksum, "field dtype")
     string path = try read_checked_line(&input, &checksum, "field path")
     if kind != expected_kind
-        return error("nn.load state field kind does not match target schema")
+        return error("nn.load state field kind does not match target schema", code = "NN_CHECKPOINT_FILE")
     if field_type != expected_kind + "<real32>"
-        return error("nn.load state field type does not match target schema")
+        return error("nn.load state field type does not match target schema", code = "NN_CHECKPOINT_FILE")
     if dtype != "real32"
-        return error("nn.load state field dtype does not match target schema")
+        return error("nn.load state field dtype does not match target schema", code = "NN_CHECKPOINT_FILE")
     if path != expected_path
-        return error("nn.load state field path does not match target schema")
+        return error("nn.load state field path does not match target schema", code = "NN_CHECKPOINT_FILE")
 
     int rank = try parse_nonnegative_state_int(
         try read_checked_line(&input, &checksum, "tensor rank"),
         "tensor rank"
     )
     if rank != len(expected_shape)
-        return error("nn.load tensor rank does not match target schema")
+        return error("nn.load tensor rank does not match target schema", code = "NN_CHECKPOINT_FILE")
     int expected_count = 1
     for axis in range(rank)
         int dimension = try parse_nonnegative_state_int(
@@ -248,9 +248,9 @@ tensor<real32> | error read_state_entry32(
             "tensor dimension"
         )
         if dimension != expected_shape[axis]
-            return error("nn.load tensor shape does not match target schema")
+            return error("nn.load tensor shape does not match target schema", code = "NN_CHECKPOINT_FILE")
         if dimension > 0 and expected_count > 9223372036854775807 / dimension
-            return error("nn.load tensor element count overflows int")
+            return error("nn.load tensor element count overflows int", code = "NN_SIZE")
         expected_count = expected_count * dimension
 
     int count = try parse_nonnegative_state_int(
@@ -258,7 +258,7 @@ tensor<real32> | error read_state_entry32(
         "tensor element count"
     )
     if count != expected_count
-        return error("nn.load tensor element count does not match its shape")
+        return error("nn.load tensor element count does not match its shape", code = "NN_CHECKPOINT_FILE")
 
     tensor<real32> value = tensor.zeros<real32>(expected_shape)
     tensor<real32> flat = value.reshape([count])
@@ -287,20 +287,20 @@ tensor<real64> | error read_state_entry64(
     string dtype = try read_checked_line(&input, &checksum, "field dtype")
     string path = try read_checked_line(&input, &checksum, "field path")
     if kind != expected_kind
-        return error("nn.load state field kind does not match target schema")
+        return error("nn.load state field kind does not match target schema", code = "NN_CHECKPOINT_FILE")
     if field_type != expected_kind + "<real64>"
-        return error("nn.load state field type does not match target schema")
+        return error("nn.load state field type does not match target schema", code = "NN_CHECKPOINT_FILE")
     if dtype != "real64"
-        return error("nn.load state field dtype does not match target schema")
+        return error("nn.load state field dtype does not match target schema", code = "NN_CHECKPOINT_FILE")
     if path != expected_path
-        return error("nn.load state field path does not match target schema")
+        return error("nn.load state field path does not match target schema", code = "NN_CHECKPOINT_FILE")
 
     int rank = try parse_nonnegative_state_int(
         try read_checked_line(&input, &checksum, "tensor rank"),
         "tensor rank"
     )
     if rank != len(expected_shape)
-        return error("nn.load tensor rank does not match target schema")
+        return error("nn.load tensor rank does not match target schema", code = "NN_CHECKPOINT_FILE")
     int expected_count = 1
     for axis in range(rank)
         int dimension = try parse_nonnegative_state_int(
@@ -308,9 +308,9 @@ tensor<real64> | error read_state_entry64(
             "tensor dimension"
         )
         if dimension != expected_shape[axis]
-            return error("nn.load tensor shape does not match target schema")
+            return error("nn.load tensor shape does not match target schema", code = "NN_CHECKPOINT_FILE")
         if dimension > 0 and expected_count > 9223372036854775807 / dimension
-            return error("nn.load tensor element count overflows int")
+            return error("nn.load tensor element count overflows int", code = "NN_SIZE")
         expected_count = expected_count * dimension
 
     int count = try parse_nonnegative_state_int(
@@ -318,7 +318,7 @@ tensor<real64> | error read_state_entry64(
         "tensor element count"
     )
     if count != expected_count
-        return error("nn.load tensor element count does not match its shape")
+        return error("nn.load tensor element count does not match its shape", code = "NN_CHECKPOINT_FILE")
 
     tensor<real64> value = tensor.zeros<real64>(expected_shape)
     tensor<real64> flat = value.reshape([count])
@@ -346,15 +346,15 @@ void | error verify_state_checksum(
 )
     string algorithm = try read_required_line(&input, "checksum algorithm")
     if algorithm != "ADLER65521-V1"
-        return error("nn.load state file uses an unsupported checksum algorithm")
+        return error("nn.load state file uses an unsupported checksum algorithm", code = "NN_CHECKPOINT_FILE")
     string expected = try read_required_line(&input, "checksum")
     if expected != checksum.value()
-        return error("nn.load state checksum does not match payload")
+        return error("nn.load state checksum does not match payload", code = "NN_CHECKPOINT_FILE")
 
     string | none | error trailing = input.read_line()
     match trailing
         string
-            return error("nn.load state file contains trailing data")
+            return error("nn.load state file contains trailing data", code = "NN_CHECKPOINT_FILE")
         none
             return
         error problem
