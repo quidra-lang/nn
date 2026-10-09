@@ -172,6 +172,37 @@ if [[ "$status" -ne 1 ]] || ! grep -Fq 'WRITE_CAPABILITY' "$TMP/const-sgd-step.o
     exit 1
 fi
 
+# The library-wide clear operation discards both real32 and real64 gradient
+# state, and remains safe to repeat when gradients are absent.
+cat > "$TMP/clear-grad.qui" <<'QUI'
+import nn
+import math
+
+class Model
+    nn.Parameter<real32> weight
+    nn.Parameter<real64> bias
+
+Model model
+model.weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
+model.bias = nn.Parameter<real64>(value = tensor.ones<real64>([1]))
+math.sum(model.weight.track()).backward(&model)
+math.sum(model.bias.track()).backward(&model)
+print(model.weight.has_grad() and model.bias.has_grad())
+print(NL)
+nn.clear_grad(&model)
+print(not model.weight.has_grad() and not model.bias.has_grad())
+print(NL)
+nn.clear_grad(&model)
+print(not model.weight.has_grad() and not model.bias.has_grad())
+print(NL)
+QUI
+clear_grad_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/clear-grad.qui")"
+if [[ "$clear_grad_output" != "$(printf 'true\\ntrue\\ntrue')" ]]; then
+    echo "unexpected nn.clear_grad output:" >&2
+    printf '%s\\n' "$clear_grad_output" >&2
+    exit 1
+fi
+
 cat > "$TMP/private-bridge.qui" <<'QUI'
 import nn
 nn.nn_runtime_fast()

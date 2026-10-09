@@ -68,6 +68,22 @@ class State<T: floating>
         else
             this.storage.value = value
 
+// Clear accumulated gradients without manufacturing zero-valued gradients.
+// The traversal also covers the two opt-in half-precision parameter families.
+void clear_grad<M>(M &model)
+    Parameter<real16>[] half_parameters = reflect.collect<Parameter<real16>>(model)
+    for parameter in half_parameters
+        parameter.clear_grad()
+    Parameter<real16b>[] bfloat_parameters = reflect.collect<Parameter<real16b>>(model)
+    for parameter in bfloat_parameters
+        parameter.clear_grad()
+    Parameter<real32>[] single_parameters = reflect.collect<Parameter<real32>>(model)
+    for parameter in single_parameters
+        parameter.clear_grad()
+    Parameter<real64>[] double_parameters = reflect.collect<Parameter<real64>>(model)
+    for parameter in double_parameters
+        parameter.clear_grad()
+
 // Explicit NN distributed-training collective. `devices` gives the destination
 // of each reduced value: -1 means CPU, otherwise the explicit GPU index.
 // Fast mode uses package-owned NCCL when every input is already on its matching
