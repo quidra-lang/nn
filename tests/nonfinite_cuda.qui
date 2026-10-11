@@ -1,0 +1,35 @@
+import nn
+import probe = "../native.qui"
+
+cli args
+    int device = option(default = 0)
+    int other = option(default = 1)
+    bool collective = flag()
+    bool direct = flag()
+    bool convolution = flag()
+
+if args.collective
+    tensor<real32> first = (tensor.ones<real32>([1]) * real32(300000000000000000000000000000000000000.0)).gpu(nat(args.device))
+    tensor<real32> second = (tensor.ones<real32>([1]) * real32(300000000000000000000000000000000000000.0)).gpu(nat(args.other))
+    tensor<real32>[] values = [first, second]
+    if args.direct
+        int32 status = probe.nccl_collective<real32>(&values)
+        if status != int32(0)
+            error("direct collective did not reserve all output checks", code = "NN_COLLECTIVE")
+    else
+        nn.all_reduce_sum(&values, [args.device, args.other])
+    tensor<real32> result = values[0].cpu()
+    print("unexpected collective output {result[0].item()}{NL}")
+elif args.convolution
+    tensor<real32> input = (tensor.ones<real32>([1, 1, 1, 1]) * real32(300000000000000000000000000000000000000.0)).gpu(nat(args.device))
+    tensor<real32> weight = (tensor.ones<real32>([1, 1, 1, 1]) * real32(2.0)).gpu(nat(args.device))
+    tensor<real32> bias = tensor.zeros<real32>([1], gpu = nat(args.device))
+    tensor<real32> output = tensor.zeros<real32>([1, 1, 1, 1], gpu = nat(args.device))
+    int32 status = probe.conv2d_cuda_f32(input, weight, bias, &output, int64(1), int64(0), int64(1))
+    tensor<real32> result = output.cpu()
+    print("unexpected convolution output {status} {result[0, 0, 0, 0].item()}{NL}")
+else
+    tensor<real32> value = (tensor.ones<real32>([1]) * real32(300000000000000000000000000000000000000.0)).gpu(nat(args.device))
+    int32 status = probe.cuda_activation_inplace_f32(&value, int64(1))
+    tensor<real32> result = value.cpu()
+    print("unexpected activation output {status} {result[0].item()}{NL}")

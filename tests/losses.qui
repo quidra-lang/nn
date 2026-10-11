@@ -1,0 +1,95 @@
+// nn.softmax and nn.cross_entropy semantics: row normalization, the loss
+// value and its gradient against closed forms. Run by integration.sh on the
+// CPU and by real_gpu_integration.sh with --device N on a GPU; every check
+// prints one line ending in "true".
+import nn
+import math
+
+real64 real_count(int value)
+    real64 converted = real64(value)
+    return converted
+
+cli args
+    int device = option(default = -1)
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+tensor<real32> place(tensor<real32> value, int device)
+    if device >= 0
+        return value.gpu(nat(device))
+    return value
+
+int loss_rows()
+    return 45
+
+int loss_classes()
+    return 3
+
+tensor<real32> logits_values()
+    tensor<real32> flat = nn.uniform_weights(loss_rows() * loss_classes(), 4.0, 91)
+    return flat.reshape([nat(loss_rows()), nat(loss_classes())])
+
+// One-hot rows scaled by a per-row weight, as in class-weighted training.
+tensor<real32> target_values()
+    tensor<real32> target = tensor.zeros<real32>([nat(loss_rows()), nat(loss_classes())])
+    for 0 <= int row < loss_rows()
+        target[row, row % loss_classes()] = real32(1 + row % 2)
+    return target
+
+void | error loss_checks(int device)
+    tensor<real32> logits = logits_values()
+    tensor<real32> target = target_values()
+    tensor<real32> probabilities = nn.softmax(place(logits, device)).cpu()
+    bool normalized = true
+    bool positive = true
+    for 0 <= int row < loss_rows()
+        real64 total = 0.0
+        for 0 <= int column < loss_classes()
+            real64 value = real64(probabilities[row, column].item())
+            total = total + value
+            positive = positive and value > 0.0
+        normalized = normalized and math.abs(total - 1.0) <= 0.000001
+    report("softmax rows are normalized", normalized and positive)
+
+    // loss = mean over rows of -sum(t * log softmax(z)), evaluated in float64.
+    real64 expected = 0.0
+    for 0 <= int row < loss_rows()
+        real64 largest = real64(logits[row, 0].item())
+        for 1 <= int column < loss_classes()
+            largest = math.max(largest, real64(logits[row, column].item()))
+        real64 denominator = 0.0
+        for 0 <= int column < loss_classes()
+            denominator = denominator + math.exp(real64(logits[row, column].item()) - largest)
+        real64 log_denominator = try math.log(denominator)
+        for 0 <= int column < loss_classes()
+            real64 log_probability = real64(logits[row, column].item()) - largest - log_denominator
+            expected = expected - real64(target[row, column].item()) * log_probability
+    expected = expected / real_count(loss_rows())
+
+    tensor<real32> tracked = place(logits, device).track()
+    tensor<real32> loss = nn.cross_entropy(tracked, place(target, device))
+    real64 actual = real64(loss.untrack().cpu().item())
+    report("cross entropy value", math.abs(actual - expected) <= 0.00001 * (1.0 + math.abs(expected)))
+
+    // d loss / d z = (softmax(z) * sum(t) - t) / rows.
+    loss.backward(&tracked)
+    tensor<real32> gradient = tracked.grad.untrack().cpu()
+    bool gradient_ok = true
+    for 0 <= int row < loss_rows()
+        real64 weight_sum = 0.0
+        for 0 <= int column < loss_classes()
+            weight_sum = weight_sum + real64(target[row, column].item())
+        for 0 <= int column < loss_classes()
+            real64 closed = (real64(probabilities[row, column].item()) * weight_sum - real64(target[row, column].item())) / real_count(loss_rows())
+            gradient_ok = gradient_ok and math.abs(real64(gradient[row, column].item()) - closed) <= 0.000001
+    report("cross entropy gradient", gradient_ok)
+    return
+
+auto | error result = loss_checks(args.device)
+match result
+    void
+        int ignored = 0
+    error problem
+        print(problem)
+        print(NL)

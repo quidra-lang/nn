@@ -1,0 +1,25 @@
+import nn
+
+cli args
+    int device = option(default = -1)
+    bool internal = flag()
+
+if args.internal
+    // Exponential underflow inside softmax yields finite public probabilities.
+    tensor<real32> input = tensor.zeros<real32>([2])
+    input[0] = real32(1000.0)
+    input[1] = real32(-1000.0)
+    if args.device >= 0
+        input = input.gpu(nat(args.device))
+    tensor<real32> result = nn.softmax(input)
+    tensor<real32> host = result.cpu()
+    print("finite softmax output " + (host[0].item() == real32(1.0) and host[1].item() == real32(0.0)).string() + NL)
+else
+    // The package's historical ReLU expression overflows on finite max input.
+    // It must stop before its public tensor can expose infinity.
+    tensor<real32> input = tensor.ones<real32>([1]) * real32(300000000000000000000000000000000000000.0)
+    if args.device >= 0
+        input = input.gpu(nat(args.device))
+    tensor<real32> output = nn.relu(input)
+    tensor<real32> host = output.cpu()
+    print("unexpected nonfinite output {host[0].item()}{NL}")

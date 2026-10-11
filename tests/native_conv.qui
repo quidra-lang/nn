@@ -1,0 +1,163 @@
+// NN's CPU Conv2D kernels against the portable gather/matmul graph (taken for
+// tracked non-contiguous inputs) and against central finite differences.
+// Run by integration.sh; every check prints one line ending in "true".
+import nn
+import math
+
+class Model()
+    nn.Conv2D convolution
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+tensor<real32> uniform(int[] shape, int seed)
+    int count = 1
+    for auto extent = shape[]
+        count = count * extent
+    tensor<real32> flat = nn.uniform_weights(count, 1.0, seed)
+    return flat.reshape(nat(shape))
+
+bool close(tensor<real32> left, tensor<real32> right, real64 tolerance)
+    tensor<real32> a = left.untrack().contiguous()
+    tensor<real32> b = right.untrack().contiguous()
+    if a.shape() != b.shape()
+        return false
+    real64 scale = 1.0 + real64(math.max_all(math.abs(b)).item())
+    return real64(math.max_all(math.abs(a - b)).item()) <= tolerance * scale
+
+class Result()
+    tensor<real32> output
+    tensor<real32> input
+    tensor<real32> weight
+    tensor<real32> bias
+
+// loss = sum(conv(x) * r). `portable` feeds the same values as a transposed
+// view of a tracked tensor, which the native bridge rejects, so the layer
+// runs its portable graph.
+Result evaluate(nn.Conv2D layer, tensor<real32> input, tensor<real32> upstream, bool portable)
+    Model model = Model()
+    model.convolution = layer
+    tensor<real32> tracked
+    tensor<real32> view
+    if portable
+        tracked = input.transpose(2, 3).contiguous().track()
+        view = tracked.transpose(2, 3)
+    else
+        tracked = input.track()
+        view = tracked
+    tensor<real32> output = .model.convolution.forward(view)
+    nn.clear_grad(&model)
+    math.sum(output * upstream).backward(&model, &tracked)
+    Result result = Result()
+    result.output = output.untrack()
+    result.input = tracked.grad.untrack()
+    if portable
+        result.input = result.input.transpose(2, 3)
+    result.weight = model.convolution.weight.gradient().untrack()
+    result.bias = model.convolution.bias.gradient().untrack()
+    return result
+
+bool conv_case(int batches, int channels_in, int channels_out, int kernel, int stride, int padding, int groups, int height, int width, int seed)
+    nn.Conv2D layer = nn.Conv2D(channels_in, channels_out, kernel, stride = stride, padding = padding, seed = seed, groups = groups)
+    .layer.bias.replace(uniform([channels_out], seed + 1))
+    tensor<real32> input = uniform([batches, channels_in, height, width], seed + 2)
+    tensor<real32> output_shape = .layer.forward(input)
+    tensor<real32> upstream = uniform(int(output_shape.shape()), seed + 3)
+    Result native = evaluate(layer, input, upstream, false)
+    Result portable = evaluate(layer, input, upstream, true)
+    return close(native.output, portable.output, 0.00001) and close(native.input, portable.input, 0.00001) and close(native.weight, portable.weight, 0.00001) and close(native.bias, portable.bias, 0.00001)
+
+bool passed = conv_case(1, 1, 1, 1, 1, 0, 1, 4, 5, 1)
+passed = conv_case(2, 3, 4, 3, 1, 1, 1, 7, 6, 2) and passed
+passed = conv_case(3, 4, 6, 3, 2, 1, 2, 9, 11, 3) and passed
+passed = conv_case(2, 4, 4, 3, 2, 0, 4, 8, 8, 4) and passed
+passed = conv_case(2, 6, 3, 1, 2, 0, 3, 5, 7, 5) and passed
+passed = conv_case(1, 2, 2, 5, 3, 2, 1, 13, 10, 6) and passed
+passed = conv_case(2, 2, 8, 3, 2, 2, 2, 9, 12, 7) and passed
+passed = conv_case(4, 8, 16, 3, 2, 1, 1, 11, 16, 8) and passed
+report("cpu conv2d matches the portable graph", passed)
+
+// Conv2D is linear in its input, so central differences of sum(conv * r)
+// are exact up to real32 rounding.
+nn.Conv2D layer = nn.Conv2D(4, 6, 3, stride = 2, padding = 1, seed = 31, groups = 2)
+tensor<real32> input = uniform([2, 4, 7, 9], 32)
+tensor<real32> upstream = uniform(int(.layer.forward(input).shape()), 33)
+Result analytic = evaluate(layer, input, upstream, false)
+tensor<real32> flat_gradient = analytic.input.reshape([2 * 4 * 7 * 9])
+bool differences_ok = true
+int[] probes = [0, 17, 63, 200, 503]
+for auto index = probes[]
+    tensor<real32> plus = input.reshape([504]).contiguous()
+    plus[index] = plus[index].item() + real32(0.5)
+    tensor<real32> minus = input.reshape([504]).contiguous()
+    minus[index] = minus[index].item() - real32(0.5)
+    real64 high = real64(math.sum(.layer.forward(plus.reshape([2, 4, 7, 9])) * upstream).item())
+    real64 low = real64(math.sum(.layer.forward(minus.reshape([2, 4, 7, 9])) * upstream).item())
+    real64 numeric = high - low
+    real64 exact_value = real64(flat_gradient[index].item())
+    differences_ok = differences_ok and math.abs(numeric - exact_value) <= 0.001 * (1.0 + math.abs(exact_value))
+report("cpu conv2d finite differences", differences_ok)
+
+// backward(track = true) through the native node: the first-order gradients
+// carry provenance, and their second-order adjoints (with respect to input,
+// weight and bias) match the portable graph.
+class SecondOrder()
+    tensor<real32> input
+    tensor<real32> weight
+    tensor<real32> bias
+
+SecondOrder second_order(nn.Conv2D layer, tensor<real32> input, tensor<real32> upstream, tensor<real32> input_weights, tensor<real32> weight_weights, bool portable)
+    Model model = Model()
+    model.convolution = layer
+    tensor<real32> tracked
+    tensor<real32> view
+    if portable
+        tracked = input.transpose(2, 3).contiguous().track()
+        view = tracked.transpose(2, 3)
+    else
+        tracked = input.track()
+        view = tracked
+    nn.clear_grad(&model)
+    tensor<real32> output = .model.convolution.forward(view)
+    math.sum(output * output * upstream).backward(&model, &tracked, track = true)
+    tensor<real32> input_gradient = tracked.grad
+    if portable
+        input_gradient = input_gradient.transpose(2, 3)
+    tensor<real32> weight_gradient = model.convolution.weight.gradient()
+    nn.clear_grad(&model)
+    .tracked.clear_grad()
+    math.sum(input_gradient * input_weights + 0.0).backward(&model, &tracked)
+    math.sum(weight_gradient * weight_weights).backward(&model, &tracked)
+    SecondOrder result = SecondOrder()
+    result.input = tracked.grad.untrack()
+    if portable
+        result.input = result.input.transpose(2, 3)
+    result.weight = model.convolution.weight.gradient().untrack()
+    result.bias = model.convolution.bias.gradient().untrack()
+    return result
+
+nn.Conv2D second_layer = nn.Conv2D(4, 6, 3, stride = 2, padding = 1, seed = 41, groups = 2)
+.second_layer.bias.replace(uniform([6], 42))
+tensor<real32> second_input = uniform([2, 4, 7, 9], 43)
+tensor<real32> second_upstream = uniform(int(.second_layer.forward(second_input).shape()), 44)
+tensor<real32> input_weights = uniform([2, 4, 7, 9], 45)
+tensor<real32> weight_weights = uniform([6, 2, 3, 3], 46)
+SecondOrder native_second = second_order(second_layer, second_input, second_upstream, input_weights, weight_weights, false)
+SecondOrder portable_second = second_order(second_layer, second_input, second_upstream, input_weights, weight_weights, true)
+report("cpu conv2d second derivative matches the portable graph", close(native_second.input, portable_second.input, 0.00001) and close(native_second.weight, portable_second.weight, 0.00001) and close(native_second.bias, portable_second.bias, 0.00001))
+
+// Masked first-order backward: with the input tracked but not a backward
+// target, the Conv2D node computes only dWeight and dBias, bit for bit the
+// gradients of the full request.
+Model masked_model = Model()
+masked_model.convolution = nn.Conv2D(3, 4, 3, padding = 1, seed = 51)
+.masked_model.convolution.bias.replace(uniform([4], 52))
+Model full_model = Model()
+full_model.convolution = nn.Conv2D(3, 4, 3, padding = 1, seed = 51)
+.full_model.convolution.bias.replace(uniform([4], 52))
+tensor<real32> masked_upstream = uniform([2, 4, 5, 6], 54)
+tensor<real32> masked_input = uniform([2, 3, 5, 6], 53).track()
+math.sum(.masked_model.convolution.forward(masked_input) * masked_upstream).backward(&masked_model)
+tensor<real32> full_input = uniform([2, 3, 5, 6], 53).track()
+math.sum(.full_model.convolution.forward(full_input) * masked_upstream).backward(&full_model, &full_input)
+report("cpu conv2d masked backward matches the full request", close(masked_model.convolution.weight.gradient(), full_model.convolution.weight.gradient(), 0.0) and close(masked_model.convolution.bias.gradient(), full_model.convolution.bias.gradient(), 0.0))

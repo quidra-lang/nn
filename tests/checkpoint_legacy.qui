@@ -1,0 +1,31 @@
+// Public-field compatibility fixture for the published formats 2 and 3.
+import nn
+
+cli args
+    string action = argument()
+    string source = option(default = "")
+    string output = argument()
+    bool checkpoint = flag()
+
+class LegacyModel()
+
+    nn.Parameter<real32> single
+    nn.Parameter<real64> wide
+    nn.State<real32> running
+    nn.State<real64> total
+    single = nn.Parameter<real32>(value = tensor.zeros<real32>([8]))
+    wide = nn.Parameter<real64>(value = tensor.zeros<real64>([8]))
+    running = nn.State<real32>(value = tensor.zeros<real32>([8]))
+    total = nn.State<real64>(value = tensor.zeros<real64>([8]))
+
+LegacyModel model = LegacyModel()
+auto optimizer = nn.Adam(&model, rate = 0.125)
+if args.action != "seed"
+    if args.checkpoint
+        nn.resume(&model, &optimizer, args.source)
+    else
+        nn.load(&model, args.source)
+if args.checkpoint
+    nn.checkpoint(&model, optimizer, args.output)
+else
+    nn.save(model, args.output)

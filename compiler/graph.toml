@@ -3,7 +3,7 @@
 # generic tensor regions, but it must not embed these NN semantic patterns.
 
 [extension]
-version = 1
+version = 2
 phase = "tensor-region"
 
 [policy]
@@ -260,31 +260,31 @@ semantic = "nn.conv2d.batchnorm.gelu.inference"
 [specialization.fc_relu_inference]
 operation = "fc_relu"
 replacement = "fc_relu_inference"
-dtype = "float32"
+dtype = "real32"
 tracked = "false"
 
 [specialization.fc_gelu_inference]
 operation = "fc_gelu"
 replacement = "fc_gelu_inference"
-dtype = "float32"
+dtype = "real32"
 tracked = "false"
 
 [specialization.conv2d_inference]
 operation = "conv2d"
 replacement = "conv2d_inference"
-dtype = "float32"
+dtype = "real32"
 tracked = "false"
 
 [specialization.conv_relu_inference]
 operation = "conv_relu"
 replacement = "conv_relu_inference"
-dtype = "float32"
+dtype = "real32"
 tracked = "false"
 
 [specialization.conv_gelu_inference]
 operation = "conv_gelu"
 replacement = "conv_gelu_inference"
-dtype = "float32"
+dtype = "real32"
 tracked = "false"
 
 [backend.fc_relu_cpu]
@@ -376,7 +376,7 @@ tracked = "false"
 [specialization.relu_training_cpu]
 operation = "relu"
 replacement = "relu_training"
-dtype = "float32"
+dtype = "real32"
 device = "cpu"
 layout = "contiguous"
 tracked = "true"
@@ -384,7 +384,7 @@ tracked = "true"
 [memory.relu_cpu_last_use]
 operation = "relu"
 replacement = "relu_reuse"
-dtype = "float32"
+dtype = "real32"
 device = "cpu"
 layout = "contiguous"
 tracked = "false"
@@ -394,7 +394,7 @@ owned = "true"
 [memory.relu_gpu_last_use]
 operation = "relu"
 replacement = "relu_reuse"
-dtype = "float32"
+dtype = "real32"
 device = "gpu"
 layout = "contiguous"
 tracked = "false"

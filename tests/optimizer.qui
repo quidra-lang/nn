@@ -1,0 +1,576 @@
+// nn.SGD and nn.Adam update() and nn.clear_grad(&model):
+//   - gradients accumulate over backward() calls until update() consumes
+//     them (two backwards, one update);
+//   - nn.clear_grad(&model) discards gradients, leaving none;
+//   - an update that fails a check changes nothing: Parameters, optimizer
+//     state and gradients are as before, and the update after the cause is
+//     removed equals one that never failed;
+//   - copied Parameters have independent values and gradient destinations;
+//   - Adam counts steps per Parameter: a Parameter without a gradient is
+//     skipped, keeping its value, moments, step count and bias corrections,
+//     and when every Parameter has a gradient at every update, every count
+//     and correction is that of one global step count.
+// Values and Adam state (read back with nn.checkpoint) are compared bit for
+// bit: every compared run sees the same gradients.
+//
+// Run by integration.sh on the CPU, by device.sh on the fake test GPU and by
+// real_gpu_integration.sh on a GPU (--device N; --host64 keeps the float
+// Parameters on the CPU, for a GPU without float arithmetic such as Metal);
+// each check prints one line ending in "true" when it passes.
+import nn
+import math
+
+cli args
+    int device = option(default = -1)
+    bool host64 = flag()
+    string scratch = option(default = "/tmp")
+
+class Model()
+    nn.Parameter<real32> a
+    nn.Parameter<real32> b
+    nn.Parameter<real64> c
+
+class Stack()
+    Model[] layers
+    nn.Parameter<real32> scale
+
+class Tied()
+    nn.Parameter<real32> first
+    nn.Parameter<real32> second
+
+class Single()
+    nn.Parameter<real32> value
+
+// Where the tensors of a run live: float32 ones on `narrow` and float ones on
+// `wide` (-1 for the CPU).
+class Placement()
+    int narrow
+    int wide
+
+Placement placement(int device, bool host64)
+    Placement at = Placement()
+    at.narrow = device
+    at.wide = device
+    if host64
+        at.wide = -1
+    return at
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+tensor<real32> place32(tensor<real32> value, Placement device)
+    if device.narrow >= 0
+        return value.gpu(nat(device.narrow))
+    return value
+
+tensor<real64> place64(tensor<real64> value, Placement device)
+    if device.wide >= 0
+        return value.gpu(nat(device.wide))
+    return value
+
+tensor<real32> uniform32(int[] shape, real64 scale, int seed)
+    int count = 1
+    for auto extent = shape[]
+        count = count * extent
+    tensor<real32> samples = nn.uniform_weights(count, scale, seed)
+    return samples.reshape(nat(shape))
+
+tensor<real64> uniform64(int[] shape, real64 scale, int seed)
+    return real64(uniform32(shape, scale, seed))
+
+Model make_model(Placement device)
+    Model model = Model()
+    model.a = nn.Parameter<real32>(value = place32(uniform32([3, 4], 1.0, 1), device))
+    model.b = nn.Parameter<real32>(value = place32(uniform32([5], 1.0, 2), device))
+    model.c = nn.Parameter<real64>(value = place64(uniform64([2, 3], 1.0, 3), device))
+    return model
+
+// The gradient a backward with `seed` gives each Parameter of a Model.
+tensor<real32> gradient_a(int seed, Placement device)
+    return place32(uniform32([3, 4], 2.0, seed), device)
+
+tensor<real32> gradient_b(int seed, Placement device)
+    return place32(uniform32([5], 0.5, seed + 1), device)
+
+tensor<real64> gradient_c(int seed, Placement device)
+    return place64(uniform64([2, 3], 1.0, seed + 2), device)
+
+// Two losses, one per dtype, whose gradients are exactly gradient_a/b/c.
+void backward(Model &model, int seed, Placement device)
+    tensor<real32> a = .model.a.track()
+    tensor<real32> b = .model.b.track()
+    tensor<real64> c = .model.c.track()
+    tensor<real32> loss32 = (
+        math.sum(a * gradient_a(seed, device))
+        + math.sum(b * gradient_b(seed, device))
+    )
+    loss32.backward(&model)
+    tensor<real64> loss64 = math.sum(c * gradient_c(seed, device))
+    loss64.backward(&model)
+
+// One backward whose gradients are those of two backward() calls with
+// `first` and `second`, each the sum of the two terms.
+void backward_both(Model &model, int first, int second, Placement device)
+    tensor<real32> a = .model.a.track()
+    tensor<real32> b = .model.b.track()
+    tensor<real64> c = .model.c.track()
+    tensor<real32> loss32 = (
+        math.sum(a * gradient_a(first, device))
+        + math.sum(b * gradient_b(first, device))
+        + math.sum(a * gradient_a(second, device))
+        + math.sum(b * gradient_b(second, device))
+    )
+    loss32.backward(&model)
+    tensor<real64> loss64 = (
+        math.sum(c * gradient_c(first, device))
+        + math.sum(c * gradient_c(second, device))
+    )
+    loss64.backward(&model)
+
+bool identical32(tensor<real32> left, tensor<real32> right)
+    tensor<real32> x = left.untrack().cpu()
+    tensor<real32> y = right.untrack().cpu()
+    if x.shape() != y.shape()
+        return false
+    int count = 1
+    for auto extent = x.shape()[]
+        count = count * int(extent)
+    tensor<real32> u = x.reshape([nat(count)])
+    tensor<real32> v = y.reshape([nat(count)])
+    for 0 <= int index < count
+        if u[index].item() != v[index].item()
+            return false
+    return true
+
+bool identical64(tensor<real64> left, tensor<real64> right)
+    tensor<real64> x = left.untrack().cpu()
+    tensor<real64> y = right.untrack().cpu()
+    if x.shape() != y.shape()
+        return false
+    int count = 1
+    for auto extent = x.shape()[]
+        count = count * int(extent)
+    tensor<real64> u = x.reshape([nat(count)])
+    tensor<real64> v = y.reshape([nat(count)])
+    for 0 <= int index < count
+        if u[index].item() != v[index].item()
+            return false
+    return true
+
+bool same_values(Model left, Model right)
+    return (
+        identical32(left.a.raw(), right.a.raw())
+        and identical32(left.b.raw(), right.b.raw())
+        and identical64(left.c.raw(), right.c.raw())
+    )
+
+bool no_gradients(Model model)
+    return not model.a.has_grad() and not model.b.has_grad() and not model.c.has_grad()
+
+bool same_gradients(Model left, Model right)
+    if left.a.has_grad() != right.a.has_grad() or left.b.has_grad() != right.b.has_grad() or left.c.has_grad() != right.c.has_grad()
+        return false
+    bool same = true
+    if left.a.has_grad()
+        same = same and identical32(left.a.gradient(), right.a.gradient())
+    if left.b.has_grad()
+        same = same and identical32(left.b.gradient(), right.b.gradient())
+    if left.c.has_grad()
+        same = same and identical64(left.c.gradient(), right.c.gradient())
+    return same
+
+string[] | error read_lines(string path)
+    file.Handle input = try file.open(path)
+    string[] lines = []
+    bool reading = true
+    while reading
+        string | none | error line = .input.read_line()
+        match line
+            string
+                lines = lines.append(line)
+            none
+                reading = false
+            error problem
+                return problem
+    return lines
+
+// The Parameters and Adam state of `model` as nn.checkpoint writes them.
+string[] | error checkpoint_lines(Model &model, nn.Adam<Model> optimizer, string path)
+    try nn.checkpoint(&model, optimizer, path)
+    return try read_lines(path)
+
+// Each Parameter's Adam step count and bias corrections, in binding order,
+// from the AdamStep entries of a checkpoint.
+class Steps()
+    int[] counts
+    real64[] first
+    real64[] second
+
+Steps | error steps_of(string[] lines)
+    Steps steps = Steps()
+    steps.counts = []
+    steps.first = []
+    steps.second = []
+    for 0 <= int index < int(len(lines)) - 4
+        if lines[index] == "AdamStep"
+            steps.counts = steps.counts.append(try int.parse(lines[index + 2]))
+            steps.first = steps.first.append(try real64.parse(lines[index + 3]))
+            steps.second = steps.second.append(try real64.parse(lines[index + 4]))
+    return steps
+
+// The lines of the `which`-th Parameter's Adam state (its AdamStep,
+// AdamFirst and AdamSecond entries).
+string[] adam_block(string[] lines, int which)
+    string[] block = []
+    int seen = -1
+    for auto line = lines[]
+        if line == "AdamStep" or line == "ADLER65521-V1"
+            seen += 1
+        if seen == which
+            block = block.append(line)
+    return block
+
+// The bias correction after `count` steps by Adam's recurrence.
+real64 correction(real64 decay, int count)
+    real64 value = 0.0
+    for 0 <= int step < count
+        value = value + (1.0 - value) * (1.0 - decay)
+    return value
+
+bool counted(Steps steps, int[] counts)
+    if len(steps.counts) != len(counts)
+        return false
+    bool same = true
+    for 0 <= nat index < len(counts)
+        same = same and steps.counts[index] == counts[index]
+        same = same and steps.first[index] == correction(0.9, counts[index])
+        same = same and steps.second[index] == correction(0.999, counts[index])
+    return same
+
+bool same_lines(string[] left, string[] right)
+    if len(left) != len(right)
+        return false
+    for 0 <= nat index < len(left)
+        if left[index] != right[index]
+            return false
+    return true
+
+bool | error same_state(Model &left, nn.Adam<Model> left_optimizer, Model &right, nn.Adam<Model> right_optimizer, string scratch)
+    string[] x = try checkpoint_lines(&left, left_optimizer, "{scratch}/optimizer-left.state")
+    string[] y = try checkpoint_lines(&right, right_optimizer, "{scratch}/optimizer-right.state")
+    return same_lines(x, y)
+
+// update() consumes the gradients: none is left afterwards, and an update
+// without gradients changes nothing.
+void | error consume_checks(Placement device, string scratch)
+    Model adam_model = make_model(device)
+    auto adam = try nn.Adam(&adam_model, rate = 0.01)
+    backward(&adam_model, 10, device)
+    bool pending = adam_model.a.has_grad() and adam_model.b.has_grad() and adam_model.c.has_grad()
+    try .adam.update()
+    bool consumed = pending and no_gradients(adam_model)
+    Model adam_after = make_model(device)
+    .adam_after.a.replace(adam_model.a.raw())
+    .adam_after.b.replace(adam_model.b.raw())
+    .adam_after.c.replace(adam_model.c.raw())
+    string[] before = try checkpoint_lines(&adam_model, adam, "{scratch}/optimizer-idle-before.state")
+    try .adam.update()
+    string[] after = try checkpoint_lines(&adam_model, adam, "{scratch}/optimizer-idle-after.state")
+    bool idle = same_values(adam_model, adam_after) and same_lines(before, after)
+
+    Model sgd_model = make_model(device)
+    auto sgd = try nn.SGD(&sgd_model, rate = 0.1)
+    backward(&sgd_model, 10, device)
+    try .sgd.update()
+    consumed = consumed and no_gradients(sgd_model)
+    Model sgd_after = make_model(device)
+    .sgd_after.a.replace(sgd_model.a.raw())
+    .sgd_after.b.replace(sgd_model.b.raw())
+    .sgd_after.c.replace(sgd_model.c.raw())
+    try .sgd.update()
+    idle = idle and same_values(sgd_model, sgd_after)
+    report("update consumes the gradients", consumed)
+    report("update without gradients changes nothing", idle)
+    return
+
+// Two backward() calls and one update() equal one backward() whose
+// gradients are the sums, and one update().
+void | error accumulation_checks(Placement device, string scratch)
+    Model twice = make_model(device)
+    Model once = make_model(device)
+    auto twice_adam = try nn.Adam(&twice, rate = 0.01)
+    auto once_adam = try nn.Adam(&once, rate = 0.01)
+    // A first update, so that the moments are not zero.
+    backward(&twice, 20, device)
+    backward(&once, 20, device)
+    try .twice_adam.update()
+    try .once_adam.update()
+    backward(&twice, 30, device)
+    backward(&twice, 40, device)
+    backward_both(&once, 30, 40, device)
+    bool gradients = (
+        same_gradients(twice, once)
+        and identical32(twice.a.gradient(), gradient_a(30, device) + gradient_a(40, device))
+        and identical64(twice.c.gradient(), gradient_c(30, device) + gradient_c(40, device))
+    )
+    try .twice_adam.update()
+    try .once_adam.update()
+    bool state_same = try same_state(&twice, twice_adam, &once, once_adam, scratch)
+    bool adam_same = same_values(twice, once) and state_same
+
+    Model sgd_twice = make_model(device)
+    Model sgd_once = make_model(device)
+    auto twice_sgd = try nn.SGD(&sgd_twice, rate = 0.1)
+    auto once_sgd = try nn.SGD(&sgd_once, rate = 0.1)
+    backward(&sgd_twice, 30, device)
+    backward(&sgd_twice, 40, device)
+    backward_both(&sgd_once, 30, 40, device)
+    try .twice_sgd.update()
+    try .once_sgd.update()
+    bool sgd_same = same_values(sgd_twice, sgd_once)
+    report("two backwards accumulate before one update", gradients)
+    report("adam update after two backwards", adam_same)
+    report("sgd update after two backwards", sgd_same)
+    return
+
+// nn.clear_grad(&model) leaves no gradient anywhere in the model (nested
+// classes and arrays included), and a discarded gradient does not reach the
+// next update.
+void | error clear_checks(Placement device, string scratch)
+    Stack stack = Stack()
+    stack.layers = [make_model(device), make_model(device)]
+    stack.scale = nn.Parameter<real32>(value = place32(uniform32([2], 1.0, 9), device))
+    tensor<real32> scale = .stack.scale.track()
+    tensor<real32> first = .stack.layers[0].a.track()
+    tensor<real32> second = .stack.layers[1].a.track()
+    tensor<real64> wide = .stack.layers[1].c.track()
+    tensor<real32> loss32 = math.sum(scale * scale) + math.sum(first * second)
+    loss32.backward(&stack)
+    math.sum(wide * wide).backward(&stack)
+    bool pending = stack.scale.has_grad() and stack.layers[0].a.has_grad() and stack.layers[1].a.has_grad() and stack.layers[1].c.has_grad()
+    nn.clear_grad(&stack)
+    bool cleared = (
+        pending
+        and not stack.scale.has_grad()
+        and no_gradients(stack.layers[0])
+        and no_gradients(stack.layers[1])
+    )
+
+    Model discarded = make_model(device)
+    Model fresh = make_model(device)
+    auto discarded_adam = try nn.Adam(&discarded, rate = 0.01)
+    auto fresh_adam = try nn.Adam(&fresh, rate = 0.01)
+    backward(&discarded, 50, device)
+    nn.clear_grad(&discarded)
+    backward(&discarded, 60, device)
+    backward(&fresh, 60, device)
+    try .discarded_adam.update()
+    try .fresh_adam.update()
+    bool state_same = try same_state(&discarded, discarded_adam, &fresh, fresh_adam, scratch)
+    bool adam_same = same_values(discarded, fresh) and state_same
+
+    Model sgd_discarded = make_model(device)
+    Model sgd_fresh = make_model(device)
+    auto discarded_sgd = try nn.SGD(&sgd_discarded, rate = 0.1)
+    auto fresh_sgd = try nn.SGD(&sgd_fresh, rate = 0.1)
+    backward(&sgd_discarded, 50, device)
+    nn.clear_grad(&sgd_discarded)
+    backward(&sgd_discarded, 60, device)
+    backward(&sgd_fresh, 60, device)
+    try .discarded_sgd.update()
+    try .fresh_sgd.update()
+    bool sgd_same = same_values(sgd_discarded, sgd_fresh)
+    report("clear_grad leaves no gradient", cleared)
+    report("a cleared gradient does not reach adam", adam_same)
+    report("a cleared gradient does not reach sgd", sgd_same)
+    return
+
+// A bound Parameter that changed its shape fails update(). The failing
+// Parameter is the last one bound (c, after the float32 ones), so an update
+// that changed Parameters one by one would already have changed a and b.
+// Nothing changes: after c is restored, the next update equals the update of
+// a run that never failed.
+void | error binding_failure_checks(Placement device, string scratch)
+    Model failing = make_model(device)
+    Model reference = make_model(device)
+    auto failing_adam = try nn.Adam(&failing, rate = 0.01)
+    auto reference_adam = try nn.Adam(&reference, rate = 0.01)
+    backward(&failing, 70, device)
+    backward(&reference, 70, device)
+    try .failing_adam.update()
+    try .reference_adam.update()
+    backward(&failing, 80, device)
+    backward(&reference, 80, device)
+    tensor<real64> kept = failing.c.raw()
+    .failing.c.replace(place64(uniform64([3, 2], 1.0, 4), device))
+    bool rejected = false
+    match .failing_adam.update()
+        void
+            rejected = false
+        error
+            rejected = true
+    bool unchanged = (
+        identical32(failing.a.raw(), reference.a.raw())
+        and identical32(failing.b.raw(), reference.b.raw())
+        and same_gradients(failing, reference)
+    )
+    .failing.c.replace(kept)
+    try .failing_adam.update()
+    try .reference_adam.update()
+    bool state_same = try same_state(&failing, failing_adam, &reference, reference_adam, scratch)
+    bool adam_atomic = rejected and unchanged and same_values(failing, reference) and no_gradients(failing) and state_same
+
+    Model sgd_failing = make_model(device)
+    Model sgd_reference = make_model(device)
+    auto failing_sgd = try nn.SGD(&sgd_failing, rate = 0.1)
+    auto reference_sgd = try nn.SGD(&sgd_reference, rate = 0.1)
+    backward(&sgd_failing, 80, device)
+    backward(&sgd_reference, 80, device)
+    tensor<real64> sgd_kept = sgd_failing.c.raw()
+    .sgd_failing.c.replace(place64(uniform64([3, 2], 1.0, 4), device))
+    bool sgd_rejected = false
+    match .failing_sgd.update()
+        void
+            sgd_rejected = false
+        error
+            sgd_rejected = true
+    bool sgd_unchanged = (
+        identical32(sgd_failing.a.raw(), sgd_reference.a.raw())
+        and identical32(sgd_failing.b.raw(), sgd_reference.b.raw())
+        and same_gradients(sgd_failing, sgd_reference)
+    )
+    .sgd_failing.c.replace(sgd_kept)
+    try .failing_sgd.update()
+    try .reference_sgd.update()
+    bool sgd_atomic = sgd_rejected and sgd_unchanged and same_values(sgd_failing, sgd_reference) and no_gradients(sgd_failing)
+    report("failed adam update changes nothing", adam_atomic)
+    report("failed sgd update changes nothing", sgd_atomic)
+    return
+
+// A gradient whose shape is not its Parameter's (the backward ran while c
+// had another shape) also fails update(), before anything changes: the Adam
+// state written by nn.checkpoint is the same before and after, and every
+// gradient is still there.
+void | error gradient_failure_checks(Placement device, string scratch)
+    Model model = make_model(device)
+    auto adam = try nn.Adam(&model, rate = 0.01)
+    backward(&model, 90, device)
+    try .adam.update()
+    tensor<real64> kept = model.c.raw()
+    .model.c.replace(place64(uniform64([3, 2], 1.0, 5), device))
+    tensor<real64> wrong = .model.c.track()
+    math.sum(wrong * wrong).backward(&model)
+    .model.c.replace(kept)
+    tensor<real32> a = .model.a.track()
+    math.sum(a * gradient_a(100, device)).backward(&model)
+    string[] before = try checkpoint_lines(&model, adam, "{scratch}/optimizer-before.state")
+    tensor<real32> a_before = model.a.raw()
+    bool rejected = false
+    match .adam.update()
+        void
+            rejected = false
+        error
+            rejected = true
+    string[] after = try checkpoint_lines(&model, adam, "{scratch}/optimizer-after.state")
+    bool unchanged = (
+        rejected
+        and same_lines(before, after)
+        and identical32(model.a.raw(), a_before)
+        and model.a.has_grad()
+        and identical32(model.a.gradient(), gradient_a(100, device))
+        and model.c.has_grad()
+        and not model.b.has_grad()
+    )
+    report("adam rejects a mismatched gradient and changes nothing", unchanged)
+    return
+
+// Copies in two value fields are independent; updating one leaves the other
+// field and the original unchanged.
+void | error tied_checks(Placement device)
+    tensor<real32> start = place32(uniform32([6], 1.0, 6), device)
+    tensor<real32> gradient = place32(uniform32([6], 1.0, 7), device)
+
+    nn.Parameter<real32> shared = nn.Parameter<real32>(value = start)
+    Tied tied = Tied()
+    tied.first = shared
+    tied.second = shared
+    auto tied_sgd = try nn.SGD(&tied, rate = 0.1)
+    math.sum(.tied.first.track() * gradient).backward(&tied)
+    try .tied_sgd.update()
+    real32 rate32 = real32(0.1)
+    bool sgd_independent = identical32(tied.first.raw(), start - gradient * rate32) and identical32(tied.second.raw(), start) and identical32(shared.raw(), start) and not shared.has_grad() and not tied.second.has_grad()
+
+    // A copied Parameter has its own moments and receives only its own gradient.
+    nn.Parameter<real32> shared_adam = nn.Parameter<real32>(value = start)
+    Tied tied_adam = Tied()
+    tied_adam.first = shared_adam
+    tied_adam.second = shared_adam
+    auto adam = try nn.Adam(&tied_adam, rate = 0.1)
+    math.sum(.tied_adam.first.track() * gradient).backward(&tied_adam)
+    try .adam.update()
+    Single once = Single()
+    once.value = nn.Parameter<real32>(value = start)
+    auto once_adam = try nn.Adam(&once, rate = 0.1)
+    math.sum(.once.value.track() * gradient).backward(&once)
+    try .once_adam.update()
+    bool adam_independent = identical32(tied_adam.first.raw(), once.value.raw()) and identical32(tied_adam.second.raw(), start) and identical32(shared_adam.raw(), start) and not tied_adam.second.has_grad()
+    report("sgd keeps copied parameters independent", sgd_independent)
+    report("adam keeps copied parameters independent", adam_independent)
+    return
+
+// Adam's step counts: a Parameter without a gradient (b in the second
+// update) is skipped, with no moment decay, and keeps its value, moments,
+// step count and corrections; the others take a step of their own. When
+// every Parameter has a gradient at every update, the counts and
+// corrections are those of a single global step count.
+void | error step_checks(Placement device, string scratch)
+    Model model = make_model(device)
+    auto adam = try nn.Adam(&model, rate = 0.01)
+    bool fresh = counted(try steps_of(try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")), [0, 0, 0])
+    backward(&model, 110, device)
+    try .adam.update()
+    string[] first = try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")
+    bool uniform = fresh and counted(try steps_of(first), [1, 1, 1])
+
+    tensor<real32> b_before = model.b.raw()
+    tensor<real32> a_before = model.a.raw()
+    tensor<real32> a = .model.a.track()
+    tensor<real64> c = .model.c.track()
+    math.sum(a * gradient_a(120, device)).backward(&model)
+    math.sum(c * gradient_c(120, device)).backward(&model)
+    try .adam.update()
+    string[] second = try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")
+    bool skipped = (
+        identical32(model.b.raw(), b_before)
+        and not identical32(model.a.raw(), a_before)
+        and same_lines(adam_block(second, 1), adam_block(first, 1))
+        and not same_lines(adam_block(second, 0), adam_block(first, 0))
+        and not same_lines(adam_block(second, 2), adam_block(first, 2))
+        and counted(try steps_of(second), [2, 1, 2])
+    )
+
+    backward(&model, 130, device)
+    try .adam.update()
+    skipped = skipped and counted(try steps_of(try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")), [3, 2, 3])
+
+    Model every = make_model(device)
+    auto every_adam = try nn.Adam(&every, rate = 0.01)
+    for 0 <= nat step < 5
+        backward(&every, 140 + int(step) * 10, device)
+        try .every_adam.update()
+    uniform = uniform and counted(try steps_of(try checkpoint_lines(&every, every_adam, "{scratch}/optimizer-steps.state")), [5, 5, 5])
+    report("adam skips a parameter without a gradient", skipped)
+    report("adam step counts equal a global count when every parameter has a gradient", uniform)
+    return
+
+void | error run(Placement device, string scratch)
+    try consume_checks(device, scratch)
+    try accumulation_checks(device, scratch)
+    try clear_checks(device, scratch)
+    try binding_failure_checks(device, scratch)
+    try gradient_failure_checks(device, scratch)
+    try tied_checks(device)
+    try step_checks(device, scratch)
+    return
+
+run(placement(args.device, args.host64), args.scratch)

@@ -1,0 +1,14 @@
+real16 forward rounds temporary only true
+real16 cast backward widens contribution true
+real16 gradients accumulate in real32 true
+real16 Adam updates original and consumes gradient true
+real16 next forward casts updated original true
+real16 checkpoint stores original real32 state true
+real16 checkpoint resumes Adam exactly true
+real16b forward rounds temporary only true
+real16b cast backward widens contribution true
+real16b gradients accumulate in real32 true
+real16b Adam updates original and consumes gradient true
+real16b next forward casts updated original true
+real16b checkpoint stores original real32 state true
+real16b checkpoint resumes Adam exactly true

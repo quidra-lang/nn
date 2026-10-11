@@ -1,0 +1,44 @@
+import nn
+import probe = "../native.qui"
+
+cli args
+    int device = option(default = 0)
+    nat count = option(default = 10000000)
+    nat64 begin = option(default = 0)
+    int32 operation = option(default = 3)
+    int32 bfloat = option(default = 0)
+
+tensor<nat32> left = tensor.zeros<nat32>([args.count])
+tensor<nat32> right = tensor.zeros<nat32>([args.count])
+nat64 random_state = 1
+nat64 multiplier = 1664525
+nat64 increment = 1013904223
+nat64 modulus = 4294967296
+for 0 <= nat i < args.count
+    if args.operation <= 2
+        nat64 offset = nat64(i)
+        left[i] = nat32(args.begin + offset)
+    else
+        random_state = (random_state * multiplier + increment) % modulus
+        left[i] = nat32(random_state)
+        random_state = (random_state * multiplier + increment) % modulus
+        right[i] = nat32(random_state)
+tensor<nat32> cpu = tensor.zeros<nat32>([args.count])
+int32 cpu_status = probe.half_probe_words(left, right, &cpu, args.operation, args.bfloat)
+tensor<nat32> a = left.gpu(nat(args.device))
+tensor<nat32> b = right.gpu(nat(args.device))
+tensor<nat32> gpu_output = tensor.zeros<nat32>([args.count], gpu = nat(args.device))
+int32 gpu_status = probe.half_probe_words(a, b, &gpu_output, args.operation, args.bfloat)
+tensor<nat32> actual = gpu_output.cpu()
+bool identical = cpu_status == 0 and gpu_status == 0
+nat32 sign_mask = 2147483648
+nat32 infinity_bits = 2139095040
+for 0 <= nat i < args.count
+    nat32 x = cpu[i].item()
+    nat32 y = actual[i].item()
+    // Exceptional NaN encodings are compared by class, not payload.
+    bool both_nan = (x % sign_mask > infinity_bits
+        and y % sign_mask > infinity_bits)
+    if x != y and not (args.operation >= 3 and both_nan)
+        identical = false
+print("half raw probe matches CPU {identical}{NL}")

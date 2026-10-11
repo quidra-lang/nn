@@ -1,0 +1,85 @@
+import nn
+import math
+
+cli args
+    int64 device = option(default = -1)
+
+class HalfModel(local int64 device)
+
+    nn.Parameter<real16> narrow
+    nn.Parameter<real16b> wide
+    local tensor<real16> first = tensor.ones<real16>([1])
+    local tensor<real16b> second = tensor.ones<real16b>([1])
+    if device >= 0
+        first = first.gpu(nat(device))
+        second = second.gpu(nat(device))
+    narrow = nn.Parameter<real16>(value = first)
+    wide = nn.Parameter<real16b>(value = second)
+
+void half_backward(HalfModel &model, bool tiny = false)
+    tensor<real16> first = .model.narrow.track()
+    tensor<real16b> second = .model.wide.track()
+    real16 first_scale = real16(0.25)
+    real16b second_scale = real16b(0.25)
+    if tiny
+        first_scale = real16(0.0001)
+        second_scale = real16b(0.0001)
+    math.sum(first * first_scale).backward(&model)
+    math.sum(second * second_scale).backward(&model)
+
+void half_checks(int64 device)
+    HalfModel sgd_model = HalfModel(device)
+    auto sgd = nn.SGD(&sgd_model, rate = 0.125)
+    half_backward(&sgd_model)
+    .sgd.update()
+    bool sgd_values = sgd_model.narrow.raw().cpu()[0].item() == real16(0.96875) and sgd_model.wide.raw().cpu()[0].item() == real16b(0.96875)
+    bool sgd_consumed = not sgd_model.narrow.has_grad() and not sgd_model.wide.has_grad()
+    print("half sgd updates both storage types {sgd_values}{NL}")
+    print("half sgd consumes gradients {sgd_consumed}{NL}")
+
+    // The squared real16 gradient and the default epsilon round to zero in
+    // real16. Real32 optimizer arithmetic keeps both nonzero.
+    HalfModel adam_model = HalfModel(device)
+    auto adam = nn.Adam(&adam_model, rate = 0.125)
+    half_backward(&adam_model, tiny = true)
+    .adam.update()
+    bool adam_values = adam_model.narrow.raw().cpu()[0].item() == real16(0.875) and adam_model.wide.raw().cpu()[0].item() == real16b(0.875)
+    .adam.update()
+    bool adam_skips = adam_model.narrow.raw().cpu()[0].item() == real16(0.875) and adam_model.wide.raw().cpu()[0].item() == real16b(0.875)
+    print("half adam rounds only the stored weight {adam_values}{NL}")
+    print("half adam skips absent gradients {adam_skips}{NL}")
+
+class PrivateModel(local int64 device)
+
+    private nn.Parameter<real32> weight
+    local tensor<real32> initial_value = tensor.ones<real32>([1])
+    if device >= 0
+        initial_value = initial_value.gpu(nat(device))
+    weight = nn.Parameter<real32>(value = initial_value)
+
+    tensor<real32> .tracked()
+        return .weight.track()
+
+    real32 value()
+        return weight.raw().cpu()[0].item()
+
+    bool has_grad()
+        return weight.has_grad()
+
+void private_checks(int64 device)
+    PrivateModel model = PrivateModel(device)
+    auto optimizer = nn.SGD(&model, rate = 0.125)
+    tensor<real32> value = .model.tracked()
+    math.sum(value * value).backward(&model)
+    bool found = model.has_grad()
+    .optimizer.update()
+    bool updated = model.value() == real32(0.75) and not model.has_grad()
+    print("private parameter receives its gradient {found}{NL}")
+    print("private parameter is updated in place {updated}{NL}")
+    string[] paths = reflect.each_paths<nn.Parameter<real32>>(model)
+    string[] expected_paths = ["weight"]
+    bool named = paths == expected_paths
+    print("private parameter has its checkpoint path {named}{NL}")
+
+half_checks(args.device)
+private_checks(args.device)

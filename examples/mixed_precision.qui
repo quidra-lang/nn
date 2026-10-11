@@ -1,0 +1,78 @@
+// Explicit low-precision training: real32 Parameters are the weight originals.
+// Requires differentiable floating tensor casts.
+import nn
+import math
+
+cli args
+    bool bfloat = flag()
+    int64 device = option(default = -1)
+    string checkpoint = option(default = "")
+
+class Scale16(local int64 device = -1)
+
+    nn.Parameter<real32> weight
+    local tensor<real32> initial = tensor.ones<real32>([1])
+    if device >= 0
+        initial = initial.gpu(nat(device))
+    weight = nn.Parameter<real32>(value = initial)
+
+    tensor<real16> .forward(tensor<real16> input)
+        tensor<real16> low_weight = real16(.weight.track())
+        return input * low_weight
+
+class Scale16b(local int64 device = -1)
+
+    nn.Parameter<real32> weight
+    local tensor<real32> initial = tensor.ones<real32>([1])
+    if device >= 0
+        initial = initial.gpu(nat(device))
+    weight = nn.Parameter<real32>(value = initial)
+
+    tensor<real16b> .forward(tensor<real16b> input)
+        tensor<real16b> low_weight = real16b(.weight.track())
+        return input * low_weight
+
+void train16(int64 device, string checkpoint)
+    Scale16 model = Scale16(device)
+    // Separate variables: Adam keeps a reference to the complete model.
+    auto optimizer = nn.Adam(&model, rate = 0.125)
+    tensor<real16> samples = tensor.ones<real16>([1])
+    tensor<real16> targets = tensor.zeros<real16>([1])
+    if device >= 0
+        samples = samples.gpu(nat(device))
+        targets = targets.gpu(nat(device))
+    for 0 <= nat iteration < 8
+        // Each forward casts the current original, including the last update.
+        tensor<real16> residual = .model.forward(samples) - targets
+        tensor<real16> loss = math.sum(residual * residual)
+        loss.backward(&model)
+        // Cast backward widens contributions; this Parameter accumulates in real32.
+        .optimizer.update()
+    print(model.weight.raw().cpu()[0].item())
+    print(NL)
+    if checkpoint != ""
+        nn.checkpoint(&model, optimizer, checkpoint)
+
+void train16b(int64 device, string checkpoint)
+    Scale16b model = Scale16b(device)
+    auto optimizer = nn.Adam(&model, rate = 0.125)
+    tensor<real16b> samples = tensor.ones<real16b>([1])
+    tensor<real16b> targets = tensor.zeros<real16b>([1])
+    if device >= 0
+        samples = samples.gpu(nat(device))
+        targets = targets.gpu(nat(device))
+    for 0 <= nat iteration < 8
+        tensor<real16b> residual = .model.forward(samples) - targets
+        tensor<real16b> loss = math.sum(residual * residual)
+        loss.backward(&model)
+        .optimizer.update()
+    print(model.weight.raw().cpu()[0].item())
+    print(NL)
+    if checkpoint != ""
+        nn.checkpoint(&model, optimizer, checkpoint)
+
+if main
+    if args.bfloat
+        train16b(args.device, args.checkpoint)
+    else
+        train16(args.device, args.checkpoint)

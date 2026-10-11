@@ -1,0 +1,99 @@
+// Independent format and transactional-load fixture.
+import nn
+import math
+
+cli args
+    string action = argument()
+    string source = option(default = "")
+    string output = argument()
+    bool checkpoint = flag()
+    int64 device = option(default = -1)
+    bool host64 = flag()
+
+class Leaf<T: floating> instance_self(local int64 device)
+
+    private nn.Parameter<T> weight
+    nn.State<T> running
+    local tensor<T> value = tensor.zeros<T>([8])
+    if device >= 0
+        value = value.gpu(nat(device))
+    weight = nn.Parameter<T>(value = value)
+    running = nn.State<T>(value = value)
+
+    void .backward()
+        math.sum(.weight.track()).backward(&instance_self)
+
+    string gradient_text()
+        if not weight.has_grad()
+            return "absent"
+        tensor<T> flat = weight.gradient().cpu().reshape([8])
+        string result = ""
+        for 0 <= nat index < 8
+            result = result + flat[index].item().string() + ";"
+        return result
+
+class FormatModel(local int64 device, local bool host64)
+    (nn.State<real16>, nn.State<real16b>) pair
+
+    Leaf<real64> wide
+    Leaf<real16>[] blocks
+    Leaf<real32> single
+    Leaf<real16b> bfloat
+    local int64 wide_device = device
+    if host64
+        wide_device = -1
+    wide = Leaf<real64>(wide_device)
+    blocks = [Leaf<real16>(device)]
+    single = Leaf<real32>(device)
+    bfloat = Leaf<real16b>(device)
+    pair = (nn.State<real16>(value = tensor.zeros<real16>([8])), nn.State<real16b>(value = tensor.zeros<real16b>([8])))
+
+    void .backward()
+        .blocks[0].backward()
+        .bfloat.backward()
+        .single.backward()
+        .wide.backward()
+
+    string gradient_text()
+        return blocks[0].gradient_text() + ";" + bfloat.gradient_text() + ";" + single.gradient_text() + ";" + wide.gradient_text()
+
+FormatModel model = FormatModel(args.device, args.host64)
+auto optimizer = nn.Adam(&model, rate = 0.125)
+if args.action == "seed"
+    if args.checkpoint
+        nn.checkpoint(&model, optimizer, args.output)
+    else
+        nn.save(model, args.output)
+else
+    if args.action == "reject"
+        // Pending gradients must survive every rejected load as well.
+        .model.backward()
+        string gradients = model.gradient_text()
+        if args.checkpoint
+            nn.checkpoint(&model, optimizer, args.output + ".before")
+        else
+            nn.save(model, args.output + ".before")
+        void | error result
+        if args.checkpoint
+            result = nn.resume(&model, &optimizer, args.source)
+        else
+            result = nn.load(&model, args.source)
+        match result
+            void
+                print("unexpected success" + NL)
+            error problem
+                print(problem.code + NL)
+                print(problem.message + NL)
+        print("gradients unchanged " + (gradients == model.gradient_text()).string() + NL)
+    else
+        if args.checkpoint
+            nn.resume(&model, &optimizer, args.source)
+        else
+            nn.load(&model, args.source)
+        if args.action == "continue"
+            .model.backward()
+            .optimizer.update()
+    if args.checkpoint
+        nn.checkpoint(&model, optimizer, args.output)
+    else
+        nn.save(model, args.output)

@@ -1,0 +1,111 @@
+// NN's CPU kernels split independent outputs across Core's CPU threads
+// (qcore_parallel_for), so their results must not depend on the thread
+// count. Every kernel below spans several chunks: Conv2D forward and
+// backward (dense and grouped, full and masked requests), ReLU/GELU forward
+// and backward, global average pooling and its adjoint, and Adam updates.
+// The results are written with nn.save; integration.sh runs this program
+// with QUIDRA_CPU_THREADS=1, 3 and unset and compares the files bytewise.
+//
+//     quidra tests/cpu_threads.qui FILE
+import nn
+import math
+
+cli args
+    string output = argument()
+
+class Net()
+    nn.Conv2D convolution
+
+class Weights()
+    nn.Parameter<real32> value
+
+class Results()
+    nn.Parameter<real32> conv
+    nn.Parameter<real32> conv_input
+    nn.Parameter<real32> conv_weight
+    nn.Parameter<real32> conv_bias
+    nn.Parameter<real32> grouped
+    nn.Parameter<real32> grouped_input
+    nn.Parameter<real32> grouped_weight
+    nn.Parameter<real32> masked_weight
+    nn.Parameter<real32> masked_bias
+    nn.Parameter<real32> gelu
+    nn.Parameter<real32> gelu_input
+    nn.Parameter<real32> relu
+    nn.Parameter<real32> relu_input
+    nn.Parameter<real32> pooled
+    nn.Parameter<real32> pooled_input
+    nn.Parameter<real32> adam
+
+tensor<real32> uniform(int[] shape, int seed)
+    int count = 1
+    for auto extent = shape[]
+        count = count * extent
+    tensor<real32> flat = nn.uniform_weights(count, 1.0, seed)
+    nat[] extents = nat(shape)
+    return flat.reshape(extents)
+
+nn.Parameter<real32> keep(tensor<real32> value)
+    return nn.Parameter<real32>(value = value.untrack())
+
+void | error run(string path)
+    Results results = Results()
+
+    Net dense = Net()
+    dense.convolution = try nn.Conv2D(8, 12, 3, padding = 1, seed = 61)
+    .dense.convolution.bias.replace(uniform([12], 62))
+    tensor<real32> x = uniform([6, 8, 20, 24], 63).track()
+    tensor<real32> y = .dense.convolution.forward(x)
+    math.sum(y * uniform([6, 12, 20, 24], 64)).backward(&dense, &x)
+    results.conv = keep(y)
+    results.conv_input = keep(x.grad)
+    results.conv_weight = keep(dense.convolution.weight.gradient())
+    results.conv_bias = keep(dense.convolution.bias.gradient())
+
+    Net grouped = Net()
+    grouped.convolution = try nn.Conv2D(8, 12, 3, stride = 2, padding = 1, seed = 65, groups = 2)
+    tensor<real32> gx = uniform([6, 8, 21, 25], 66).track()
+    tensor<real32> gy = .grouped.convolution.forward(gx)
+    math.sum(gy * uniform(int(gy.shape()), 67)).backward(&grouped, &gx)
+    results.grouped = keep(gy)
+    results.grouped_input = keep(gx.grad)
+    results.grouped_weight = keep(grouped.convolution.weight.gradient())
+
+    Net masked = Net()
+    masked.convolution = try nn.Conv2D(8, 12, 3, padding = 1, seed = 61)
+    .masked.convolution.bias.replace(uniform([12], 62))
+    tensor<real32> mx = uniform([6, 8, 20, 24], 63).track()
+    math.sum(.masked.convolution.forward(mx) * uniform([6, 12, 20, 24], 64)).backward(&masked)
+    results.masked_weight = keep(masked.convolution.weight.gradient())
+    results.masked_bias = keep(masked.convolution.bias.gradient())
+
+    tensor<real32> a = (uniform([6, 8, 40, 48], 68) * 4.0).track()
+    tensor<real32> gelu = nn.gelu(a)
+    math.sum(gelu * uniform([6, 8, 40, 48], 69)).backward(&a)
+    results.gelu = keep(gelu)
+    results.gelu_input = keep(a.grad)
+    tensor<real32> r = (uniform([6, 8, 40, 48], 70) * 4.0).track()
+    tensor<real32> relu = nn.relu(r)
+    math.sum(relu * uniform([6, 8, 40, 48], 71)).backward(&r)
+    results.relu = keep(relu)
+    results.relu_input = keep(r.grad)
+
+    tensor<real32> p = uniform([40, 16, 10, 12], 72).track()
+    tensor<real32> pooled = nn.global_average_pool2d(p)
+    math.sum(pooled * uniform([40, 16], 73)).backward(&p)
+    results.pooled = keep(pooled)
+    results.pooled_input = keep(p.grad)
+
+    Weights weights = Weights()
+    weights.value = nn.Parameter<real32>(value = uniform([200, 200], 74))
+    auto optimizer = try nn.Adam(&weights, rate = 0.01)
+    for 0 <= nat step < 3
+        tensor<real32> w = .weights.value.track()
+        math.sum(w * w * uniform([200, 200], 75 + int(step))).backward(&weights)
+        .optimizer.update()
+    results.adam = keep(weights.value.raw())
+
+    try nn.save(results, path)
+    return
+
+run(args.output)

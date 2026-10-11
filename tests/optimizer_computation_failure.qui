@@ -1,0 +1,49 @@
+import nn
+import math
+import probe = "../native.qui"
+
+cli args
+    string scratch = argument()
+
+class Model()
+
+    nn.Parameter<real32> first
+    nn.Parameter<real32> second
+    first = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
+    second = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
+
+void backward(Model &model)
+    math.sum(.model.first.track() + .model.second.track()).backward(&model)
+
+Model model = Model()
+auto optimizer = nn.Adam(&model, rate = 0.125)
+backward(&model)
+.optimizer.update()
+nn.checkpoint(&model, optimizer, "{args.scratch}/before.state")
+backward(&model)
+probe.optimizer_failure_after(int64(1))
+void | error result = .optimizer.update()
+match result
+    void
+        print("unexpected success" + NL)
+    error problem
+        bool code = problem.code == "NN_UPDATE_FAILED"
+        bool text = problem.message == "nn.Adam.update failed during computation at first; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer"
+        print("computation error contract {code} {text}{NL}")
+// Continuing on the failed optimizer is deliberately not a supported action.
+Model restored = Model()
+auto restored_optimizer = nn.Adam(&restored, rate = 0.125)
+nn.resume(&restored, &restored_optimizer, "{args.scratch}/before.state")
+Model control = Model()
+auto control_optimizer = nn.Adam(&control, rate = 0.125)
+backward(&control)
+.control_optimizer.update()
+backward(&control)
+.control_optimizer.update()
+backward(&restored)
+.restored_optimizer.update()
+nn.checkpoint(&restored, restored_optimizer, "{args.scratch}/restored.state")
+nn.checkpoint(&control, control_optimizer, "{args.scratch}/control.state")
+string restored_bytes = file.read("{args.scratch}/restored.state")
+string control_bytes = file.read("{args.scratch}/control.state")
+print("fresh optimizer resumes training " + (restored_bytes == control_bytes).string() + NL)

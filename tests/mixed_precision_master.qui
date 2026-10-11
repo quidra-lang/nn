@@ -1,0 +1,185 @@
+// Focused explicit-master contract; requires differentiable floating casts and model-bound optimizers.
+import nn
+import math
+
+bool next_weight_matches16(real16 observed, real32 value)
+    real16 expected = real16(value)
+    return observed == expected
+
+bool next_weight_matches16b(real16b observed, real32 value)
+    real16b expected = real16b(value)
+    return observed == expected
+
+class Scale16(local int64 device = -1)
+
+    nn.Parameter<real32> weight
+    local tensor<real32> initial = tensor.ones<real32>([1])
+    if device >= 0
+        initial = initial.gpu(nat(device))
+    weight = nn.Parameter<real32>(value = initial)
+
+    tensor<real16> .forward(tensor<real16> input)
+        tensor<real16> low_weight = real16(.weight.track())
+        return input * low_weight
+
+class Scale16b(local int64 device = -1)
+
+    nn.Parameter<real32> weight
+    local tensor<real32> initial = tensor.ones<real32>([1])
+    if device >= 0
+        initial = initial.gpu(nat(device))
+    weight = nn.Parameter<real32>(value = initial)
+
+    tensor<real16b> .forward(tensor<real16b> input)
+        tensor<real16b> low_weight = real16b(.weight.track())
+        return input * low_weight
+
+cli args
+    int64 device = option(default = -1)
+    string scratch = argument()
+
+bool is_weight_path(string[] paths)
+    string[] expected = ["weight"]
+    return paths == expected
+
+bool has_no_paths(string[] paths)
+    string[] expected = []
+    return paths == expected
+
+void report(string label, bool passed)
+    print("{label} {passed}{NL}")
+
+void checks16(int64 device, string scratch)
+    Scale16 model = Scale16(device)
+    Scale16 reference = Scale16(device)
+    tensor<real32> initial = tensor.ones<real32>([1]) * real32(1.000244140625)
+    tensor<real16> unit = tensor.ones<real16>([1])
+    tensor<real16> tiny = tensor.ones<real16>([1]) * real16(0.000244140625)
+    if device >= 0
+        initial = initial.gpu(nat(device))
+        unit = unit.gpu(nat(device))
+        tiny = tiny.gpu(nat(device))
+    .model.weight.replace(initial)
+    .reference.weight.replace(initial)
+    auto optimizer = nn.Adam(&model, rate = 0.125)
+    auto reference_optimizer = nn.Adam(&reference, rate = 0.125)
+
+    tensor<real16> prediction = .model.forward(unit)
+    report("real16 forward rounds temporary only",
+        prediction.untrack().cpu()[0].item() == real16(1.0)
+        and model.weight.raw().cpu()[0].item() == real32(1.000244140625))
+    math.sum(prediction).backward(&model)
+    report("real16 cast backward widens contribution",
+        model.weight.has_grad() and model.weight.gradient().untrack().cpu()[0].item() == real32(1.0))
+    math.sum(.model.forward(tiny)).backward(&model)
+    // The tiny contribution is below half an ulp at 1 in either low format.
+    // It remains present when added to the real32 Parameter's gradient slot.
+    report("real16 gradients accumulate in real32",
+        model.weight.gradient().untrack().cpu()[0].item() == real32(1.000244140625))
+    math.sum(.reference.weight.track()).backward(&reference)
+    math.sum(.reference.weight.track() * real32(0.000244140625)).backward(&reference)
+    .optimizer.update()
+    .reference_optimizer.update()
+    report("real16 Adam updates original and consumes gradient",
+        model.weight.raw().cpu()[0].item() == reference.weight.raw().cpu()[0].item()
+        and not model.weight.has_grad())
+    tensor<real16> next_prediction = .model.forward(unit)
+    report("real16 next forward casts updated original",
+        next_weight_matches16(next_prediction.untrack().cpu()[0].item(), model.weight.raw().cpu()[0].item()))
+
+    string saved = "{scratch}/master-16.state"
+    string control = "{scratch}/master-16-reference.state"
+    nn.checkpoint(&model, optimizer, saved)
+    nn.checkpoint(&reference, reference_optimizer, control)
+    string saved_bytes = file.read(saved)
+    string control_bytes = file.read(control)
+    string[] lines = saved_bytes.split("{NL}")
+    report("real16 checkpoint stores original real32 state",
+        saved_bytes == control_bytes
+        and lines[0] == "QUIDRA_DNN_STATE" and lines[1] == "5"
+        and lines[2] == "model+Adam" and lines[4] == "1"
+        and lines[5] == "Parameter" and lines[6] == "real32" and lines[7] == "weight"
+        and is_weight_path(reflect.each_paths<nn.Parameter<real32>>(model))
+        and has_no_paths(reflect.each_paths<nn.Parameter<real16>>(model)))
+
+    Scale16 resumed = Scale16(device)
+    auto resumed_optimizer = nn.Adam(&resumed, rate = 0.125)
+    nn.resume(&resumed, &resumed_optimizer, saved)
+    math.sum(.model.forward(tiny)).backward(&model)
+    math.sum(.resumed.forward(tiny)).backward(&resumed)
+    .optimizer.update()
+    .resumed_optimizer.update()
+    nn.checkpoint(&model, optimizer, "{scratch}/master-16-continued.state")
+    nn.checkpoint(&resumed, resumed_optimizer, "{scratch}/master-16-resumed.state")
+    string continued_bytes = file.read("{scratch}/master-16-continued.state")
+    string resumed_bytes = file.read("{scratch}/master-16-resumed.state")
+    report("real16 checkpoint resumes Adam exactly", continued_bytes == resumed_bytes)
+
+void checks16b(int64 device, string scratch)
+    Scale16b model = Scale16b(device)
+    Scale16b reference = Scale16b(device)
+    tensor<real32> initial = tensor.ones<real32>([1]) * real32(1.000244140625)
+    tensor<real16b> unit = tensor.ones<real16b>([1])
+    tensor<real16b> tiny = tensor.ones<real16b>([1]) * real16b(0.000244140625)
+    if device >= 0
+        initial = initial.gpu(nat(device))
+        unit = unit.gpu(nat(device))
+        tiny = tiny.gpu(nat(device))
+    .model.weight.replace(initial)
+    .reference.weight.replace(initial)
+    auto optimizer = nn.Adam(&model, rate = 0.125)
+    auto reference_optimizer = nn.Adam(&reference, rate = 0.125)
+
+    tensor<real16b> prediction = .model.forward(unit)
+    report("real16b forward rounds temporary only",
+        prediction.untrack().cpu()[0].item() == real16b(1.0)
+        and model.weight.raw().cpu()[0].item() == real32(1.000244140625))
+    math.sum(prediction).backward(&model)
+    report("real16b cast backward widens contribution",
+        model.weight.has_grad() and model.weight.gradient().untrack().cpu()[0].item() == real32(1.0))
+    math.sum(.model.forward(tiny)).backward(&model)
+    // The tiny contribution is below half an ulp at 1 in either low format.
+    // It remains present when added to the real32 Parameter's gradient slot.
+    report("real16b gradients accumulate in real32",
+        model.weight.gradient().untrack().cpu()[0].item() == real32(1.000244140625))
+    math.sum(.reference.weight.track()).backward(&reference)
+    math.sum(.reference.weight.track() * real32(0.000244140625)).backward(&reference)
+    .optimizer.update()
+    .reference_optimizer.update()
+    report("real16b Adam updates original and consumes gradient",
+        model.weight.raw().cpu()[0].item() == reference.weight.raw().cpu()[0].item()
+        and not model.weight.has_grad())
+    tensor<real16b> next_prediction = .model.forward(unit)
+    report("real16b next forward casts updated original",
+        next_weight_matches16b(next_prediction.untrack().cpu()[0].item(), model.weight.raw().cpu()[0].item()))
+
+    string saved = "{scratch}/master-16b.state"
+    string control = "{scratch}/master-16b-reference.state"
+    nn.checkpoint(&model, optimizer, saved)
+    nn.checkpoint(&reference, reference_optimizer, control)
+    string saved_bytes = file.read(saved)
+    string control_bytes = file.read(control)
+    string[] lines = saved_bytes.split("{NL}")
+    report("real16b checkpoint stores original real32 state",
+        saved_bytes == control_bytes
+        and lines[0] == "QUIDRA_DNN_STATE" and lines[1] == "5"
+        and lines[2] == "model+Adam" and lines[4] == "1"
+        and lines[5] == "Parameter" and lines[6] == "real32" and lines[7] == "weight"
+        and is_weight_path(reflect.each_paths<nn.Parameter<real32>>(model))
+        and has_no_paths(reflect.each_paths<nn.Parameter<real16b>>(model)))
+
+    Scale16b resumed = Scale16b(device)
+    auto resumed_optimizer = nn.Adam(&resumed, rate = 0.125)
+    nn.resume(&resumed, &resumed_optimizer, saved)
+    math.sum(.model.forward(tiny)).backward(&model)
+    math.sum(.resumed.forward(tiny)).backward(&resumed)
+    .optimizer.update()
+    .resumed_optimizer.update()
+    nn.checkpoint(&model, optimizer, "{scratch}/master-16b-continued.state")
+    nn.checkpoint(&resumed, resumed_optimizer, "{scratch}/master-16b-resumed.state")
+    string continued_bytes = file.read("{scratch}/master-16b-continued.state")
+    string resumed_bytes = file.read("{scratch}/master-16b-resumed.state")
+    report("real16b checkpoint resumes Adam exactly", continued_bytes == resumed_bytes)
+
+checks16(args.device, args.scratch)
+checks16b(args.device, args.scratch)

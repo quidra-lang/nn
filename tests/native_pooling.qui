@@ -1,0 +1,95 @@
+// nn.global_average_pool2d's native kernel against the former compositional
+// graph on the CPU (values, gradients and three orders of autograd). Run by
+// integration.sh; every check prints one line ending in "true".
+import nn
+import math
+
+real32 real_count(int value)
+    real32 converted = real32(value)
+    return converted
+
+// The gather/sum_last composition NN used before the native kernel.
+tensor<real32> pool_reference(tensor<real32> value)
+    int[] shape = int(value.shape())
+    int batches = shape[0]
+    int channels = shape[1]
+    int count = shape[2] * shape[3]
+    int total_count = batches * channels * count
+    int[] flatten_indices = array(nat(total_count), fill = 0)
+    for 0 <= int index < total_count
+        flatten_indices[index] = index
+    tensor<real32> flattened = value.gather(flatten_indices, [batches, channels, count])
+    tensor<real32> means = math.sum_last(flattened) / real_count(count)
+    int[] indices = array(nat(batches * channels), fill = 0)
+    for 0 <= int index < batches * channels
+        indices[index] = index * count
+    return means.gather(indices, [batches, channels])
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+bool identical(tensor<real32> left, tensor<real32> right)
+    tensor<real32> a = left.untrack().cpu()
+    tensor<real32> b = right.untrack().cpu()
+    if a.shape() != b.shape()
+        return false
+    return real64(math.max_all(math.abs(a - b)).item()) == 0.0
+
+bool close(tensor<real32> left, tensor<real32> right, real64 tolerance)
+    tensor<real32> a = left.untrack().cpu()
+    tensor<real32> b = right.untrack().cpu()
+    if a.shape() != b.shape()
+        return false
+    real64 scale = 1.0 + real64(math.max_all(math.abs(b)).item())
+    return real64(math.max_all(math.abs(a - b)).item()) <= tolerance * scale
+
+tensor<real32> uniform(int[] shape, int seed)
+    int count = 1
+    for auto extent = shape[]
+        count = count * extent
+    tensor<real32> flat = nn.uniform_weights(count, 2.0, seed)
+    return flat.reshape(nat(shape))
+
+class Orders()
+    tensor<real32> first
+    tensor<real32> second
+    tensor<real32> third
+
+// loss = sum(w * pool(x)^3); three successive derivatives with respect to x.
+Orders orders(tensor<real32> base, tensor<real32> weights, bool native)
+    tensor<real32> x = base.track()
+    tensor<real32> pooled
+    if native
+        pooled = nn.global_average_pool2d(x)
+    else
+        pooled = pool_reference(x)
+    math.sum(pooled * pooled * pooled * weights).backward(&x, track = true)
+    tensor<real32> first = x.grad
+    .x.clear_grad()
+    math.sum(first * first).backward(&x, track = true)
+    tensor<real32> second = x.grad
+    .x.clear_grad()
+    math.sum(second).backward(&x)
+    Orders result = Orders()
+    result.first = first.untrack()
+    result.second = second.untrack()
+    result.third = x.grad.untrack()
+    return result
+
+tensor<real32> input = uniform([3, 5, 6, 8], 21)
+report("pool forward matches the graph", identical(nn.global_average_pool2d(input), pool_reference(input)))
+tensor<real32> view = uniform([3, 5, 8, 6], 22).transpose(2, 3)
+report("pool strided input", identical(nn.global_average_pool2d(view), pool_reference(view)))
+
+tensor<real32> weights = uniform([3, 5], 23)
+Orders native_orders = orders(input, weights, true)
+Orders graph_orders = orders(input, weights, false)
+report("pool first derivative", close(native_orders.first, graph_orders.first, 0.000001))
+report("pool second derivative", close(native_orders.second, graph_orders.second, 0.000001))
+report("pool third derivative", close(native_orders.third, graph_orders.third, 0.000001))
+
+tensor<real32> tracked_view = uniform([2, 3, 5, 4], 24).track()
+math.sum(nn.global_average_pool2d(tracked_view.transpose(2, 3)) * uniform([2, 3], 25)).backward(&tracked_view)
+tensor<real32> reference_view = uniform([2, 3, 5, 4], 24).track()
+math.sum(pool_reference(reference_view.transpose(2, 3)) * uniform([2, 3], 25)).backward(&reference_view)
+report("pool tracked strided input", identical(tracked_view.grad, reference_view.grad))

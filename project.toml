@@ -20,6 +20,12 @@ graph = "compiler/graph.toml"
 cpu = "native/nn_native.cpp"
 cuda_driver = "native/nn_cuda.cpp"
 
+[native.source.macos-arm64]
+metal = "native/nn_metal.mm"
+
+[native.source.macos-x86_64]
+metal = "native/nn_metal.mm"
+
 [assets]
 linux-x86_64 = "nn-nvidia-linux-x86_64.tar.xz"
 windows-x86_64 = "nn-nvidia-windows-x86_64.zip"

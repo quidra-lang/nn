@@ -4,8 +4,8 @@
 // `deterministic` restricts the backends to deterministic algorithms.
 import bridge = "./runtime.qui"
 
-void fast()
-    bridge.set(int32(0))
+void .fast()
+    .bridge.select(int32(0))
 
-void deterministic()
-    bridge.set(int32(1))
+void .deterministic()
+    .bridge.select(int32(1))

@@ -29,6 +29,46 @@ state persistence, and training behavior remain NN-owned.
 NN uses the exact same `MAJOR.MINOR.PATCH` version as Core and Math. The
 first-party package version is lockstep and must not be chosen independently.
 
+## Native kernels and tests
+
+`native/nn_native.cpp` holds the CPU kernels and the backend dispatch;
+`native/nn_cuda.cpp` and the cuDNN/NCCL bridge serve NVIDIA GPUs; on macOS
+`native/nn_metal.mm` provides NN-owned Metal kernels for Conv2D (forward,
+backward and custom autograd), the fused ReLU/GELU activations, global
+average pooling and the Adam update. Every kernel reproduces the package's
+own source expressions, and every backend without a native kernel keeps the
+portable Quidra graph.
+
+The suites under `tests/` take the compiler path as their first argument.
+`tests/optimizer.qui` (the update semantics of `nn.SGD` and `nn.Adam`:
+gradient accumulation, `nn.clear_grad`, atomic failure, tied Parameters and
+Adam's per-Parameter step counts) runs on the CPU in `integration.sh`, on the
+fake test GPU in `device.sh` and on GPU 0 in `real_gpu_integration.sh`.
+When GPU 0 is a Metal device, `real_gpu_integration.sh` additionally runs
+`tests/metal_native.qui` (values and gradients against the CPU),
+`tests/metal_dispatch.qui` (the native Metal kernels actually ran: the
+portable fallback gives the same values, so the test reads NN's per-kernel
+dispatch counter, a test probe exported by `nn_native.cpp`),
+`tests/metal_adam.qui` (Adam state after every step) and
+`tests/metal_uninitialized.qui` (partially initialized, untracked GPU inputs
+stop with `UNINITIALIZED` on the native kernels too, because Core rejects
+such views in `qcore_tensor_device_handle(_const)`). With an older Core that
+does not reject them, the kernels compute on unwritten memory; the suite
+only reports that, and `QUIDRA_NN_REQUIRE_METAL_UNINITIALIZED=1` makes it
+fail.
+
+`tests/performance.sh` prints Conv2D/GELU timings for the small (the first
+convolution of an external training program), medium and, on request, large
+shapes on the CPU and GPU 0:
+
+```sh
+bash tests/performance.sh /path/to/quidra small,medium,large
+QUIDRA_NN_PERFORMANCE_CHECK=1 bash tests/performance.sh /path/to/quidra small
+```
+
+The second form fails when a GPU runs the small Conv2D forward+backward
+through the portable fallback instead of a native kernel.
+
 ## Dependency-first release order
 
 NN uses the same `MAJOR.MINOR.PATCH` version as Core and Math. A release

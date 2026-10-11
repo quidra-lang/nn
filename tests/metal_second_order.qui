@@ -1,0 +1,177 @@
+// Second-order autograd through NN's Metal custom nodes (Conv2D, the fused
+// Conv2D + activation target, ReLU, GELU, global average pooling) against
+// the CPU. real_gpu_integration.sh runs this file only after a probe shows
+// that Core runs backward(track = true) on GPU graphs; while Core rejects
+// it, the script checks that Core's diagnostic is unchanged. Each check
+// prints one line ending in "true" when it passes.
+import nn
+import math
+
+real64 real_index(nat value)
+    real64 converted = real64(value)
+    return converted
+
+cli args
+    int device = option(default = 0)
+
+class Model()
+    nn.Conv2D convolution
+
+void report(string name, bool passed)
+    print("{name} {passed}{NL}")
+
+tensor<real32> uniform(int[] shape, int seed)
+    int count = 1
+    for auto extent = shape[]
+        count = count * extent
+    tensor<real32> samples = nn.uniform_weights(count, 1.0, seed)
+    return samples.reshape(nat(shape))
+
+tensor<real32> place(tensor<real32> value, int device)
+    if device >= 0
+        return value.gpu(nat(device))
+    return value
+
+bool close(tensor<real32> expected, tensor<real32> actual, real64 tolerance)
+    tensor<real32> a = expected.untrack().cpu()
+    tensor<real32> b = actual.untrack().cpu()
+    if a.shape() != b.shape()
+        return false
+    real64 difference = real64(math.max_all(math.abs(a - b)).item())
+    real64 magnitude = real64(math.max_all(math.abs(a)).item())
+    return difference <= tolerance * (1.0 + magnitude)
+
+// 0: Conv2D, 1: ReLU(Conv2D), 2: GELU(Conv2D), 3: GELU,
+// 4: global_average_pool2d(GELU).
+tensor<real32> network(int which, Model &model, tensor<real32> input)
+    if which == 0
+        return .model.convolution.forward(input)
+    if which == 1
+        return nn.relu(.model.convolution.forward(input))
+    if which == 2
+        return nn.gelu(.model.convolution.forward(input))
+    if which == 3
+        return nn.gelu(input)
+    return nn.global_average_pool2d(nn.gelu(input))
+
+class SecondOrder()
+    tensor<real32> input
+    tensor<real32> weight
+    tensor<real32> bias
+
+SecondOrder second_order(int which, int device)
+    Model model = Model()
+    model.convolution = nn.Conv2D(3, 4, 3, stride = 2, padding = 1, seed = 51)
+    .model.convolution.weight.replace(place(model.convolution.weight.raw(), device))
+    .model.convolution.bias.replace(place(uniform([4], 52), device))
+    tensor<real32> tracked = place(uniform([2, 3, 7, 6], 53), device).track()
+    nn.clear_grad(&model)
+    tensor<real32> output = network(which, &model, tracked)
+    tensor<real32> upstream = place(uniform(int(output.shape()), 54), device)
+    math.sum(output * output * upstream).backward(&model, &tracked, track = true)
+    tensor<real32> input_gradient = tracked.grad
+    SecondOrder result = SecondOrder()
+    if which <= 2
+        tensor<real32> weight_gradient = model.convolution.weight.gradient()
+        nn.clear_grad(&model)
+        .tracked.clear_grad()
+        math.sum(input_gradient * place(uniform(int(input_gradient.shape()), 55), device)).backward(&model, &tracked)
+        math.sum(weight_gradient * place(uniform(int(weight_gradient.shape()), 56), device)).backward(&model, &tracked)
+        result.weight = model.convolution.weight.gradient().untrack().cpu()
+        result.bias = model.convolution.bias.gradient().untrack().cpu()
+    else
+        .tracked.clear_grad()
+        math.sum(input_gradient * place(uniform(int(input_gradient.shape()), 55), device)).backward(&tracked)
+        result.weight = tensor.zeros<real32>([1])
+        result.bias = tensor.zeros<real32>([1])
+    result.input = tracked.grad.untrack().cpu()
+    return result
+
+bool second_order_case(int which, int device)
+    SecondOrder host = second_order(which, -1)
+    SecondOrder metal = second_order(which, device)
+    bool passed = close(host.input, metal.input, 0.0001)
+    if which <= 2
+        passed = passed and close(host.weight, metal.weight, 0.0001) and close(host.bias, metal.bias, 0.0001)
+    return passed
+
+real64 power2(int exponent)
+    real64 result = 1.0
+    for 0 <= int step < math.abs(exponent)
+        if exponent > 0
+            result = result * 2.0
+        else
+            result = result * 0.5
+    return result
+
+// The dense inputs of native_activations.qui (all with a finite forward
+// value), including 1.3128e10 <= |x| <= 6.9815e12, where inner_derivative^2
+// overflows real32 and the second derivative must still be finite.
+tensor<real32> dense_gelu_values()
+    real32[] values = [real32(0), real32(-0.0)]
+    real32[] edges = [real32(1.1754942106924411e-38), real32(1.1754943508222875e-38), real32(7.30049419), real32(13128121344.0), real32(13128122368.0), real32(6981463048192.0)]
+    for auto value = edges[]
+        values = values.append(value)
+        values = values.append(-value)
+    real64 boundary_start = real64(real32(7.32))
+    real64 boundary_ulp = power2(-21)
+    for 0 <= nat index < 104858
+        real32 value = real32(boundary_start + real_index(index) * boundary_ulp)
+        values = values.append(value)
+        values = values.append(-value)
+    for 0 <= nat index < 9503
+        real32 value = real32(5.0 + real_index(index) / 4096.0)
+        values = values.append(value)
+        values = values.append(-value)
+    for 0 <= nat index < 6145
+        real32 value = real32(-12.0 + real_index(index) / 256.0)
+        values = values.append(value)
+    for -149 <= int exponent < 43
+        real64 scale = power2(exponent)
+        for 0 <= nat step < 32
+            real32 value = real32(scale * (1.0 + real_index(step) / 32.0))
+            if real64(value) <= 6981463048192.0
+                values = values.append(value)
+                values = values.append(-value)
+    tensor<real32> result = tensor.zeros<real32>([len(values)])
+    for 0 <= nat index < len(values)
+        result[index] = values[index]
+    return result
+
+class GeluDerivatives()
+    tensor<real64> first
+    tensor<real64> second
+
+// Unit upstream: first = f'(x), second = f''(x).
+GeluDerivatives gelu_derivatives(tensor<real32> values, int device)
+    tensor<real32> x = place(values, device).track()
+    math.sum(nn.gelu(x)).backward(&x, track = true)
+    tensor<real32> first = x.grad
+    .x.clear_grad()
+    math.sum(first).backward(&x)
+    GeluDerivatives result = GeluDerivatives()
+    result.first = real64(first.untrack().cpu())
+    result.second = real64(x.grad.untrack().cpu())
+    return result
+
+real64 scaled_difference(tensor<real64> actual, tensor<real64> reference)
+    return math.max_all(math.abs(actual - reference) / (1.0 + math.abs(reference))).item()
+
+// The device's fused first and second GELU derivatives over the dense inputs
+// against NN's CPU kernel, metric |d| / (1 + |cpu|) per element. Both
+// kernels evaluate the same analytic derivatives and differ only in the last
+// bits, from Metal's exp against the CPU kernel's exp polynomial. Bound
+// 1e-6, and both derivatives must be finite everywhere.
+bool dense_gelu_case(int device)
+    tensor<real32> values = dense_gelu_values()
+    GeluDerivatives host = gelu_derivatives(values, -1)
+    GeluDerivatives metal = gelu_derivatives(values, device)
+    bool finite = ((metal.first - metal.first) == 0.0).all() and ((metal.second - metal.second) == 0.0).all()
+    return finite and scaled_difference(metal.first, host.first) <= 0.000001 and scaled_difference(metal.second, host.second) <= 0.000001
+
+report("metal conv2d second derivative", second_order_case(0, args.device))
+report("metal conv relu second derivative", second_order_case(1, args.device))
+report("metal conv gelu second derivative", second_order_case(2, args.device))
+report("metal gelu second derivative", second_order_case(3, args.device))
+report("metal pooling second derivative", second_order_case(4, args.device))
+report("metal gelu dense second derivative", dense_gelu_case(args.device))

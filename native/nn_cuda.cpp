@@ -248,7 +248,7 @@ int launch_activation(
 
 } // namespace
 
-extern "C" std::int32_t nn_cuda_activation_inplace_f32(
+extern "C" std::int32_t nn_cuda_activation_inplace_f32_unchecked(
     void* value, std::int32_t activation) {
     if (qcore_native_abi_version() != QUIDRA_NATIVE_ABI_VERSION || !value)
         return 1;
@@ -274,3 +274,80 @@ extern "C" std::int32_t nn_cuda_activation_inplace_f32(
     return launch_activation(
         device, activation, pointer, qcore_tensor_element_count(value));
 }
+
+// The producers and this checker use Core's existing CUDA default stream.
+// The status is handed to Core after launch; normal calls never wait.
+extern "C" int nn_cuda_validate_output(const void* output, const char* operation,
+    const char* message) {
+    if (!output || qcore_tensor_backend(output) != QCORE_BACKEND_CUDA ||
+        !qcore_tensor_is_contiguous(output)) return 6;
+    const int dtype = qcore_tensor_dtype(output);
+    if (dtype != QCORE_DTYPE_FLOAT32 && dtype != QCORE_DTYPE_FLOAT64) return 6;
+    std::uint64_t count = qcore_tensor_element_count(output);
+    if (!count) return 0;
+    const auto device = qcore_tensor_device(output);
+    auto& api = cuda();
+    if (!api.ready || !qcore_device_activate(device)) return 6;
+    const auto base = qcore_tensor_device_handle_const(output);
+    const auto tensor_offset = qcore_tensor_device_offset_bytes(output);
+    if (!base || tensor_offset > std::numeric_limits<std::uint64_t>::max() - base) return 6;
+    std::uint64_t input = base + tensor_offset;
+    std::uint64_t handle = 0, offset = 0, slot = 0;
+    if (qcore_device_status_slot(device, &handle, &offset, &slot) != 0) return 6;
+    struct StatusOwner {
+        long long device; std::uint64_t slot; bool owned = true;
+        ~StatusOwner() { if (owned) qcore_device_status_release(device, slot); }
+    } owner{device, slot};
+    if (!handle || offset > std::numeric_limits<std::uint64_t>::max() - handle) return 6;
+    std::uint64_t status = handle + offset;
+    const std::string read = dtype == QCORE_DTYPE_FLOAT32 ?
+        "  mul.lo.u64 %rd8,%rd7,4;\n  add.u64 %rd9,%rd1,%rd8;\n"
+        "  ld.global.u32 %r5,[%rd9];\n  and.b32 %r6,%r5,0x7f800000;\n"
+        "  setp.eq.u32 %p2,%r6,0x7f800000;\n" :
+        "  mul.lo.u64 %rd8,%rd7,8;\n  add.u64 %rd9,%rd1,%rd8;\n"
+        "  ld.global.u64 %rd10,[%rd9];\n  and.b64 %rd11,%rd10,0x7ff0000000000000;\n"
+        "  setp.eq.u64 %p2,%rd11,0x7ff0000000000000;\n";
+    const std::string ptx =
+        ".version 7.0\n.target sm_52\n.address_size 64\n"
+        ".visible .entry nn_activation(\n  .param .u64 p_input,\n"
+        "  .param .u64 p_status,\n  .param .u64 p_count) {\n"
+        "  .reg .pred %p<4>;\n  .reg .b32 %r<12>;\n  .reg .b64 %rd<14>;\n"
+        "  mov.u32 %r1,%ctaid.x;\n  mov.u32 %r2,%ntid.x;\n  mov.u32 %r3,%tid.x;\n"
+        "  cvt.u64.u32 %rd4,%r1;\n  cvt.u64.u32 %rd5,%r2;\n  cvt.u64.u32 %rd6,%r3;\n"
+        "  mad.lo.u64 %rd7,%rd4,%rd5,%rd6;\n"
+        "  ld.param.u64 %rd1,[p_input];\n  ld.param.u64 %rd2,[p_status];\n"
+        "  ld.param.u64 %rd3,[p_count];\n  setp.ge.u64 %p1,%rd7,%rd3;\n"
+        "  @%p1 bra DONE;\n" + read +
+        "  @!%p2 bra DONE;\n  mov.u32 %r7,1;\n  atom.global.exch.b32 %r8,[%rd2],%r7;\n"
+        "DONE:\n  ret;\n}\n";
+    const auto function = kernel(device, 100 + dtype, ptx);
+    constexpr unsigned threads = 256;
+    const auto blocks = (count - 1) / threads + 1;
+    if (!function || blocks > std::numeric_limits<unsigned>::max()) return 6;
+    auto stream = reinterpret_cast<CudaApi::Stream>(static_cast<std::uintptr_t>(qcore_device_queue_handle(device)));
+    void* arguments[] = {&input, &status, &count};
+    if (api.launch_kernel(function, static_cast<unsigned>(blocks), 1, 1, threads,
+        1, 1, 0, stream, arguments, nullptr) != 0) return 6;
+    if (qcore_device_defer_status(device, slot, message) == 0) { owner.owned = false; return 0; }
+    std::uint32_t value = 0;
+    const bool waited = qcore_device_status_wait(device, slot, &value) == 0;
+    owner.owned = false; // wait already consumes/releases a valid slot.
+    if (waited && value) qcore_tensor_report_status(output, operation, value);
+    return 6;
+}
+
+extern "C" std::int32_t nn_cuda_activation_inplace_f32(void* value, std::int32_t activation) {
+    const auto result = nn_cuda_activation_inplace_f32_unchecked(value, activation);
+    if (result != 0) return result;
+    return nn_cuda_validate_output(value, "nn.activation", "package operation nn.activation produced a non-finite real32 value");
+}
+namespace {
+struct NnCudaValidationFlags {
+    NnCudaValidationFlags() {
+        qcore_op_register_flags("nn_cuda_activation_inplace_f32", QCORE_OP_VALIDATES_NONFINITE);
+        qcore_op_register_flags("nn_native_conv2d_cuda_f32", QCORE_OP_VALIDATES_NONFINITE);
+        qcore_op_register_flags("nn_native_nccl_collective", QCORE_OP_VALIDATES_NONFINITE);
+    }
+};
+NnCudaValidationFlags nn_cuda_validation_flags;
+} // namespace
