@@ -239,11 +239,12 @@ int launch_activation(
     auto stream = reinterpret_cast<CudaApi::Stream>(
         static_cast<std::uintptr_t>(qcore_device_queue_handle(device)));
     void* arguments[] = {&pointer, &count};
-    return api.launch_kernel(
+    if (api.launch_kernel(
                function, static_cast<unsigned>(blocks64), 1, 1,
-               threads, 1, 1, 0, stream, arguments, nullptr) == 0
-        ? 0
-        : 5;
+               threads, 1, 1, 0, stream, arguments, nullptr) != 0)
+        return 5;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 } // namespace
@@ -328,6 +329,7 @@ extern "C" int nn_cuda_validate_output(const void* output, const char* operation
     void* arguments[] = {&input, &status, &count};
     if (api.launch_kernel(function, static_cast<unsigned>(blocks), 1, 1, threads,
         1, 1, 0, stream, arguments, nullptr) != 0) return 6;
+    qcore_counter_note_dispatches(1);
     if (qcore_device_defer_status(device, slot, message) == 0) { owner.owned = false; return 0; }
     std::uint32_t value = 0;
     const bool waited = qcore_device_status_wait(device, slot, &value) == 0;

@@ -657,6 +657,16 @@ struct NcclState {
     std::uint64_t count{};
     std::size_t selected{nccl_no_selection};
     bool group_open{};
+    // NCCL accepts rank calls inside a group; only a successful group end
+    // enqueues them. Failed or cancelled groups publish no dispatches.
+    std::uint64_t pending_dispatches{};
+
+    void finish_dispatch_counts(bool enqueued) {
+        if (!qcore_counters_enabled()) return;
+        if (enqueued && pending_dispatches != 0)
+            qcore_counter_note_dispatches(pending_dispatches);
+        pending_dispatches = 0;
+    }
 
     void reset_pending() {
         expected = 0;
@@ -1006,17 +1016,20 @@ int conv2d_cuda_backward_f32(
             workspace, data_workspace, &zero, x_desc.value, dx) != cudnn_success) {
         return 115;
     }
+    qcore_counter_note_dispatches(1);
     if (api.convolution_backward_filter(
             session.value, &alpha, x_desc.value, x,
             y_desc.value, dy, conv_desc.value, filter_algorithm,
             workspace, filter_workspace, &zero, filter_desc.value, dfilter) != cudnn_success) {
         return 116;
     }
+    qcore_counter_note_dispatches(1);
     if (api.convolution_backward_bias(
             session.value, &alpha, y_desc.value, dy,
             &zero, bias_desc.value, dbias) != cudnn_success) {
         return 117;
     }
+    qcore_counter_note_dispatches(1);
     return 0;
 }
 
@@ -1245,11 +1258,13 @@ int cuda_conv_forward_no_bias(
     if (!scratch.allocate(geometry.device, workspace_size)) return 306;
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.convolution_forward(
+    if (api.convolution_forward(
                session.value, &alpha, input_desc.value, x,
                filter_desc.value, filter, convolution_desc.value, algorithm,
-               scratch.pointer, workspace_size, &zero, output_desc.value, y) ==
-           cudnn_success ? 0 : 307;
+               scratch.pointer, workspace_size, &zero, output_desc.value, y) !=
+           cudnn_success) return 307;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int cuda_conv_backward_data_only(
@@ -1297,11 +1312,13 @@ int cuda_conv_backward_data_only(
     if (!scratch.allocate(geometry.device, workspace_size)) return 316;
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.convolution_backward_data(
+    if (api.convolution_backward_data(
                session.value, &alpha, filter_desc.value, filter,
                output_desc.value, dy, convolution_desc.value, algorithm,
-               scratch.pointer, workspace_size, &zero, input_desc.value, dx) ==
-           cudnn_success ? 0 : 317;
+               scratch.pointer, workspace_size, &zero, input_desc.value, dx) !=
+           cudnn_success) return 317;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int cuda_conv_backward_filter_only(
@@ -1349,11 +1366,13 @@ int cuda_conv_backward_filter_only(
     if (!scratch.allocate(geometry.device, workspace_size)) return 326;
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.convolution_backward_filter(
+    if (api.convolution_backward_filter(
                session.value, &alpha, input_desc.value, x,
                output_desc.value, dy, convolution_desc.value, algorithm,
-               scratch.pointer, workspace_size, &zero, filter_desc.value, dw) ==
-           cudnn_success ? 0 : 327;
+               scratch.pointer, workspace_size, &zero, filter_desc.value, dw) !=
+           cudnn_success) return 327;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int cuda_bias_broadcast(
@@ -1408,10 +1427,12 @@ int cuda_bias_broadcast(
 
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.add_tensor(
+    if (api.add_tensor(
                session.value, &alpha, bias_desc.value, source,
-               &zero, output_desc.value, destination) == cudnn_success
-        ? 0 : 336;
+               &zero, output_desc.value, destination) != cudnn_success)
+        return 336;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int conv2d_cuda_dx_backward_f32(
@@ -2992,10 +3013,12 @@ extern "C" std::int32_t nn_native_nccl_commit() {
 
 extern "C" std::int32_t nn_native_nccl_cancel() {
     auto& state = nccl_state;
+    bool submitted = false;
     if (state.group_open) {
-        (void)nccl().group_end();
+        submitted = nccl().group_end() == nccl_success;
         state.group_open = false;
     }
+    state.finish_dispatch_counts(submitted);
     state.reset_pending();
     return 0;
 }
@@ -3008,6 +3031,7 @@ extern "C" std::int32_t nn_native_nccl_group_start() {
     }
     if (nccl().group_start() != nccl_success) return 2;
     state.group_open = true;
+    if (qcore_counters_enabled()) state.pending_dispatches = 0;
     return 0;
 }
 
@@ -3038,12 +3062,15 @@ extern "C" std::int32_t nn_native_nccl_all_reduce(
     if (!pointer) return 3;
     const int datatype =
         state.dtype == QCORE_DTYPE_FLOAT32 ? nccl_float32 : nccl_float64;
-    return nccl().all_reduce(
+    if (nccl().all_reduce(
                pointer, pointer, static_cast<std::size_t>(state.count),
                datatype, nccl_sum, set.communicators[rank], nullptr) ==
-               nccl_success
-        ? 0
-        : 4;
+               nccl_success) {
+        if (state.count != 0 && qcore_counters_enabled())
+            ++state.pending_dispatches;
+        return 0;
+    }
+    return 4;
 }
 
 extern "C" std::int32_t nn_native_nccl_group_end() {
@@ -3051,6 +3078,7 @@ extern "C" std::int32_t nn_native_nccl_group_end() {
     if (!state.group_open) return 1;
     const auto status = nccl().group_end();
     state.group_open = false;
+    state.finish_dispatch_counts(status == nccl_success);
     state.reset_pending();
     return status == nccl_success ? 0 : 2;
 }
@@ -3092,9 +3120,12 @@ int enqueue_prepared_nccl_rank(const PreparedNcclRank& rank,
     // NCCL's null stream is the current device's default stream. Keep the
     // original per-rank activation; tensor handles are no longer touched here.
     if (!qcore_device_activate(rank.device)) return 2;
-    return nccl().all_reduce(rank.pointer, rank.pointer, count, datatype,
-                            nccl_sum, rank.communicator, nullptr) == nccl_success
-        ? 0 : 4;
+    if (nccl().all_reduce(rank.pointer, rank.pointer, count, datatype,
+                         nccl_sum, rank.communicator, nullptr) != nccl_success)
+        return 4;
+    if (count != 0 && qcore_counters_enabled())
+        ++nccl_state.pending_dispatches;
+    return 0;
 }
 
 
@@ -3103,7 +3134,7 @@ int enqueue_prepared_nccl_rank(const PreparedNcclRank& rank,
     std::fprintf(stderr,
         "Quidra runtime error[GPU_ASYNC]: operation owner unknown: %s\n", detail);
     std::fflush(stderr);
-    std::_Exit(101);
+    qcore_runtime_immediate_failure_exit();
 }
 
 void abort_selected_nccl_group() {
@@ -3182,6 +3213,7 @@ extern "C" std::int32_t nn_native_nccl_collective(void* values) {
     }
     const auto end_status = nccl().group_end();
     nccl_state.group_open = false;
+    nccl_state.finish_dispatch_counts(end_status == nccl_success);
     if (end_status != nccl_success) {
         abort_selected_nccl_group();
         group.open = false;
@@ -3407,11 +3439,13 @@ std::int32_t conv2d_cuda_f32_impl(
             &zero, y_desc.value, y) != cudnn_success) {
         return 12;
     }
+    qcore_counter_note_dispatches(1);
     if (api.add_tensor(
             session.value, &alpha, bias_desc.value, b,
             &one, y_desc.value, y) != cudnn_success) {
         return 13;
     }
+    qcore_counter_note_dispatches(1);
 
 
     const Conv2dAutogradMetadata metadata{
