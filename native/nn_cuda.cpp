@@ -303,11 +303,11 @@ extern "C" int nn_cuda_validate_output(const void* output, const char* operation
     std::uint64_t status = handle + offset;
     const std::string read = dtype == QCORE_DTYPE_FLOAT32 ?
         "  mul.lo.u64 %rd8,%rd7,4;\n  add.u64 %rd9,%rd1,%rd8;\n"
-        "  ld.global.u32 %r5,[%rd9];\n  and.b32 %r6,%r5,0x7f800000;\n"
-        "  setp.eq.u32 %p2,%r6,0x7f800000;\n" :
+        "  ld.global.u32 %r5,[%rd9];\n  and.b32 %r6,%r5,0x7fffffff;\n"
+        "  setp.gt.u32 %p2,%r6,0x7f800000;\n" :
         "  mul.lo.u64 %rd8,%rd7,8;\n  add.u64 %rd9,%rd1,%rd8;\n"
-        "  ld.global.u64 %rd10,[%rd9];\n  and.b64 %rd11,%rd10,0x7ff0000000000000;\n"
-        "  setp.eq.u64 %p2,%rd11,0x7ff0000000000000;\n";
+        "  ld.global.u64 %rd10,[%rd9];\n  and.b64 %rd11,%rd10,0x7fffffffffffffff;\n"
+        "  setp.gt.u64 %p2,%rd11,0x7ff0000000000000;\n";
     const std::string ptx =
         ".version 7.0\n.target sm_52\n.address_size 64\n"
         ".visible .entry nn_activation(\n  .param .u64 p_input,\n"
@@ -341,14 +341,14 @@ extern "C" int nn_cuda_validate_output(const void* output, const char* operation
 extern "C" std::int32_t nn_cuda_activation_inplace_f32(void* value, std::int32_t activation) {
     const auto result = nn_cuda_activation_inplace_f32_unchecked(value, activation);
     if (result != 0) return result;
-    return nn_cuda_validate_output(value, "nn.activation", "package operation nn.activation produced a non-finite real32 value");
+    return nn_cuda_validate_output(value, "nn.activation", "package operation nn.activation produced a NaN real32 value");
 }
 namespace {
 struct NnCudaValidationFlags {
     NnCudaValidationFlags() {
-        qcore_op_register_flags("nn_cuda_activation_inplace_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_conv2d_cuda_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_nccl_collective", QCORE_OP_VALIDATES_NONFINITE);
+        qcore_op_register_flags("nn_cuda_activation_inplace_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_conv2d_cuda_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_nccl_collective", QCORE_OP_VALIDATES_NAN);
     }
 };
 NnCudaValidationFlags nn_cuda_validation_flags;
