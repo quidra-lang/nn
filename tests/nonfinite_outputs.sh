@@ -11,17 +11,12 @@ export QUIDRA_CACHE_DIR="$TMP/cache"
 printf 'finite softmax output true
 ' > "$TMP/expected"
 diff -u "$TMP/expected" "$TMP/internal.out"
-set +e
+# Infinity remains observable, unlike NaN. Exercise CPU and device paths.
 "$QUIDRA" "$ROOT/tests/nonfinite_outputs.qui" --device "$DEVICE" > "$TMP/overflow.out" 2> "$TMP/overflow.err"
-failure_status=$?
-set -e
-if [[ "$failure_status" -ne 101 ]]; then
-    echo "expected NN nonfinite output failure with status 101, got $failure_status" >&2
-    cat "$TMP/overflow.err" >&2; exit 1
-fi
-if [[ "$DEVICE" == -1 ]]; then
-    grep -q 'NONFINITE_RESULT' "$TMP/overflow.err"
-else
-    grep -Fq 'Quidra runtime error[TENSOR]' "$TMP/overflow.err"
-    grep -q 'produced a non-finite real32 value' "$TMP/overflow.err"
+printf 'infinite relu output true\n' > "$TMP/expected-infinity"
+diff -u "$TMP/expected-infinity" "$TMP/overflow.out"
+if [[ -s "$TMP/overflow.err" ]]; then
+    echo "unexpected NN infinity diagnostics:" >&2
+    cat "$TMP/overflow.err" >&2
+    exit 1
 fi

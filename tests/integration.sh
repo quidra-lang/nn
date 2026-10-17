@@ -167,25 +167,33 @@ if [[ "$activation_passed_count" -ne "$activation_expected_count" ]] ||
     exit 1
 fi
 
-# Inputs that formerly produced infinity/NaN must fail under the finite-value
-# contract; the finite activation/gradient checks above keep their reports.
+# Signed infinity is valid; 0/0 and indeterminate activation results are not.
+# Run each case independently so a failure cannot mask later edge cases.
 for exceptional_case in {1..20}; do
     set +e
     QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$ROOT/tests/native_activations.qui" \
         --exceptional_case "$exceptional_case" > "$TMP/activation-invalid.out" 2> "$TMP/activation-invalid.err"
     activation_invalid_status=$?
     set -e
+    if [[ "$exceptional_case" -le 2 ]]; then
+        expected_inf="inf"
+        [[ "$exceptional_case" != 2 ]] || expected_inf="-inf"
+        if [[ "$activation_invalid_status" -ne 0 || "$(cat "$TMP/activation-invalid.out")" != "$expected_inf" || -s "$TMP/activation-invalid.err" ]]; then
+            echo "NN infinity activation case $exceptional_case was not preserved:" >&2
+            cat "$TMP/activation-invalid.out" "$TMP/activation-invalid.err" >&2
+            exit 1
+        fi
+        continue
+    fi
     if [[ "$activation_invalid_status" -ne 101 || -s "$TMP/activation-invalid.out" ]]; then
-        echo "NN invalid activation case $exceptional_case did not fail with status 101 and empty output" >&2
+        echo "NN NaN activation case $exceptional_case did not fail with status 101 and empty output" >&2
         cat "$TMP/activation-invalid.err" >&2
         exit 1
     fi
-    if [[ "$exceptional_case" -ge 6 && $((exceptional_case % 2)) -eq 0 ]]; then
-        grep -q 'REAL_OVERFLOW' "$TMP/activation-invalid.err"
-    elif [[ "$exceptional_case" -ge 4 ]]; then
-        grep -q 'NONFINITE_RESULT' "$TMP/activation-invalid.err"
-    else
+    if [[ "$exceptional_case" -eq 3 ]]; then
         grep -q 'DIVISION_BY_ZERO' "$TMP/activation-invalid.err"
+    else
+        grep -q 'NONFINITE_RESULT' "$TMP/activation-invalid.err"
     fi
 done
 

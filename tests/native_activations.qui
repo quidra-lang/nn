@@ -38,9 +38,8 @@ void report(string name, bool passed)
     print("{name} {passed}{NL}")
 
 // Finite special values (signed zero and clamp saturation), followed by
-// uniform values in [-9, 9]. Non-finite construction and GELU overflow are
-// tested separately as fatal errors by exceptional_case; they cannot be
-// legal public inputs/results under the finite-value contract.
+// uniform values in [-9, 9]. Signed infinities remain valid, while 0/0
+// and NaN-producing GELU paths are rejected in exceptional_case.
 tensor<real32> activation_inputs(int random_count, bool non_finite)
     real32 zero = real32(0)
     real32[] special = [zero, real32(-0.0), real32(1), real32(-1), real32(0.5), real32(-0.5), real32(3), real32(-3), real32(5.9), real32(-5.9), real32(30), real32(-30), real32(1000), real32(-1000), real32(0.000001), real32(-0.000001)]
@@ -59,7 +58,7 @@ tensor<real32> activation_inputs(int random_count, bool non_finite)
             values[index] = random_values[index - int(len(special))].item()
     return values
 
-// Elementwise bit equality, treating NaN as equal to NaN.
+// Elementwise equality for valid real values. NaN is rejected before this check.
 bool identical(tensor<real32> left, tensor<real32> right)
     tensor<real32> a = left.untrack().cpu()
     tensor<real32> b = right.untrack().cpu()
