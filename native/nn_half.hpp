@@ -36,7 +36,14 @@ inline std::uint32_t widen(std::uint16_t raw, bool bfloat) {
     return sign | (static_cast<std::uint32_t>(exponent32 + 127) << 23) | ((fraction & 1023u) << 13);
 }
 inline bool narrow(std::uint32_t raw, bool bfloat, std::uint16_t& result) {
-    if ((raw & 0x7f800000u) == 0x7f800000u) return false;
+    const auto magnitude = raw & 0x7fffffffu;
+    if (magnitude > 0x7f800000u) return false; // NaN, including signaling payloads.
+    if (magnitude == 0x7f800000u) {
+        // Preserve an existing infinity; finite narrowing overflow remains checked below.
+        result = static_cast<std::uint16_t>(((raw >> 16) & 0x8000u) |
+                                            (bfloat ? 0x7f80u : 0x7c00u));
+        return true;
+    }
     if (bfloat) {
         const auto rounded = raw + 0x7fffu + ((raw >> 16) & 1u);
         result = static_cast<std::uint16_t>(rounded >> 16);

@@ -21,13 +21,19 @@ int main(int argc, char** argv) {
                 std::bit_cast<std::uint32_t>(actual) != std::bit_cast<std::uint32_t>(expected)) {
                 std::fprintf(stderr, "widen mismatch format=%d bits=%u\n", bfloat, raw); return 1;
             }
+            if (!std::isnan(expected)) {
+                std::uint16_t restored = 0;
+                if (!nn_half::narrow(nn_half::bits(actual), bfloat, restored) || restored != raw) {
+                    std::fprintf(stderr, "roundtrip mismatch format=%d bits=%u\n", bfloat, raw); return 1;
+                }
+            }
         }
         for (auto raw = begin; raw < end; ++raw) {
             const float source = std::bit_cast<float>(static_cast<std::uint32_t>(raw));
             const auto expected = quidra::abi::half::round_to(static_cast<double>(source), format);
             std::uint16_t actual = 0;
             const bool valid = nn_half::narrow(static_cast<std::uint32_t>(raw), bfloat, actual);
-            const bool expected_valid = std::isfinite(source) && quidra::abi::half::is_finite(expected, format);
+            const bool expected_valid = !std::isnan(source) && (std::isinf(source) || quidra::abi::half::is_finite(expected, format));
             if (valid != expected_valid || (valid && actual != expected)) {
                 std::fprintf(stderr, "narrow mismatch format=%d bits=%llu\n", bfloat, static_cast<unsigned long long>(raw)); return 1;
             }
