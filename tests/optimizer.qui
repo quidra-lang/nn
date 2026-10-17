@@ -256,8 +256,8 @@ bool same_lines(string[] left, string[] right)
     return true
 
 bool | error same_state(Model &left, nn.Adam<Model> left_optimizer, Model &right, nn.Adam<Model> right_optimizer, string scratch)
-    string[] x = try checkpoint_lines(&left, left_optimizer, "{scratch}/optimizer-left.state")
-    string[] y = try checkpoint_lines(&right, right_optimizer, "{scratch}/optimizer-right.state")
+    string[] x = try checkpoint_lines(&left, left_optimizer, "{scratch}/optimizer-left.qnn")
+    string[] y = try checkpoint_lines(&right, right_optimizer, "{scratch}/optimizer-right.qnn")
     return same_lines(x, y)
 
 // update() consumes the gradients: none is left afterwards, and an update
@@ -273,9 +273,9 @@ void | error consume_checks(Placement device, string scratch)
     .adam_after.a.replace(adam_model.a.raw())
     .adam_after.b.replace(adam_model.b.raw())
     .adam_after.c.replace(adam_model.c.raw())
-    string[] before = try checkpoint_lines(&adam_model, adam, "{scratch}/optimizer-idle-before.state")
+    string[] before = try checkpoint_lines(&adam_model, adam, "{scratch}/optimizer-idle-before.qnn")
     try .adam.update()
-    string[] after = try checkpoint_lines(&adam_model, adam, "{scratch}/optimizer-idle-after.state")
+    string[] after = try checkpoint_lines(&adam_model, adam, "{scratch}/optimizer-idle-after.qnn")
     bool idle = same_values(adam_model, adam_after) and same_lines(before, after)
 
     Model sgd_model = make_model(device)
@@ -463,7 +463,7 @@ void | error gradient_failure_checks(Placement device, string scratch)
     .model.c.replace(kept)
     tensor<real32> a = .model.a.track()
     math.sum(a * gradient_a(100, device)).backward(&model)
-    string[] before = try checkpoint_lines(&model, adam, "{scratch}/optimizer-before.state")
+    string[] before = try checkpoint_lines(&model, adam, "{scratch}/optimizer-before.qnn")
     tensor<real32> a_before = model.a.raw()
     bool rejected = false
     match .adam.update()
@@ -471,7 +471,7 @@ void | error gradient_failure_checks(Placement device, string scratch)
             rejected = false
         error
             rejected = true
-    string[] after = try checkpoint_lines(&model, adam, "{scratch}/optimizer-after.state")
+    string[] after = try checkpoint_lines(&model, adam, "{scratch}/optimizer-after.qnn")
     bool unchanged = (
         rejected
         and same_lines(before, after)
@@ -526,10 +526,10 @@ void | error tied_checks(Placement device)
 void | error step_checks(Placement device, string scratch)
     Model model = make_model(device)
     auto adam = try nn.Adam(&model, rate = 0.01)
-    bool fresh = counted(try steps_of(try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")), [0, 0, 0])
+    bool fresh = counted(try steps_of(try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.qnn")), [0, 0, 0])
     backward(&model, 110, device)
     try .adam.update()
-    string[] first = try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")
+    string[] first = try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.qnn")
     bool uniform = fresh and counted(try steps_of(first), [1, 1, 1])
 
     tensor<real32> b_before = model.b.raw()
@@ -539,7 +539,7 @@ void | error step_checks(Placement device, string scratch)
     math.sum(a * gradient_a(120, device)).backward(&model)
     math.sum(c * gradient_c(120, device)).backward(&model)
     try .adam.update()
-    string[] second = try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")
+    string[] second = try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.qnn")
     bool skipped = (
         identical32(model.b.raw(), b_before)
         and not identical32(model.a.raw(), a_before)
@@ -551,14 +551,14 @@ void | error step_checks(Placement device, string scratch)
 
     backward(&model, 130, device)
     try .adam.update()
-    skipped = skipped and counted(try steps_of(try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.state")), [3, 2, 3])
+    skipped = skipped and counted(try steps_of(try checkpoint_lines(&model, adam, "{scratch}/optimizer-steps.qnn")), [3, 2, 3])
 
     Model every = make_model(device)
     auto every_adam = try nn.Adam(&every, rate = 0.01)
     for 0 <= nat step < 5
         backward(&every, 140 + int(step) * 10, device)
         try .every_adam.update()
-    uniform = uniform and counted(try steps_of(try checkpoint_lines(&every, every_adam, "{scratch}/optimizer-steps.state")), [5, 5, 5])
+    uniform = uniform and counted(try steps_of(try checkpoint_lines(&every, every_adam, "{scratch}/optimizer-steps.qnn")), [5, 5, 5])
     report("adam skips a parameter without a gradient", skipped)
     report("adam step counts equal a global count when every parameter has a gradient", uniform)
     return

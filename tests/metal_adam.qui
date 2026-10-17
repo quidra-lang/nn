@@ -365,9 +365,9 @@ void | error state_checks(int device, int steps, string scratch)
         train_step(&again, &again_optimizer, gradients, device)
         replica_step(&replica, gradients, rate, device)
 
-        AdamState host_state = try saved_state(&host, host_optimizer, "{scratch}/adam_host.state")
-        AdamState metal_state = try saved_state(&metal, metal_optimizer, "{scratch}/adam_metal.state")
-        AdamState again_state = try saved_state(&again, again_optimizer, "{scratch}/adam_again.state")
+        AdamState host_state = try saved_state(&host, host_optimizer, "{scratch}/adam_host.qnn")
+        AdamState metal_state = try saved_state(&metal, metal_optimizer, "{scratch}/adam_metal.qnn")
+        AdamState again_state = try saved_state(&again, again_optimizer, "{scratch}/adam_again.qnn")
 
         // Step counts and bias corrections are host float64 values: exact.
         // Every Parameter has a gradient at every step, so each one's count

@@ -87,8 +87,8 @@ void checks16(int64 device, string scratch)
     report("real16 next forward casts updated original",
         next_weight_matches16(next_prediction.untrack().cpu()[0].item(), model.weight.raw().cpu()[0].item()))
 
-    string saved = "{scratch}/master-16.state"
-    string control = "{scratch}/master-16-reference.state"
+    string saved = "{scratch}/master-16.qnn"
+    string control = "{scratch}/master-16-reference.qnn"
     nn.checkpoint(&model, optimizer, saved)
     nn.checkpoint(&reference, reference_optimizer, control)
     string saved_bytes = file.read(saved)
@@ -109,10 +109,10 @@ void checks16(int64 device, string scratch)
     math.sum(.resumed.forward(tiny)).backward(&resumed)
     .optimizer.update()
     .resumed_optimizer.update()
-    nn.checkpoint(&model, optimizer, "{scratch}/master-16-continued.state")
-    nn.checkpoint(&resumed, resumed_optimizer, "{scratch}/master-16-resumed.state")
-    string continued_bytes = file.read("{scratch}/master-16-continued.state")
-    string resumed_bytes = file.read("{scratch}/master-16-resumed.state")
+    nn.checkpoint(&model, optimizer, "{scratch}/master-16-continued.qnn")
+    nn.checkpoint(&resumed, resumed_optimizer, "{scratch}/master-16-resumed.qnn")
+    string continued_bytes = file.read("{scratch}/master-16-continued.qnn")
+    string resumed_bytes = file.read("{scratch}/master-16-resumed.qnn")
     report("real16 checkpoint resumes Adam exactly", continued_bytes == resumed_bytes)
 
 void checks16b(int64 device, string scratch)
@@ -153,8 +153,8 @@ void checks16b(int64 device, string scratch)
     report("real16b next forward casts updated original",
         next_weight_matches16b(next_prediction.untrack().cpu()[0].item(), model.weight.raw().cpu()[0].item()))
 
-    string saved = "{scratch}/master-16b.state"
-    string control = "{scratch}/master-16b-reference.state"
+    string saved = "{scratch}/master-16b.qnn"
+    string control = "{scratch}/master-16b-reference.qnn"
     nn.checkpoint(&model, optimizer, saved)
     nn.checkpoint(&reference, reference_optimizer, control)
     string saved_bytes = file.read(saved)
@@ -175,10 +175,10 @@ void checks16b(int64 device, string scratch)
     math.sum(.resumed.forward(tiny)).backward(&resumed)
     .optimizer.update()
     .resumed_optimizer.update()
-    nn.checkpoint(&model, optimizer, "{scratch}/master-16b-continued.state")
-    nn.checkpoint(&resumed, resumed_optimizer, "{scratch}/master-16b-resumed.state")
-    string continued_bytes = file.read("{scratch}/master-16b-continued.state")
-    string resumed_bytes = file.read("{scratch}/master-16b-resumed.state")
+    nn.checkpoint(&model, optimizer, "{scratch}/master-16b-continued.qnn")
+    nn.checkpoint(&resumed, resumed_optimizer, "{scratch}/master-16b-resumed.qnn")
+    string continued_bytes = file.read("{scratch}/master-16b-continued.qnn")
+    string resumed_bytes = file.read("{scratch}/master-16b-resumed.qnn")
     report("real16b checkpoint resumes Adam exactly", continued_bytes == resumed_bytes)
 
 checks16(args.device, args.scratch)

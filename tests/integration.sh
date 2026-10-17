@@ -270,11 +270,11 @@ fi
 # results must be bitwise the same for every thread count.
 QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" build "$ROOT/tests/cpu_threads.qui" \
     -o "$TMP/cpu-threads"
-QUIDRA_CPU_THREADS=1 "$TMP/cpu-threads" "$TMP/cpu-threads-1.state"
-QUIDRA_CPU_THREADS=3 "$TMP/cpu-threads" "$TMP/cpu-threads-3.state"
-"$TMP/cpu-threads" "$TMP/cpu-threads-all.state"
-if ! cmp -s "$TMP/cpu-threads-1.state" "$TMP/cpu-threads-3.state" ||
-   ! cmp -s "$TMP/cpu-threads-1.state" "$TMP/cpu-threads-all.state"; then
+QUIDRA_CPU_THREADS=1 "$TMP/cpu-threads" "$TMP/cpu-threads-1.qnn"
+QUIDRA_CPU_THREADS=3 "$TMP/cpu-threads" "$TMP/cpu-threads-3.qnn"
+"$TMP/cpu-threads" "$TMP/cpu-threads-all.qnn"
+if ! cmp -s "$TMP/cpu-threads-1.qnn" "$TMP/cpu-threads-3.qnn" ||
+   ! cmp -s "$TMP/cpu-threads-1.qnn" "$TMP/cpu-threads-all.qnn"; then
     echo "NN CPU kernels depend on the thread count" >&2
     exit 1
 fi

@@ -49,7 +49,7 @@ Model make_model()
 Model model = make_model()
 nn.Parameter<real32> &first_identity = &model.layers[0].weight
 nn.State<real32> &state_identity = &model.layers[0].running
-nn.save(model, path = "$TMP/model-base.dnn")
+nn.save(model, path = "$TMP/model-base.qnn")
 
 .model.layers[0].weight.replace(tensor.zeros<real32>([1]))
 .model.layers[0].running.replace(tensor.zeros<real32>([1]))
@@ -57,7 +57,7 @@ nn.save(model, path = "$TMP/model-base.dnn")
 .model.layers[1].running.replace(tensor.zeros<real32>([1]))
 .model.scale.replace(tensor.zeros<real64>([1]))
 .model.total.replace(tensor.zeros<real64>([1]))
-nn.load(&model, path = "$TMP/model-base.dnn")
+nn.load(&model, path = "$TMP/model-base.qnn")
 print(model.layers[0].weight.raw()[0].item() == real32(2))
 print(NL)
 print(model.layers[0].running.raw()[0].item() == real32(3))
@@ -82,7 +82,7 @@ math.sum(first_weight * second_weight).backward(&model)
 tensor<real64> scale = .model.scale.track()
 math.sum(scale * scale).backward(&model)
 .optimizer.update()
-nn.checkpoint(&model, optimizer, path = "$TMP/checkpoint-base.dnn")
+nn.checkpoint(&model, optimizer, path = "$TMP/checkpoint-base.qnn")
 QUI
 
 normal_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/make-state.qui")"
@@ -109,44 +109,44 @@ def changed(document, name, transform):
     transform(item)
     save(name, encode(item))
 
-model = decode(root / "model-base.dnn")
+model = decode(root / "model-base.qnn")
 text = encode(model)
-save("model-wrong-magic.dnn", text.replace("QUIDRA_DNN_STATE", "BROKEN_MAGIC", 1))
-save("model-unsupported-version.dnn", text.replace("\n5\n", "\n999\n", 1))
-save("model-prep-version.dnn", text.replace("\n5\n", "\n4\n", 1))
-changed(model, "model-wrong-root.dnn", lambda d: d.update(root="OtherModel"))
-changed(model, "model-wrong-kind.dnn", lambda d: d["entries"][0].update(kind="State"))
-changed(model, "model-wrong-field-type.dnn", lambda d: d["entries"][0].update(kind="Unknown"))
-changed(model, "model-wrong-dtype.dnn", lambda d: d["entries"][0].update(dtype="real64"))
-changed(model, "model-wrong-path.dnn", lambda d: d["entries"][0].update(path="wrong.path"))
-changed(model, "model-wrong-rank.dnn", lambda d: d["entries"][0].update(shape=[]))
-changed(model, "model-wrong-shape.dnn", lambda d: d["entries"][0].update(shape=[2], values=d["entries"][0]["values"] * 2))
-x = text.splitlines(); x[10] = "0"; save("model-wrong-count.dnn", "\n".join(seal(x[:-2])) + "\n")
-changed(model, "model-oversized-shape.dnn", lambda d: d["entries"][0].update(shape=[9223372036854775807], values=[]))
-save("model-truncated.dnn", "\n".join(text.splitlines()[:-1]) + "\n")
-save("model-corrupt-checksum.dnn", "\n".join(text.splitlines()[:-1] + ["0:0"]) + "\n")
-save("model-trailing-data.dnn", text + "TRAILING_DATA\n")
-checkpoint = decode(root / "checkpoint-base.dnn")
+save("model-wrong-magic.qnn", text.replace("QUIDRA_DNN_STATE", "BROKEN_MAGIC", 1))
+save("model-unsupported-version.qnn", text.replace("\n5\n", "\n999\n", 1))
+save("model-prep-version.qnn", text.replace("\n5\n", "\n4\n", 1))
+changed(model, "model-wrong-root.qnn", lambda d: d.update(root="OtherModel"))
+changed(model, "model-wrong-kind.qnn", lambda d: d["entries"][0].update(kind="State"))
+changed(model, "model-wrong-field-type.qnn", lambda d: d["entries"][0].update(kind="Unknown"))
+changed(model, "model-wrong-dtype.qnn", lambda d: d["entries"][0].update(dtype="real64"))
+changed(model, "model-wrong-path.qnn", lambda d: d["entries"][0].update(path="wrong.path"))
+changed(model, "model-wrong-rank.qnn", lambda d: d["entries"][0].update(shape=[]))
+changed(model, "model-wrong-shape.qnn", lambda d: d["entries"][0].update(shape=[2], values=d["entries"][0]["values"] * 2))
+x = text.splitlines(); x[10] = "0"; save("model-wrong-count.qnn", "\n".join(seal(x[:-2])) + "\n")
+changed(model, "model-oversized-shape.qnn", lambda d: d["entries"][0].update(shape=[9223372036854775807], values=[]))
+save("model-truncated.qnn", "\n".join(text.splitlines()[:-1]) + "\n")
+save("model-corrupt-checksum.qnn", "\n".join(text.splitlines()[:-1] + ["0:0"]) + "\n")
+save("model-trailing-data.qnn", text + "TRAILING_DATA\n")
+checkpoint = decode(root / "checkpoint-base.qnn")
 text = encode(checkpoint)
-save("checkpoint-wrong-optimizer.dnn", text.replace("\nAdam\n", "\nSGD\n", 1))
-x = text.splitlines(); adam = x.index("Adam"); x[adam + 5] = str(int(x[adam + 5]) + 1); save("checkpoint-wrong-binding.dnn", "\n".join(seal(x[:-2])) + "\n")
-save("checkpoint-prep-version.dnn", text.replace("\n5\n", "\n4\n", 1))
+save("checkpoint-wrong-optimizer.qnn", text.replace("\nAdam\n", "\nSGD\n", 1))
+x = text.splitlines(); adam = x.index("Adam"); x[adam + 5] = str(int(x[adam + 5]) + 1); save("checkpoint-wrong-binding.qnn", "\n".join(seal(x[:-2])) + "\n")
+save("checkpoint-prep-version.qnn", text.replace("\n5\n", "\n4\n", 1))
 step = text.splitlines().index("AdamStep")
-x = text.splitlines(); x[step] = "AdamSteps"; save("checkpoint-wrong-step-kind.dnn", "\n".join(seal(x[:-2])) + "\n")
-changed(checkpoint, "checkpoint-wrong-step-path.dnn", lambda d: d["slots"][0].update(path="wrong.step.path"))
-changed(checkpoint, "checkpoint-negative-step.dnn", lambda d: d["slots"][0]["step"].__setitem__(0, "-1"))
-changed(checkpoint, "checkpoint-zero-step-correction.dnn", lambda d: d["slots"][0]["step"].__setitem__(0, "0"))
-changed(checkpoint, "checkpoint-step-correction-range.dnn", lambda d: d["slots"][0]["step"].__setitem__(1, "1.5"))
-x = text.splitlines(); del x[step:step + 5]; save("checkpoint-missing-step.dnn", "\n".join(seal(x[:-2])) + "\n")
+x = text.splitlines(); x[step] = "AdamSteps"; save("checkpoint-wrong-step-kind.qnn", "\n".join(seal(x[:-2])) + "\n")
+changed(checkpoint, "checkpoint-wrong-step-path.qnn", lambda d: d["slots"][0].update(path="wrong.step.path"))
+changed(checkpoint, "checkpoint-negative-step.qnn", lambda d: d["slots"][0]["step"].__setitem__(0, "-1"))
+changed(checkpoint, "checkpoint-zero-step-correction.qnn", lambda d: d["slots"][0]["step"].__setitem__(0, "0"))
+changed(checkpoint, "checkpoint-step-correction-range.qnn", lambda d: d["slots"][0]["step"].__setitem__(1, "1.5"))
+x = text.splitlines(); del x[step:step + 5]; save("checkpoint-missing-step.qnn", "\n".join(seal(x[:-2])) + "\n")
 for version in ["2", "3"]:
-    save("checkpoint-legacy-v" + version + ".dnn", encode(checkpoint, version))
-changed(checkpoint, "checkpoint-wrong-moment-dtype.dnn", lambda d: d["slots"][0]["first"].update(dtype="real64"))
-changed(checkpoint, "checkpoint-wrong-binding-path.dnn", lambda d: d["slots"][0]["first"].update(path="wrong.optimizer.path"))
-changed(checkpoint, "checkpoint-wrong-moment-shape.dnn", lambda d: d["slots"][0]["first"].update(shape=[2], values=d["slots"][0]["first"]["values"] * 2))
-changed(checkpoint, "checkpoint-oversized-moment-shape.dnn", lambda d: d["slots"][0]["first"].update(shape=[9223372036854775807], values=[]))
-save("checkpoint-truncated.dnn", "\n".join(text.splitlines()[:-1]) + "\n")
-save("checkpoint-corrupt-checksum.dnn", "\n".join(text.splitlines()[:-1] + ["0:0"]) + "\n")
-save("checkpoint-trailing-data.dnn", text + "TRAILING_DATA\n")
+    save("checkpoint-legacy-v" + version + ".qnn", encode(checkpoint, version))
+changed(checkpoint, "checkpoint-wrong-moment-dtype.qnn", lambda d: d["slots"][0]["first"].update(dtype="real64"))
+changed(checkpoint, "checkpoint-wrong-binding-path.qnn", lambda d: d["slots"][0]["first"].update(path="wrong.optimizer.path"))
+changed(checkpoint, "checkpoint-wrong-moment-shape.qnn", lambda d: d["slots"][0]["first"].update(shape=[2], values=d["slots"][0]["first"]["values"] * 2))
+changed(checkpoint, "checkpoint-oversized-moment-shape.qnn", lambda d: d["slots"][0]["first"].update(shape=[9223372036854775807], values=[]))
+save("checkpoint-truncated.qnn", "\n".join(text.splitlines()[:-1]) + "\n")
+save("checkpoint-corrupt-checksum.qnn", "\n".join(text.splitlines()[:-1] + ["0:0"]) + "\n")
+save("checkpoint-trailing-data.qnn", text + "TRAILING_DATA\n")
 PY
 
 write_model_failure_program() {
@@ -217,9 +217,9 @@ for entry in \
 do
     case="${entry%%:*}"
     code="${entry#*:}"
-    before="$TMP/model-$case-before.dnn"
-    after="$TMP/model-$case-after.dnn"
-    write_model_failure_program "$TMP/model-$case.dnn" "$before" "$after"
+    before="$TMP/model-$case-before.qnn"
+    after="$TMP/model-$case-after.qnn"
+    write_model_failure_program "$TMP/model-$case.qnn" "$before" "$after"
     output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/model-failure.qui")"
     if [[ "$output" == "false" ]]; then
         echo "NN model corruption case unexpectedly loaded: $case" >&2
@@ -313,9 +313,9 @@ for entry in \
 do
     case="${entry%%:*}"
     code="${entry#*:}"
-    before="$TMP/checkpoint-$case-before.dnn"
-    after="$TMP/checkpoint-$case-after.dnn"
-    write_checkpoint_failure_program "$TMP/checkpoint-$case.dnn" "$before" "$after"
+    before="$TMP/checkpoint-$case-before.qnn"
+    after="$TMP/checkpoint-$case-after.qnn"
+    write_checkpoint_failure_program "$TMP/checkpoint-$case.qnn" "$before" "$after"
     output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/checkpoint-failure.qui")"
     if [[ "$output" == "false" ]]; then
         echo "NN checkpoint corruption case unexpectedly loaded: $case" >&2
@@ -360,13 +360,13 @@ Model make_model()
 
 Model model = make_model()
 auto optimizer = nn.Adam(&model, rate = 0.5)
-nn.resume(&model, &optimizer, path = "$TMP/checkpoint-legacy-$version.dnn")
-nn.checkpoint(&model, optimizer, path = "$TMP/checkpoint-legacy-$version-resaved.dnn")
+nn.resume(&model, &optimizer, path = "$TMP/checkpoint-legacy-$version.qnn")
+nn.checkpoint(&model, optimizer, path = "$TMP/checkpoint-legacy-$version-resaved.qnn")
 QUI
     QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/checkpoint-legacy.qui"
-    if ! cmp -s "$TMP/checkpoint-base.dnn" "$TMP/checkpoint-legacy-$version-resaved.dnn"; then
+    if ! cmp -s "$TMP/checkpoint-base.qnn" "$TMP/checkpoint-legacy-$version-resaved.qnn"; then
         echo "NN $version checkpoint did not load as per-Parameter Adam state" >&2
-        diff "$TMP/checkpoint-base.dnn" "$TMP/checkpoint-legacy-$version-resaved.dnn" >&2 || true
+        diff "$TMP/checkpoint-base.qnn" "$TMP/checkpoint-legacy-$version-resaved.qnn" >&2 || true
         exit 1
     fi
 done
