@@ -113,6 +113,31 @@ jobs:
       - name: Install Quidra dependencies
         run: sudo apt-get update && sudo apt-get install -y ccache clang llvm libcurl4-openssl-dev
 
+      - name: Half conversion contracts with GCC and Clang
+        shell: bash
+        run: |
+          set -euo pipefail
+          for compiler in g++ clang++; do
+            "$compiler" -std=c++20 -O2 -Wall -Wextra -Werror -Iquidra/include \
+              tests/half_conversions.cpp -o "$RUNNER_TEMP/half-conversions-release"
+            # Match the independent CI oracle, including all storage round-trips.
+            while read -r begin end; do
+              "$RUNNER_TEMP/half-conversions-release" "$begin" "$end"
+              printf 'PASS %s %s..%s\n' "$compiler" "$begin" "$end"
+            done <<'RANGES'
+          0x0 0x10000
+          0x80000000 0x80010000
+          0x32fff000 0x33001000
+          0x387ff000 0x38801000
+          0x477fe000 0x47802000
+          0xc77fe000 0xc7802000
+          0x7f7ffffe 0x7fc00002
+          0xff7ffffe 0xffc00002
+          0x7ffff000 0x80000000
+          0xfffff000 0x100000000
+          RANGES
+          done
+
       - name: Enforce Core native ABI boundary
         run: python3 quidra/tests/package_native_boundary_tests.py .
 
