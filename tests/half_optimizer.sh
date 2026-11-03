@@ -31,6 +31,16 @@ for mode in conversion moment; do
     "$QUIDRA" "$ROOT/tests/half_optimizer_failure.qui" ${failure_extra[@]+"${failure_extra[@]}"} ${arg[@]+"${arg[@]}"} > "$TMP/$mode.out" 2> "$TMP/$mode.err"
     failure_status=$?
     set -e
+    if [[ "$mode" == moment ]]; then
+        # A +inf second moment alone is legal; no NaN or conversion error
+        # occurs because the adjusted update remains exactly zero.
+        if [[ "$failure_status" -ne 0 || "$(cat "$TMP/$mode.out")" != true || -s "$TMP/$mode.err" ]]; then
+            echo "half optimizer valid infinity moment disagrees with the NaN-only contract (status=$failure_status):" >&2
+            cat "$TMP/$mode.out" "$TMP/$mode.err" >&2
+            exit 1
+        fi
+        continue
+    fi
     if [[ "$failure_status" -ne 101 ]]; then
         echo "expected half optimizer $mode failure with status 101, got $failure_status" >&2
         cat "$TMP/$mode.err" >&2; exit 1

@@ -657,6 +657,16 @@ struct NcclState {
     std::uint64_t count{};
     std::size_t selected{nccl_no_selection};
     bool group_open{};
+    // NCCL accepts rank calls inside a group; only a successful group end
+    // enqueues them. Failed or cancelled groups publish no dispatches.
+    std::uint64_t pending_dispatches{};
+
+    void finish_dispatch_counts(bool enqueued) {
+        if (!qcore_counters_enabled()) return;
+        if (enqueued && pending_dispatches != 0)
+            qcore_counter_note_dispatches(pending_dispatches);
+        pending_dispatches = 0;
+    }
 
     void reset_pending() {
         expected = 0;
@@ -1006,17 +1016,20 @@ int conv2d_cuda_backward_f32(
             workspace, data_workspace, &zero, x_desc.value, dx) != cudnn_success) {
         return 115;
     }
+    qcore_counter_note_dispatches(1);
     if (api.convolution_backward_filter(
             session.value, &alpha, x_desc.value, x,
             y_desc.value, dy, conv_desc.value, filter_algorithm,
             workspace, filter_workspace, &zero, filter_desc.value, dfilter) != cudnn_success) {
         return 116;
     }
+    qcore_counter_note_dispatches(1);
     if (api.convolution_backward_bias(
             session.value, &alpha, y_desc.value, dy,
             &zero, bias_desc.value, dbias) != cudnn_success) {
         return 117;
     }
+    qcore_counter_note_dispatches(1);
     return 0;
 }
 
@@ -1245,11 +1258,13 @@ int cuda_conv_forward_no_bias(
     if (!scratch.allocate(geometry.device, workspace_size)) return 306;
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.convolution_forward(
+    if (api.convolution_forward(
                session.value, &alpha, input_desc.value, x,
                filter_desc.value, filter, convolution_desc.value, algorithm,
-               scratch.pointer, workspace_size, &zero, output_desc.value, y) ==
-           cudnn_success ? 0 : 307;
+               scratch.pointer, workspace_size, &zero, output_desc.value, y) !=
+           cudnn_success) return 307;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int cuda_conv_backward_data_only(
@@ -1297,11 +1312,13 @@ int cuda_conv_backward_data_only(
     if (!scratch.allocate(geometry.device, workspace_size)) return 316;
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.convolution_backward_data(
+    if (api.convolution_backward_data(
                session.value, &alpha, filter_desc.value, filter,
                output_desc.value, dy, convolution_desc.value, algorithm,
-               scratch.pointer, workspace_size, &zero, input_desc.value, dx) ==
-           cudnn_success ? 0 : 317;
+               scratch.pointer, workspace_size, &zero, input_desc.value, dx) !=
+           cudnn_success) return 317;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int cuda_conv_backward_filter_only(
@@ -1349,11 +1366,13 @@ int cuda_conv_backward_filter_only(
     if (!scratch.allocate(geometry.device, workspace_size)) return 326;
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.convolution_backward_filter(
+    if (api.convolution_backward_filter(
                session.value, &alpha, input_desc.value, x,
                output_desc.value, dy, convolution_desc.value, algorithm,
-               scratch.pointer, workspace_size, &zero, filter_desc.value, dw) ==
-           cudnn_success ? 0 : 327;
+               scratch.pointer, workspace_size, &zero, filter_desc.value, dw) !=
+           cudnn_success) return 327;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int cuda_bias_broadcast(
@@ -1408,10 +1427,12 @@ int cuda_bias_broadcast(
 
     const float alpha = 1.0F;
     const float zero = 0.0F;
-    return api.add_tensor(
+    if (api.add_tensor(
                session.value, &alpha, bias_desc.value, source,
-               &zero, output_desc.value, destination) == cudnn_success
-        ? 0 : 336;
+               &zero, output_desc.value, destination) != cudnn_success)
+        return 336;
+    qcore_counter_note_dispatches(1);
+    return 0;
 }
 
 int conv2d_cuda_dx_backward_f32(
@@ -2876,7 +2897,7 @@ std::int32_t half_update_cpu_impl(const void* parameter, const void* gradient,
                 const float denominator = half_add(root, epsilon);
                 updated = half_sub(weight, half_mul(half_div(nm, denominator), scale));
                 m[i] = nm; v[i] = nv;
-                if (!std::isfinite(nm) || !std::isfinite(nv)) nonfinite.store(1, std::memory_order_relaxed);
+                if (std::isnan(nm) || std::isnan(nv)) nonfinite.store(1, std::memory_order_relaxed);
             } else {
                 updated = half_sub(weight, half_mul(gradient_value, scale));
             }
@@ -2992,10 +3013,12 @@ extern "C" std::int32_t nn_native_nccl_commit() {
 
 extern "C" std::int32_t nn_native_nccl_cancel() {
     auto& state = nccl_state;
+    bool submitted = false;
     if (state.group_open) {
-        (void)nccl().group_end();
+        submitted = nccl().group_end() == nccl_success;
         state.group_open = false;
     }
+    state.finish_dispatch_counts(submitted);
     state.reset_pending();
     return 0;
 }
@@ -3008,6 +3031,7 @@ extern "C" std::int32_t nn_native_nccl_group_start() {
     }
     if (nccl().group_start() != nccl_success) return 2;
     state.group_open = true;
+    if (qcore_counters_enabled()) state.pending_dispatches = 0;
     return 0;
 }
 
@@ -3038,12 +3062,15 @@ extern "C" std::int32_t nn_native_nccl_all_reduce(
     if (!pointer) return 3;
     const int datatype =
         state.dtype == QCORE_DTYPE_FLOAT32 ? nccl_float32 : nccl_float64;
-    return nccl().all_reduce(
+    if (nccl().all_reduce(
                pointer, pointer, static_cast<std::size_t>(state.count),
                datatype, nccl_sum, set.communicators[rank], nullptr) ==
-               nccl_success
-        ? 0
-        : 4;
+               nccl_success) {
+        if (state.count != 0 && qcore_counters_enabled())
+            ++state.pending_dispatches;
+        return 0;
+    }
+    return 4;
 }
 
 extern "C" std::int32_t nn_native_nccl_group_end() {
@@ -3051,6 +3078,7 @@ extern "C" std::int32_t nn_native_nccl_group_end() {
     if (!state.group_open) return 1;
     const auto status = nccl().group_end();
     state.group_open = false;
+    state.finish_dispatch_counts(status == nccl_success);
     state.reset_pending();
     return status == nccl_success ? 0 : 2;
 }
@@ -3092,9 +3120,12 @@ int enqueue_prepared_nccl_rank(const PreparedNcclRank& rank,
     // NCCL's null stream is the current device's default stream. Keep the
     // original per-rank activation; tensor handles are no longer touched here.
     if (!qcore_device_activate(rank.device)) return 2;
-    return nccl().all_reduce(rank.pointer, rank.pointer, count, datatype,
-                            nccl_sum, rank.communicator, nullptr) == nccl_success
-        ? 0 : 4;
+    if (nccl().all_reduce(rank.pointer, rank.pointer, count, datatype,
+                         nccl_sum, rank.communicator, nullptr) != nccl_success)
+        return 4;
+    if (count != 0 && qcore_counters_enabled())
+        ++nccl_state.pending_dispatches;
+    return 0;
 }
 
 
@@ -3103,7 +3134,7 @@ int enqueue_prepared_nccl_rank(const PreparedNcclRank& rank,
     std::fprintf(stderr,
         "Quidra runtime error[GPU_ASYNC]: operation owner unknown: %s\n", detail);
     std::fflush(stderr);
-    std::_Exit(101);
+    qcore_runtime_immediate_failure_exit();
 }
 
 void abort_selected_nccl_group() {
@@ -3182,6 +3213,7 @@ extern "C" std::int32_t nn_native_nccl_collective(void* values) {
     }
     const auto end_status = nccl().group_end();
     nccl_state.group_open = false;
+    nccl_state.finish_dispatch_counts(end_status == nccl_success);
     if (end_status != nccl_success) {
         abort_selected_nccl_group();
         group.open = false;
@@ -3196,8 +3228,8 @@ extern "C" std::int32_t nn_native_nccl_collective(void* values) {
     for (auto* output : outputs)
         if (nn_cuda_validate_output(output, "nn.all_reduce_sum",
                 qcore_tensor_dtype(output) == QCORE_DTYPE_FLOAT64
-                    ? "package operation nn.all_reduce_sum produced a non-finite real64 value"
-                    : "package operation nn.all_reduce_sum produced a non-finite real32 value") != 0)
+                    ? "package operation nn.all_reduce_sum produced a NaN real64 value"
+                    : "package operation nn.all_reduce_sum produced a NaN real32 value") != 0)
             validation_failed = true;
     if (validation_failed) return 4;
     return 0;
@@ -3407,11 +3439,13 @@ std::int32_t conv2d_cuda_f32_impl(
             &zero, y_desc.value, y) != cudnn_success) {
         return 12;
     }
+    qcore_counter_note_dispatches(1);
     if (api.add_tensor(
             session.value, &alpha, bias_desc.value, b,
             &one, y_desc.value, y) != cudnn_success) {
         return 13;
     }
+    qcore_counter_note_dispatches(1);
 
 
     const Conv2dAutogradMetadata metadata{
@@ -3440,7 +3474,7 @@ extern "C" std::int32_t nn_native_conv2d_cuda_f32(
         stride, padding, groups);
     if (result != 0) return result;
     return nn_cuda_validate_output(output, "nn.Conv2D.forward",
-        "package operation nn.Conv2D.forward produced a non-finite real32 value");
+        "package operation nn.Conv2D.forward produced a NaN real32 value");
 }
 
 extern "C" std::int32_t nn_native_is_cpu_floating(
@@ -5120,7 +5154,7 @@ bool nn_validate_cpu_output(const void* output, const char* operation) {
     std::atomic<std::uint32_t> status{0};
     auto check = [&](std::uint64_t begin, std::uint64_t end) -> int {
         for (std::uint64_t i = begin; i < end; ++i)
-            if (!std::isfinite(values[i])) status.store(1, std::memory_order_relaxed);
+            if (std::isnan(values[i])) status.store(1, std::memory_order_relaxed);
         return 0;
     };
     if (parallel_chunks(count, parallel_elements, check, 6) != 0) return false;
@@ -5144,25 +5178,25 @@ bool nn_validate_output(const void* output, const char* operation, [[maybe_unuse
 }
 struct NnOutputValidationFlags {
     NnOutputValidationFlags() {
-        qcore_op_register_flags("nn_native_relu_reuse_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_relu_training_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_activation_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_global_average_pool2d_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_fc_relu_inference_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_fc_gelu_inference_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_conv2d_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_conv2d_metal_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_conv2d_activation_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_conv2d_relu_inference_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_conv2d_gelu_inference_f32", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_adam_metal_update", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_adam_update", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_sgd_update", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_sgd_metal_update", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_adam_half_update", QCORE_OP_VALIDATES_NONFINITE);
-        qcore_op_register_flags("nn_native_sgd_half_metal_update", QCORE_OP_VALIDATES_NONFINITE);
+        qcore_op_register_flags("nn_native_relu_reuse_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_relu_training_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_activation_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_global_average_pool2d_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_fc_relu_inference_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_fc_gelu_inference_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_conv2d_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_conv2d_metal_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_conv2d_activation_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_conv2d_relu_inference_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_conv2d_gelu_inference_f32", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_adam_metal_update", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_adam_update", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_sgd_update", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_sgd_metal_update", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_adam_half_update", QCORE_OP_VALIDATES_NAN);
+        qcore_op_register_flags("nn_native_sgd_half_metal_update", QCORE_OP_VALIDATES_NAN);
         // Copying finite elements preserves finiteness, with no arithmetic.
-        qcore_op_register_flags("nn_native_im2col_f32", QCORE_OP_FINITE_PRESERVING);
+        qcore_op_register_flags("nn_native_im2col_f32", QCORE_OP_NAN_PRESERVING);
     }
 };
 NnOutputValidationFlags nn_output_validation_flags;
@@ -5171,7 +5205,7 @@ NnOutputValidationFlags nn_output_validation_flags;
 extern "C" std::int32_t nn_native_relu_reuse_f32(void* value) {
     const auto status = nn_native_relu_reuse_f32_unchecked(value);
     if (status != 0) return status;
-    if (!nn_validate_output(value, "nn.relu_reuse_f32", "package operation nn.relu_reuse_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(value, "nn.relu_reuse_f32", "package operation nn.relu_reuse_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5179,7 +5213,7 @@ extern "C" std::int32_t nn_native_relu_training_f32(
     const void* input, void* output) {
     const auto status = nn_native_relu_training_f32_unchecked(input, output);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.relu_training_f32", "package operation nn.relu_training_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.relu_training_f32", "package operation nn.relu_training_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5189,7 +5223,7 @@ extern "C" std::int32_t nn_native_activation_f32(
     long long activation_raw) {
     const auto status = nn_native_activation_f32_unchecked(input, output, activation_raw);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.activation_f32", "package operation nn.activation_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.activation_f32", "package operation nn.activation_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5198,7 +5232,7 @@ extern "C" std::int32_t nn_native_global_average_pool2d_f32(
     void* output) {
     const auto status = nn_native_global_average_pool2d_f32_unchecked(input, output);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.global_average_pool2d_f32", "package operation nn.global_average_pool2d_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.global_average_pool2d_f32", "package operation nn.global_average_pool2d_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5209,7 +5243,7 @@ extern "C" std::int32_t nn_native_fc_relu_inference_f32(
     void* output) {
     const auto status = nn_native_fc_relu_inference_f32_unchecked(input, weight, bias, output);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.fc_relu_inference_f32", "package operation nn.fc_relu_inference_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.fc_relu_inference_f32", "package operation nn.fc_relu_inference_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5220,7 +5254,7 @@ extern "C" std::int32_t nn_native_fc_gelu_inference_f32(
     void* output) {
     const auto status = nn_native_fc_gelu_inference_f32_unchecked(input, weight, bias, output);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.fc_gelu_inference_f32", "package operation nn.fc_gelu_inference_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.fc_gelu_inference_f32", "package operation nn.fc_gelu_inference_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5234,7 +5268,7 @@ extern "C" std::int32_t nn_native_conv2d_f32(
     long long groups_raw) {
     const auto status = nn_native_conv2d_f32_unchecked(input, weight, bias, output, stride_raw, padding_raw, groups_raw);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.conv2d_f32", "package operation nn.conv2d_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.conv2d_f32", "package operation nn.conv2d_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5248,7 +5282,7 @@ extern "C" std::int32_t nn_native_conv2d_metal_f32(
     long long groups_raw) {
     const auto status = nn_native_conv2d_metal_f32_unchecked(input, weight, bias, output, stride_raw, padding_raw, groups_raw);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.conv2d_metal_f32", "package operation nn.conv2d_metal_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.conv2d_metal_f32", "package operation nn.conv2d_metal_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5264,8 +5298,8 @@ extern "C" std::int32_t nn_native_conv2d_activation_f32(
     long long activation_raw) {
     const auto status = nn_native_conv2d_activation_f32_unchecked(input, weight, bias, conv_output, activation_output, stride_raw, padding_raw, groups_raw, activation_raw);
     if (status != 0) return status;
-    if (!nn_validate_output(conv_output, "nn.conv2d_activation_f32", "package operation nn.conv2d_activation_f32 produced a non-finite real32 value")) return 6;
-    if (!nn_validate_output(activation_output, "nn.conv2d_activation_f32", "package operation nn.conv2d_activation_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(conv_output, "nn.conv2d_activation_f32", "package operation nn.conv2d_activation_f32 produced a NaN real32 value")) return 6;
+    if (!nn_validate_output(activation_output, "nn.conv2d_activation_f32", "package operation nn.conv2d_activation_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5279,7 +5313,7 @@ extern "C" std::int32_t nn_native_conv2d_relu_inference_f32(
     long long groups_raw) {
     const auto status = nn_native_conv2d_relu_inference_f32_unchecked(input, weight, bias, output, stride_raw, padding_raw, groups_raw);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.conv2d_relu_inference_f32", "package operation nn.conv2d_relu_inference_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.conv2d_relu_inference_f32", "package operation nn.conv2d_relu_inference_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5293,7 +5327,7 @@ extern "C" std::int32_t nn_native_conv2d_gelu_inference_f32(
     long long groups_raw) {
     const auto status = nn_native_conv2d_gelu_inference_f32_unchecked(input, weight, bias, output, stride_raw, padding_raw, groups_raw);
     if (status != 0) return status;
-    if (!nn_validate_output(output, "nn.conv2d_gelu_inference_f32", "package operation nn.conv2d_gelu_inference_f32 produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(output, "nn.conv2d_gelu_inference_f32", "package operation nn.conv2d_gelu_inference_f32 produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5311,9 +5345,9 @@ extern "C" std::int32_t nn_native_adam_metal_update(
     double step_scale) {
     const auto status = nn_native_adam_metal_update_unchecked(parameter, gradient, first, second, next_parameter, beta1, beta2, one_minus_beta1, one_minus_beta2, adjusted_epsilon, step_scale);
     if (status != 0) return status;
-    if (!nn_validate_output(first, "nn.adam_metal_update", "package operation nn.adam_metal_update produced a non-finite real32 value")) return 6;
-    if (!nn_validate_output(second, "nn.adam_metal_update", "package operation nn.adam_metal_update produced a non-finite real32 value")) return 6;
-    if (!nn_validate_output(next_parameter, "nn.adam_metal_update", "package operation nn.adam_metal_update produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(first, "nn.adam_metal_update", "package operation nn.adam_metal_update produced a NaN real32 value")) return 6;
+    if (!nn_validate_output(second, "nn.adam_metal_update", "package operation nn.adam_metal_update produced a NaN real32 value")) return 6;
+    if (!nn_validate_output(next_parameter, "nn.adam_metal_update", "package operation nn.adam_metal_update produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5331,9 +5365,9 @@ extern "C" std::int32_t nn_native_adam_update(
     double step_scale) {
     const auto status = nn_native_adam_update_unchecked(parameter, gradient, first, second, next_parameter, beta1, beta2, one_minus_beta1, one_minus_beta2, adjusted_epsilon, step_scale);
     if (status != 0) return status;
-    if (!nn_validate_output(first, "nn.adam_update", "package operation nn.adam_update produced a non-finite real32 value")) return 6;
-    if (!nn_validate_output(second, "nn.adam_update", "package operation nn.adam_update produced a non-finite real32 value")) return 6;
-    if (!nn_validate_output(next_parameter, "nn.adam_update", "package operation nn.adam_update produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(first, "nn.adam_update", "package operation nn.adam_update produced a NaN real32 value")) return 6;
+    if (!nn_validate_output(second, "nn.adam_update", "package operation nn.adam_update produced a NaN real32 value")) return 6;
+    if (!nn_validate_output(next_parameter, "nn.adam_update", "package operation nn.adam_update produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5343,7 +5377,7 @@ extern "C" std::int32_t nn_native_sgd_update(const void* parameter,
     const auto status = nn_native_sgd_update_unchecked(parameter, gradient, next_parameter, rate);
     if (status != 0) return status;
     if (qcore_tensor_dtype(next_parameter) == QCORE_DTYPE_FLOAT32 || qcore_tensor_dtype(next_parameter) == QCORE_DTYPE_FLOAT64) {
-        if (!nn_validate_output(next_parameter, "nn.sgd_update", "package operation nn.sgd_update produced a non-finite real32 value")) return 6;
+        if (!nn_validate_output(next_parameter, "nn.sgd_update", "package operation nn.sgd_update produced a NaN real32 value")) return 6;
     }
     return 0;
 }
@@ -5353,7 +5387,7 @@ extern "C" std::int32_t nn_native_sgd_metal_update(const void* parameter,
                                                    void* next_parameter, double rate) {
     const auto status = nn_native_sgd_metal_update_unchecked(parameter, gradient, next_parameter, rate);
     if (status != 0) return status;
-    if (!nn_validate_output(next_parameter, "nn.sgd_metal_update", "package operation nn.sgd_metal_update produced a non-finite real32 value")) return 6;
+    if (!nn_validate_output(next_parameter, "nn.sgd_metal_update", "package operation nn.sgd_metal_update produced a NaN real32 value")) return 6;
     return 0;
 }
 
@@ -5399,6 +5433,6 @@ extern "C" std::int32_t nn_native_half_probe_words(const void* left, const void*
 extern "C" std::int32_t nn_native_nccl_validate_output(const void* value) {
     return nn_cuda_validate_output(value, "nn.all_reduce_sum",
         qcore_tensor_dtype(value) == QCORE_DTYPE_FLOAT64
-            ? "package operation nn.all_reduce_sum produced a non-finite real64 value"
-            : "package operation nn.all_reduce_sum produced a non-finite real32 value");
+            ? "package operation nn.all_reduce_sum produced a NaN real64 value"
+            : "package operation nn.all_reduce_sum produced a NaN real32 value");
 }

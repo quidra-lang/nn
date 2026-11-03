@@ -1,0 +1,64 @@
+name: half-conversion-contracts
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - native/nn_half.hpp
+      - tests/half_conversions.cpp
+      - .github/workflows/half-conversion-contracts.yml
+  pull_request:
+    branches: [develop]
+    paths:
+      - native/nn_half.hpp
+      - tests/half_conversions.cpp
+      - .github/workflows/half-conversion-contracts.yml
+
+permissions:
+  contents: read
+
+jobs:
+  conversions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: quidra-lang/quidra
+          ref: develop
+          path: .core
+          persist-credentials: false
+      - name: Build independent half-conversion oracle
+        env:
+          CXX: ${{ matrix.compiler }}
+        run: >-
+          "$CXX" -std=c++20 -O2 -Wall -Wextra -Werror -I.core/include
+          tests/half_conversions.cpp -o "$RUNNER_TEMP/half-conversions"
+      - name: Check infinities, NaNs, rounding and finite range boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Each invocation also exhausts all 65,536 encodings of both
+          # storage formats and round-trips every non-NaN value, including Inf.
+          while read -r begin end; do
+            "$RUNNER_TEMP/half-conversions" "$begin" "$end"
+            printf 'PASS %s..%s\n' "$begin" "$end"
+          done <<'RANGES'
+          0x0 0x10000
+          0x80000000 0x80010000
+          0x32fff000 0x33001000
+          0x387ff000 0x38801000
+          0x477fe000 0x47802000
+          0xc77fe000 0xc7802000
+          0x7f7ffffe 0x7fc00002
+          0xff7ffffe 0xffc00002
+          0x7ffff000 0x80000000
+          0xfffff000 0x100000000
+          RANGES

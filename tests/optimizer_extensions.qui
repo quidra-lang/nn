@@ -34,8 +34,8 @@ void half_checks(int64 device)
     .sgd.update()
     bool sgd_values = sgd_model.narrow.raw().cpu()[0].item() == real16(0.96875) and sgd_model.wide.raw().cpu()[0].item() == real16b(0.96875)
     bool sgd_consumed = not sgd_model.narrow.has_grad() and not sgd_model.wide.has_grad()
-    print("half sgd updates both storage types {sgd_values}{NL}")
-    print("half sgd consumes gradients {sgd_consumed}{NL}")
+    print.line("half sgd updates both storage types {sgd_values}")
+    print.line("half sgd consumes gradients {sgd_consumed}")
 
     // The squared real16 gradient and the default epsilon round to zero in
     // real16. Real32 optimizer arithmetic keeps both nonzero.
@@ -46,8 +46,8 @@ void half_checks(int64 device)
     bool adam_values = adam_model.narrow.raw().cpu()[0].item() == real16(0.875) and adam_model.wide.raw().cpu()[0].item() == real16b(0.875)
     .adam.update()
     bool adam_skips = adam_model.narrow.raw().cpu()[0].item() == real16(0.875) and adam_model.wide.raw().cpu()[0].item() == real16b(0.875)
-    print("half adam rounds only the stored weight {adam_values}{NL}")
-    print("half adam skips absent gradients {adam_skips}{NL}")
+    print.line("half adam rounds only the stored weight {adam_values}")
+    print.line("half adam skips absent gradients {adam_skips}")
 
 class PrivateModel(local int64 device)
 
@@ -74,12 +74,12 @@ void private_checks(int64 device)
     bool found = model.has_grad()
     .optimizer.update()
     bool updated = model.value() == real32(0.75) and not model.has_grad()
-    print("private parameter receives its gradient {found}{NL}")
-    print("private parameter is updated in place {updated}{NL}")
+    print.line("private parameter receives its gradient {found}")
+    print.line("private parameter is updated in place {updated}")
     string[] paths = reflect.each_paths<nn.Parameter<real32>>(model)
     string[] expected_paths = ["weight"]
     bool named = paths == expected_paths
-    print("private parameter has its checkpoint path {named}{NL}")
+    print.line("private parameter has its checkpoint path {named}")
 
 half_checks(args.device)
 private_checks(args.device)

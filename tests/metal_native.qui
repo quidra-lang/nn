@@ -43,7 +43,7 @@ ConvPair conv_pair(int channels_in, int channels_out, int kernel, int stride, in
     return pair
 
 void report(string name, bool passed)
-    print("{name} {passed}{NL}")
+    print.line("{name} {passed}")
 
 // Forward: kernel 1x1/3x3, stride 1/2, padding 0/1, groups 1/>1, several
 // batches and channel counts.
@@ -341,7 +341,7 @@ void dense_gelu_checks(int device)
     tensor<real64> cpu_fused = unit_first_derivative(values, true)
     real64 to_graph = scaled_difference(metal_fused, metal_graph)
     real64 to_cpu = scaled_difference(metal_fused, cpu_fused)
-    print("metal gelu dense first derivative over {values.shape()[0]} inputs (|d| / (1 + |reference|)): vs metal graph {to_graph}, vs cpu kernel {to_cpu}{NL}")
+    print.line("metal gelu dense first derivative over {values.shape()[0]} inputs (|d| / (1 + |reference|)): vs metal graph {to_graph}, vs cpu kernel {to_cpu}")
     report("metal gelu dense first derivative finite", ((metal_fused - metal_fused) == 0.0).all())
     report("metal gelu dense first derivative matches the graph", to_graph <= 0.00001)
     report("metal gelu dense first derivative matches cpu", to_cpu <= 0.000001)
@@ -451,7 +451,7 @@ void pooling_checks(int device)
         uniform_difference = math.max(uniform_difference, plain.difference)
         mixed_difference = math.max(mixed_difference, mixed.difference)
         gradients_identical = gradients_identical and plain.gradient_identical and mixed.gradient_identical
-    print("metal pooling planes above 64 (max |d| / (1 + max |cpu|)): uniform {uniform_difference}, mixed magnitudes {mixed_difference}{NL}")
+    print.line("metal pooling planes above 64 (max |d| / (1 + max |cpu|)): uniform {uniform_difference}, mixed magnitudes {mixed_difference}")
     report("metal pooling planes above 64", uniform_difference <= 0.0000003 and mixed_difference <= 0.00001 and gradients_identical)
 
     tensor<real32> weights = uniform([45, 16], 73)

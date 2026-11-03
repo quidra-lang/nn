@@ -33,10 +33,8 @@ int | error run()
     auto optimizer = try nn.SGD(&model, rate = 0.1)
     loss.backward(&model)
     .optimizer.update()
-    print(prediction.shape()[0] == 1)
-    print(NL)
-    print(prediction.shape()[1] == 1)
-    print(NL)
+    print.line(prediction.shape()[0] == 1)
+    print.line(prediction.shape()[1] == 1)
 
     nn.Conv2D conv = try nn.Conv2D(1, 1, 1)
     .conv.weight.replace(tensor.ones<real32>([1, 1, 1, 1]))
@@ -44,31 +42,28 @@ int | error run()
     tensor<real32> image = tensor.ones<real32>([1, 1, 2, 2])
     tensor<real32> activated = nn.relu(.conv.forward(image))
     nat[] activated_shape = activated.shape()
-    print(
+    print.line(
         len(activated_shape) == 4
         and activated_shape[0] == 1
         and activated_shape[1] == 1
         and activated_shape[2] == 2
         and activated_shape[3] == 2
     )
-    print(NL)
 
     nn.BatchNorm norm = try nn.BatchNorm(1)
     tensor<real32> normalized = .norm.infer(activated)
     nat[] normalized_shape = normalized.shape()
-    print(
+    print.line(
         len(normalized_shape) == 4
         and normalized_shape[0] == 1
         and normalized_shape[1] == 1
         and normalized_shape[2] == 2
         and normalized_shape[3] == 2
     )
-    print(NL)
 
     nn.Dropout dropout = try nn.Dropout(0.5, seed = 1)
     tensor<real32> inference = dropout.infer(activated)
-    print(inference[0, 0, 0, 0].item() == activated[0, 0, 0, 0].item())
-    print(NL)
+    print.line(inference[0, 0, 0, 0].item() == activated[0, 0, 0, 0].item())
     return 0
 
 auto | error result = run()
@@ -76,8 +71,7 @@ match result
     int
         int ignored = result
     error problem
-        print(problem)
-        print(NL)
+        print.line(problem)
 QUI
 
 if actual="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/use-nn.qui")"; then
@@ -167,25 +161,33 @@ if [[ "$activation_passed_count" -ne "$activation_expected_count" ]] ||
     exit 1
 fi
 
-# Inputs that formerly produced infinity/NaN must fail under the finite-value
-# contract; the finite activation/gradient checks above keep their reports.
+# Signed infinity is valid; 0/0 and indeterminate activation results are not.
+# Run each case independently so a failure cannot mask later edge cases.
 for exceptional_case in {1..20}; do
     set +e
     QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$ROOT/tests/native_activations.qui" \
         --exceptional_case "$exceptional_case" > "$TMP/activation-invalid.out" 2> "$TMP/activation-invalid.err"
     activation_invalid_status=$?
     set -e
+    if [[ "$exceptional_case" -le 2 ]]; then
+        expected_inf="inf"
+        [[ "$exceptional_case" != 2 ]] || expected_inf="-inf"
+        if [[ "$activation_invalid_status" -ne 0 || "$(cat "$TMP/activation-invalid.out")" != "$expected_inf" || -s "$TMP/activation-invalid.err" ]]; then
+            echo "NN infinity activation case $exceptional_case was not preserved:" >&2
+            cat "$TMP/activation-invalid.out" "$TMP/activation-invalid.err" >&2
+            exit 1
+        fi
+        continue
+    fi
     if [[ "$activation_invalid_status" -ne 101 || -s "$TMP/activation-invalid.out" ]]; then
-        echo "NN invalid activation case $exceptional_case did not fail with status 101 and empty output" >&2
+        echo "NN NaN activation case $exceptional_case did not fail with status 101 and empty output" >&2
         cat "$TMP/activation-invalid.err" >&2
         exit 1
     fi
-    if [[ "$exceptional_case" -ge 6 && $((exceptional_case % 2)) -eq 0 ]]; then
-        grep -q 'REAL_OVERFLOW' "$TMP/activation-invalid.err"
-    elif [[ "$exceptional_case" -ge 4 ]]; then
-        grep -q 'NONFINITE_RESULT' "$TMP/activation-invalid.err"
-    else
+    if [[ "$exceptional_case" -eq 3 ]]; then
         grep -q 'DIVISION_BY_ZERO' "$TMP/activation-invalid.err"
+    else
+        grep -q 'NONFINITE_RESULT' "$TMP/activation-invalid.err"
     fi
 done
 
@@ -270,11 +272,11 @@ fi
 # results must be bitwise the same for every thread count.
 QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" build "$ROOT/tests/cpu_threads.qui" \
     -o "$TMP/cpu-threads"
-QUIDRA_CPU_THREADS=1 "$TMP/cpu-threads" "$TMP/cpu-threads-1.state"
-QUIDRA_CPU_THREADS=3 "$TMP/cpu-threads" "$TMP/cpu-threads-3.state"
-"$TMP/cpu-threads" "$TMP/cpu-threads-all.state"
-if ! cmp -s "$TMP/cpu-threads-1.state" "$TMP/cpu-threads-3.state" ||
-   ! cmp -s "$TMP/cpu-threads-1.state" "$TMP/cpu-threads-all.state"; then
+QUIDRA_CPU_THREADS=1 "$TMP/cpu-threads" "$TMP/cpu-threads-1.qnn"
+QUIDRA_CPU_THREADS=3 "$TMP/cpu-threads" "$TMP/cpu-threads-3.qnn"
+"$TMP/cpu-threads" "$TMP/cpu-threads-all.qnn"
+if ! cmp -s "$TMP/cpu-threads-1.qnn" "$TMP/cpu-threads-3.qnn" ||
+   ! cmp -s "$TMP/cpu-threads-1.qnn" "$TMP/cpu-threads-all.qnn"; then
     echo "NN CPU kernels depend on the thread count" >&2
     exit 1
 fi

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "nn_version": "0.5.0",
+  "nn_version": "0.6.0",
   "platform": "linux",
   "architecture": "x86_64",
   "cuda_compatibility": "replace-with-exact-supported-CUDA-range",

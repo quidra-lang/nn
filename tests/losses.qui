@@ -13,7 +13,7 @@ cli args
     int device = option(default = -1)
 
 void report(string name, bool passed)
-    print("{name} {passed}{NL}")
+    print.line("{name} {passed}")
 
 tensor<real32> place(tensor<real32> value, int device)
     if device >= 0
@@ -91,5 +91,4 @@ match result
     void
         int ignored = 0
     error problem
-        print(problem)
-        print(NL)
+        print.line(problem)

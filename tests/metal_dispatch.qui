@@ -62,12 +62,12 @@ bool exactly(int[] before, int[] after, int[] listed, int[] expected)
             if listed[index] == int(kind)
                 wanted = expected[index]
         if delta(before, after, int(kind)) != wanted
-            print("  kind {kind}: {delta(before, after, int(kind))} dispatches, expected {wanted}{NL}")
+            print.line("  kind {kind}: {delta(before, after, int(kind))} dispatches, expected {wanted}")
             return false
     return true
 
 void report(string name, bool passed)
-    print("{name} {passed}{NL}")
+    print.line("{name} {passed}")
 
 tensor<real32> uniform(int[] shape, int seed, int device)
     int count = 1

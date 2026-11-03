@@ -124,26 +124,27 @@ class StateChecksum()
         return second.string() + ":" + first.string()
 
 void | error write_checked_line(
-    file.Handle &output,
+    file.write &output,
     StateChecksum &checksum,
     string text
 )
     .checksum.update(text)
-    try .output.write_line(text)
+    try .output("{text}{NL}")
     return
 
-string | error read_required_line(file.Handle &input, string context)
-    string | none | error line = .input.read_line()
-    match line
-        string
-            return line
-        none
+string | error read_required_line(file.read &input, string context)
+    string line = ""
+    bool | error read = .input(&line)
+    match read
+        bool ok
+            if ok
+                return line
             return error("nn.load encountered unexpected end of state file while reading " + context, code = "NN_CHECKPOINT_FILE")
         error problem
             return problem
 
 string | error read_checked_line(
-    file.Handle &input,
+    file.read &input,
     StateChecksum &checksum,
     string context
 )
@@ -164,7 +165,7 @@ int | error parse_nonnegative_state_int(string text, string context)
     return value
 
 void | error write_state_entry<T: floating>(
-    file.Handle &output,
+    file.write &output,
     StateChecksum &checksum,
     string kind,
     string dtype,
@@ -234,7 +235,7 @@ void | error check_adam_step(
     return
 
 void | error write_adam_step(
-    file.Handle &output,
+    file.write &output,
     StateChecksum &checksum,
     string path,
     nat count,
@@ -249,16 +250,16 @@ void | error write_adam_step(
     return
 
 void | error finish_state_write(
-    file.Handle &output,
+    file.write &output,
     StateChecksum checksum
 )
-    try .output.write_line("ADLER65521-V1")
-    try .output.write_line(checksum.value())
-    try .output.flush()
+    try .output("ADLER65521-V1{NL}")
+    string digest = checksum.value()
+    try .output("{digest}{NL}")
     return
 
 void | error verify_state_checksum(
-    file.Handle &input,
+    file.read &input,
     StateChecksum checksum
 )
     string algorithm = try read_required_line(&input, "checksum algorithm")
@@ -268,11 +269,12 @@ void | error verify_state_checksum(
     if expected != checksum.value()
         return error("nn.load state checksum does not match payload", code = "NN_CHECKPOINT_FILE")
 
-    string | none | error trailing = .input.read_line()
-    match trailing
-        string
-            return error("nn.load state file contains trailing data", code = "NN_CHECKPOINT_FILE")
-        none
+    string trailing = ""
+    bool | error read = .input(&trailing)
+    match read
+        bool present
+            if present
+                return error("nn.load state file contains trailing data", code = "NN_CHECKPOINT_FILE")
             return
         error problem
             return problem
@@ -439,7 +441,7 @@ void | error compare_state_schema(
 real32 | error parse_state_real32(string text, string context);
 real64 | error parse_state_real64(string text, string context);
 
-StoredTensor<real32> | error read_stored_tensor32(file.Handle &input, StateChecksum &checksum)
+StoredTensor<real32> | error read_stored_tensor32(file.read &input, StateChecksum &checksum)
     string kind = try read_checked_line(&input, &checksum, "field kind")
     string field_type = try read_checked_line(&input, &checksum, "field type")
     string dtype = try read_checked_line(&input, &checksum, "field dtype")
@@ -469,7 +471,7 @@ StoredTensor<real32> | error read_stored_tensor32(file.Handle &input, StateCheck
     StateEntrySchema schema = StateEntrySchema(kind_initial = kind, dtype_initial = "real32", path_initial = path, shape_initial = shape)
     return StoredTensor<real32>(schema_initial = schema, value_initial = flat.reshape(shape))
 
-StoredTensor<real64> | error read_stored_tensor64(file.Handle &input, StateChecksum &checksum)
+StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksum &checksum)
     string kind = try read_checked_line(&input, &checksum, "field kind")
     string field_type = try read_checked_line(&input, &checksum, "field type")
     string dtype = try read_checked_line(&input, &checksum, "field dtype")
@@ -513,7 +515,7 @@ class StoredAdamStep(local string path_initial, local AdamStep step_initial)
     path = path_initial
     step = step_initial
 
-StoredAdamStep | error read_stored_adam_step(file.Handle &input, StateChecksum &checksum)
+StoredAdamStep | error read_stored_adam_step(file.read &input, StateChecksum &checksum)
     string kind = try read_checked_line(&input, &checksum, "Adam step kind")
     if kind != "AdamStep"
         return error("nn.Adam.load expected an AdamStep entry", code = "NN_CHECKPOINT_FILE")
@@ -566,7 +568,7 @@ class TensorPayload(local StateEntrySchema schema_initial, local int count_initi
     schema = schema_initial
     count = count_initial
 
-TensorPayload | error read_tensor_payload(file.Handle &input, StateChecksum &checksum, string expected_kind)
+TensorPayload | error read_tensor_payload(file.read &input, StateChecksum &checksum, string expected_kind)
     string kind = try read_checked_line(&input, &checksum, "field kind")
     string dtype = try read_checked_line(&input, &checksum, "field dtype")
     string path = try read_checked_line(&input, &checksum, "field path")
@@ -600,7 +602,7 @@ real16 | error parse_state_real16(string text, string context)
         error problem
             return error("nn.load invalid " + context, code = "NN_CHECKPOINT_FILE", cause = problem)
 
-StoredTensor<real16> | error read_tensor_values16(file.Handle &input, StateChecksum &checksum, TensorPayload payload)
+StoredTensor<real16> | error read_tensor_values16(file.read &input, StateChecksum &checksum, TensorPayload payload)
     tensor<real16> flat = tensor.zeros<real16>([nat(payload.count)])
     for 0 <= int index < payload.count
         string text = try read_checked_line(&input, &checksum, "tensor value")
@@ -615,21 +617,21 @@ real16b | error parse_state_real16b(string text, string context)
         error problem
             return error("nn.load invalid " + context, code = "NN_CHECKPOINT_FILE", cause = problem)
 
-StoredTensor<real16b> | error read_tensor_values16b(file.Handle &input, StateChecksum &checksum, TensorPayload payload)
+StoredTensor<real16b> | error read_tensor_values16b(file.read &input, StateChecksum &checksum, TensorPayload payload)
     tensor<real16b> flat = tensor.zeros<real16b>([nat(payload.count)])
     for 0 <= int index < payload.count
         string text = try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real16b(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real16b>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
-StoredTensor<real32> | error read_tensor_values32(file.Handle &input, StateChecksum &checksum, TensorPayload payload)
+StoredTensor<real32> | error read_tensor_values32(file.read &input, StateChecksum &checksum, TensorPayload payload)
     tensor<real32> flat = tensor.zeros<real32>([nat(payload.count)])
     for 0 <= int index < payload.count
         string text = try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real32(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real32>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
-StoredTensor<real64> | error read_tensor_values64(file.Handle &input, StateChecksum &checksum, TensorPayload payload)
+StoredTensor<real64> | error read_tensor_values64(file.read &input, StateChecksum &checksum, TensorPayload payload)
     tensor<real64> flat = tensor.zeros<real64>([nat(payload.count)])
     for 0 <= int index < payload.count
         string text = try read_checked_line(&input, &checksum, "tensor value")
@@ -643,7 +645,7 @@ class StateTable()
     StoredTensor<real32>[] values32 = []
     StoredTensor<real64>[] values64 = []
 
-    void | error .read_entry(file.Handle &input, StateChecksum &checksum, string expected_kind = "")
+    void | error .read_entry(file.read &input, StateChecksum &checksum, string expected_kind = "")
         TensorPayload payload = try read_tensor_payload(&input, &checksum, expected_kind)
         schemas = schemas.append(payload.schema)
         if payload.schema.dtype == "real16"
@@ -663,7 +665,7 @@ class StateTable()
                 string ignored = try read_checked_line(&input, &checksum, "unknown dtype value")
         return
 
-    void | error .read_legacy32(file.Handle &input, StateChecksum &checksum, string expected_kind)
+    void | error .read_legacy32(file.read &input, StateChecksum &checksum, string expected_kind)
         StoredTensor<real32> entry = try read_stored_tensor32(&input, &checksum)
         if entry.schema.kind != expected_kind
             return error("nn.load has an invalid legacy entry kind", code = "NN_CHECKPOINT_FILE")
@@ -671,7 +673,7 @@ class StateTable()
         values32 = values32.append(entry)
         return
 
-    void | error .read_legacy64(file.Handle &input, StateChecksum &checksum, string expected_kind)
+    void | error .read_legacy64(file.read &input, StateChecksum &checksum, string expected_kind)
         StoredTensor<real64> entry = try read_stored_tensor64(&input, &checksum)
         if entry.schema.kind != expected_kind
             return error("nn.load has an invalid legacy entry kind", code = "NN_CHECKPOINT_FILE")
@@ -679,7 +681,7 @@ class StateTable()
         values64 = values64.append(entry)
         return
 
-StateTable | error read_model_entries(file.Handle &input, StateChecksum &checksum, string version)
+StateTable | error read_model_entries(file.read &input, StateChecksum &checksum, string version)
     StateTable table = StateTable()
     if version == "5"
         int count = try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "model entry count"), "model entry count")

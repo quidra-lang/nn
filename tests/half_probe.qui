@@ -41,4 +41,4 @@ for 0 <= nat i < args.count
         and y % sign_mask > infinity_bits)
     if x != y and not (args.operation >= 3 and both_nan)
         identical = false
-print("half raw probe matches CPU {identical}{NL}")
+print.line("half raw probe matches CPU {identical}")

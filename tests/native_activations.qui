@@ -35,12 +35,11 @@ tensor<real64> gelu_reference64(tensor<real64> value)
     return value * 0.5 * (1.0 + hyperbolic)
 
 void report(string name, bool passed)
-    print("{name} {passed}{NL}")
+    print.line("{name} {passed}")
 
 // Finite special values (signed zero and clamp saturation), followed by
-// uniform values in [-9, 9]. Non-finite construction and GELU overflow are
-// tested separately as fatal errors by exceptional_case; they cannot be
-// legal public inputs/results under the finite-value contract.
+// uniform values in [-9, 9]. Signed infinities remain valid, while 0/0
+// and NaN-producing GELU paths are rejected in exceptional_case.
 tensor<real32> activation_inputs(int random_count, bool non_finite)
     real32 zero = real32(0)
     real32[] special = [zero, real32(-0.0), real32(1), real32(-1), real32(0.5), real32(-0.5), real32(3), real32(-3), real32(5.9), real32(-5.9), real32(30), real32(-30), real32(1000), real32(-1000), real32(0.000001), real32(-0.000001)]
@@ -59,7 +58,7 @@ tensor<real32> activation_inputs(int random_count, bool non_finite)
             values[index] = random_values[index - int(len(special))].item()
     return values
 
-// Elementwise bit equality, treating NaN as equal to NaN.
+// Elementwise equality for valid real values. NaN is rejected before this check.
 bool identical(tensor<real32> left, tensor<real32> right)
     tensor<real32> a = left.untrack().cpu()
     tensor<real32> b = right.untrack().cpu()
@@ -191,7 +190,7 @@ void activation_checks()
     real64 first_to_graph = max_error64(gelu_fused.first, widen(gelu_graph.first))
     real64 fused_second_error = max_error64(gelu_fused.second, x64.grad)
     real64 graph_second_error = max_error64(gelu_graph.second, x64.grad)
-    print("gelu derivative differences (|d| / (1 + |reference|)): first fused vs graph {first_to_graph}, second fused vs float64 {fused_second_error}, second graph vs float64 {graph_second_error}{NL}")
+    print.line("gelu derivative differences (|d| / (1 + |reference|)): first fused vs graph {first_to_graph}, second fused vs float64 {fused_second_error}, second graph vs float64 {graph_second_error}")
     report("gelu second derivative no less accurate than the graph", fused_second_error <= graph_second_error)
 
     // Layout handling: untracked views are densified, tracked views keep the
@@ -348,7 +347,7 @@ void dense_gelu_checks()
             // cancelled to 0) and f'' = 0.
             overflow_count = overflow_count + 1
             overflow_range = overflow_range and second == 0.0 and graph_second[index].item() == real32(0) and first == graph_value
-    print("gelu dense sweep over {count} inputs (|d| / (1 + |reference|)): first fused vs graph {first_to_graph} (max |d| {first_to_graph_absolute}), first fused vs float64 {first_to_float64}, second fused vs float64 {second_to_float64}{NL}")
+    print.line("gelu dense sweep over {count} inputs (|d| / (1 + |reference|)): first fused vs graph {first_to_graph} (max |d| {first_to_graph_absolute}), first fused vs float64 {first_to_float64}, second fused vs float64 {second_to_float64}")
     report("gelu dense derivatives finite", finite)
     report("gelu dense derivatives where inner_derivative^2 overflows", overflow_range and overflow_count > 0)
     report("gelu dense first derivative matches the graph", first_to_graph <= gelu_graph_bound())

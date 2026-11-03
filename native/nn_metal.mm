@@ -734,7 +734,7 @@ kernel void nn_half_update(
     }
     if (c.adam) {
         first[gid] = nm; second[gid] = nv;
-        if ((nm & 0x7f800000u) == 0x7f800000u || (nv & 0x7f800000u) == 0x7f800000u)
+        if ((nm & 0x7fffffffu) > 0x7f800000u || (nv & 0x7fffffffu) > 0x7f800000u)
             atomic_store_explicit(nonfinite, 1u, memory_order_relaxed);
     }
     ushort narrowed = 0;
@@ -774,7 +774,7 @@ kernel void nn_half_probe_words(device const uint* left [[buffer(0)]],
 kernel void nn_validate_finite(device const uint* values [[buffer(0)]],
     device atomic_uint* status [[buffer(1)]], constant uint& count [[buffer(2)]],
     uint gid [[thread_position_in_grid]]) {
-    if (gid < count && (values[gid] & 0x7f800000u) == 0x7f800000u)
+    if (gid < count && (values[gid] & 0x7fffffffu) > 0x7f800000u)
         atomic_store_explicit(status, 1u, memory_order_relaxed);
 }
 
@@ -2186,7 +2186,7 @@ extern "C" int nn_metal_half_update(const void* parameter, const void* gradient,
         if (!encoded) return result;
         // Both ownership handoffs run even when one fails.
         const bool conversion_deferred = conversion.defer(dtype, nullptr);
-        const bool nonfinite_deferred = nonfinite.defer(0, "package operation nn.Adam.update produced a non-finite real32 value");
+        const bool nonfinite_deferred = nonfinite.defer(0, "package operation nn.Adam.update produced a NaN real32 value");
         // Both slot handoffs/consumes finish before a diagnostic may throw.
         if (conversion.failed_check()) qcore_tensor_report_conversion_status(output, 1);
         if (nonfinite.failed_check()) qcore_tensor_report_status(first, "nn.Adam.update", 1);

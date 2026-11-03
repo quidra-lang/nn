@@ -1,5 +1,10 @@
 # Persistence fixtures
 
+Saved models and checkpoints use the recommended `.qnn` (Quidra Neural
+Network) extension and the Quidra NN State Format. The extension does not
+affect parsing: existing `.dnn` files and other paths remain usable. The
+legacy `QUIDRA_DNN_STATE` magic, format versions and checksum are unchanged.
+
 Run `python3 tests/checkpoint_format5.py /path/to/quidra` with a compatible
 Core and the NN/Math package siblings. The Python oracle independently
 encodes the line protocol/checksum and rounds exact decimal rationals to

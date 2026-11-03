@@ -77,7 +77,7 @@ class Model()
     nn.Parameter<real32> d
 
 void report(string name, bool passed)
-    print("{name} {passed}{NL}")
+    print.line("{name} {passed}")
 
 int element_count(tensor<real32> value)
     int count = 1
@@ -237,18 +237,14 @@ tensor<real32> | error read_block(string[] lines, int start)
     return samples
 
 AdamState | error read_state(string path)
-    file.Handle input = try file.open(path)
+    file.read input = try file.read(path)
     string[] lines = []
     bool reading = true
     while reading
-        string | none | error line = .input.read_line()
-        match line
-            string
-                lines = lines.append(line)
-            none
-                reading = false
-            error problem
-                return problem
+        string line = ""
+        reading = try .input(&line)
+        if reading
+            lines = lines.append(line)
     AdamState state = AdamState()
     state.parameters = []
     state.first = []
@@ -365,9 +361,9 @@ void | error state_checks(int device, int steps, string scratch)
         train_step(&again, &again_optimizer, gradients, device)
         replica_step(&replica, gradients, rate, device)
 
-        AdamState host_state = try saved_state(&host, host_optimizer, "{scratch}/adam_host.state")
-        AdamState metal_state = try saved_state(&metal, metal_optimizer, "{scratch}/adam_metal.state")
-        AdamState again_state = try saved_state(&again, again_optimizer, "{scratch}/adam_again.state")
+        AdamState host_state = try saved_state(&host, host_optimizer, "{scratch}/adam_host.qnn")
+        AdamState metal_state = try saved_state(&metal, metal_optimizer, "{scratch}/adam_metal.qnn")
+        AdamState again_state = try saved_state(&again, again_optimizer, "{scratch}/adam_again.qnn")
 
         // Step counts and bias corrections are host float64 values: exact.
         // Every Parameter has a gradient at every step, so each one's count
@@ -396,8 +392,8 @@ void | error state_checks(int device, int steps, string scratch)
         tensor<real32> c_now = metal.c.raw().cpu()
         zero_gradient_fixed = zero_gradient_fixed and c_now[0, 1].item() == c_initial[0, 1].item() and c_now[1, 2].item() == c_initial[1, 2].item()
 
-    print("adam metal-fused vs metal-elementwise over {steps} steps: max abs parameter {versus_elementwise.parameter_abs} m {versus_elementwise.first_abs} v {versus_elementwise.second_abs}; steps not bitwise {versus_elementwise.mismatched_steps}{NL}")
-    print("adam metal-fused vs cpu over {steps} steps: max abs parameter {versus_cpu.parameter_abs} m {versus_cpu.first_abs} v {versus_cpu.second_abs}; steps not bitwise {versus_cpu.mismatched_steps}{NL}")
+    print.line("adam metal-fused vs metal-elementwise over {steps} steps: max abs parameter {versus_elementwise.parameter_abs} m {versus_elementwise.first_abs} v {versus_elementwise.second_abs}; steps not bitwise {versus_elementwise.mismatched_steps}")
+    print.line("adam metal-fused vs cpu over {steps} steps: max abs parameter {versus_cpu.parameter_abs} m {versus_cpu.first_abs} v {versus_cpu.second_abs}; steps not bitwise {versus_cpu.mismatched_steps}")
     report("metal adam step count and corrections", bookkeeping)
     report("metal adam matches elementwise metal", versus_elementwise.within)
     report("metal adam matches cpu", versus_cpu.within)

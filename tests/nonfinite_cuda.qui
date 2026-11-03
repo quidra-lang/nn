@@ -19,7 +19,7 @@ if args.collective
     else
         nn.all_reduce_sum(&values, [args.device, args.other])
     tensor<real32> result = values[0].cpu()
-    print("unexpected collective output {result[0].item()}{NL}")
+    print.line("unexpected collective output {result[0].item()}")
 elif args.convolution
     tensor<real32> input = (tensor.ones<real32>([1, 1, 1, 1]) * real32(300000000000000000000000000000000000000.0)).gpu(nat(args.device))
     tensor<real32> weight = (tensor.ones<real32>([1, 1, 1, 1]) * real32(2.0)).gpu(nat(args.device))
@@ -27,9 +27,9 @@ elif args.convolution
     tensor<real32> output = tensor.zeros<real32>([1, 1, 1, 1], gpu = nat(args.device))
     int32 status = probe.conv2d_cuda_f32(input, weight, bias, &output, int64(1), int64(0), int64(1))
     tensor<real32> result = output.cpu()
-    print("unexpected convolution output {status} {result[0, 0, 0, 0].item()}{NL}")
+    print.line("unexpected convolution output {status} {result[0, 0, 0, 0].item()}")
 else
     tensor<real32> value = (tensor.ones<real32>([1]) * real32(300000000000000000000000000000000000000.0)).gpu(nat(args.device))
     int32 status = probe.cuda_activation_inplace_f32(&value, int64(1))
     tensor<real32> result = value.cpu()
-    print("unexpected activation output {status} {result[0].item()}{NL}")
+    print.line("unexpected activation output {status} {result[0].item()}")

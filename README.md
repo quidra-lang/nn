@@ -6,7 +6,7 @@ Dependency layers:
 
 ```text
 Layer 1: Core
-Layer 2: Math
+Layer 2: Math / Collections / Text / Encoding
 Layer 3: NN / Vision / Video
 Layer 4: DNN
 ```
@@ -173,8 +173,12 @@ across Core's CPU threads with `qcore_parallel_for`, never the terms of one
 sum. `QUIDRA_CPU_THREADS` limits the threads, and results are bitwise the
 same for every thread count.
 
-The state serializer is owned here. The on-disk magic remains
-`QUIDRA_DNN_STATE`. `nn.save` and `nn.checkpoint` write format 5, with one
+Use `.qnn` (Quidra Neural Network) for saved models and checkpoints, such
+as `model.qnn` and `checkpoint.qnn`. The Quidra NN State Format serializer
+is owned here. The extension is a naming convention: save/load and
+checkpoint/resume accept arbitrary paths, so existing `.dnn` files remain
+usable without renaming. To preserve compatibility, the on-disk magic
+remains `QUIDRA_DNN_STATE`. `nn.save` and `nn.checkpoint` write format 5, with one
 entry per Parameter or State and an explicit `real16`, `real16b`, `real32`
 or `real64` dtype name. Values use the scalar's shortest round-trip decimal
 text, including negative zero and subnormals. No dtype conversion happens
@@ -254,9 +258,10 @@ quotients that underflow to zero, and recomputes the affected element from its
 unchanged inputs with integer binary32 operations. The test-only
 `half_exact_probe` can prove that this path ran; production updates do not
 synchronize to read a counter. A narrowed weight outside its storage range
-reports `NUMERIC_CONVERSION` for a tensor element. Non-finite moments report
-`NONFINITE_RESULT` on the CPU. On Metal, conversion failures keep
-`NUMERIC_CONVERSION`, while the deferred non-finite moment check reports the
+reports `NUMERIC_CONVERSION` for a tensor element. NaN moments report
+`NONFINITE_RESULT` on the CPU; a valid infinite second moment is retained,
+including when the resulting update is zero. On Metal, conversion failures
+keep `NUMERIC_CONVERSION`, while the deferred NaN moment check reports the
 Core code of the synchronization that consumes it: `TENSOR` for `.cpu()`,
 `GPU_SYNC` for `gpu.sync` or time synchronization, and `GPU_ASYNC` at exit.
 The report retains the operation message and the statement that queued it.
