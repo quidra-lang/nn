@@ -133,7 +133,7 @@ void | error write_checked_line(
     return
 
 string | error read_required_line(file.read &input, string context)
-    string line := ""
+    line := ""
     bool | error read := .input(&line)
     match read
         bool ok
@@ -185,7 +185,7 @@ void | error write_state_entry<T: floating>(
     for dimension := shape[]
         if dimension > 9223372036854775807
             return error("nn.save tensor dimension exceeds the storage limit", code = "NN_SIZE")
-        int extent := int(dimension)
+        extent := int(dimension)
         if extent > 0 and count > 9223372036854775807 / extent
             return error("nn.save tensor element count overflows int", code = "NN_SIZE")
         try write_checked_line(&output, &checksum, dimension.string())
@@ -211,7 +211,7 @@ class AdamStep()
     real64 second_correction
 
 AdamStep adam_step(nat count, real64 first_correction, real64 second_correction)
-    AdamStep step := AdamStep()
+    step := AdamStep()
     step.count = count
     step.first_correction = first_correction
     step.second_correction = second_correction
@@ -269,7 +269,7 @@ void | error verify_state_checksum(
     if expected != checksum.value()
         return error("nn.load state checksum does not match payload", code = "NN_CHECKPOINT_FILE")
 
-    string trailing := ""
+    trailing := ""
     bool | error read := .input(&trailing)
     match read
         bool present
@@ -298,7 +298,7 @@ class StoredTensor<T: floating>(local StateEntrySchema schema_initial, local ten
     value = value_initial
 
 string shape_text(nat[] shape)
-    string result := "["
+    result := "["
     for dimension := shape[nat index]
         if index != 0
             result = result + ", "
@@ -348,14 +348,14 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
         string new_name := first_model[position].split("[")[0]
         if old_name == "" or new_name == ""
             continue
-        bool old_is_index := false
+        old_is_index := false
         nat | error old_index := nat.parse(old_name)
         match old_index
             nat
                 old_is_index = true
             error
                 old_is_index = false
-        bool new_is_index := false
+        new_is_index := false
         nat | error new_index := nat.parse(new_name)
         match new_index
             nat
@@ -364,10 +364,10 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
                 new_is_index = false
         if old_is_index or new_is_index
             continue
-        bool matches := true
+        matches := true
         for model_entry := expected[]
             string[] model_parts := model_entry.path.split(".")
-            bool found := false
+            found := false
             for file_entry := actual[]
                 string[] parts := file_entry.path.split(".")
                 if len(parts) != len(model_parts) or len(parts) <= position
@@ -413,7 +413,7 @@ void | error compare_state_schema(
                 missing = missing.append(schema_text(model_entry))
                 missing_entries = missing_entries.append(model_entry)
     for file_entry := actual[nat index]
-        bool duplicate := false
+        duplicate := false
         for 0 <= nat previous < index
             if actual[previous].path == file_entry.path
                 duplicate = true
@@ -468,7 +468,7 @@ StoredTensor<real32> | error read_stored_tensor32(file.read &input, StateChecksu
     for 0 <= int index < count
         string value_text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real32(value_text, "tensor value at " + path + "[" + index.string() + "]")
-    StateEntrySchema schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real32", path_initial = path, shape_initial = shape)
+    schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real32", path_initial = path, shape_initial = shape)
     return StoredTensor<real32>(schema_initial = schema, value_initial = flat.reshape(shape))
 
 StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksum &checksum)
@@ -498,7 +498,7 @@ StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksu
     for 0 <= int index < count
         string value_text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real64(value_text, "tensor value at " + path + "[" + index.string() + "]")
-    StateEntrySchema schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real64", path_initial = path, shape_initial = shape)
+    schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real64", path_initial = path, shape_initial = shape)
     return StoredTensor<real64>(schema_initial = schema, value_initial = flat.reshape(shape))
 
 tensor<T> | error select_stored_tensor<T: floating>(const StoredTensor<T>[] entries, string path)
@@ -682,7 +682,7 @@ class StateTable()
         return
 
 StateTable | error read_model_entries(file.read &input, StateChecksum &checksum, string version)
-    StateTable table := StateTable()
+    table := StateTable()
     if version == "5"
         int count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "model entry count"), "model entry count")
         for 0 <= int index < count

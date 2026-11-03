@@ -5,7 +5,7 @@ class Model()
     nn.FC output
 
 void train()
-    Model model := Model()
+    model := Model()
     model.hidden = nn.FC(features_in = 2, features_out = 4)
     model.output = nn.FC(features_in = 4, features_out = 1, seed = 2)
     optimizer := nn.SGD(&model, rate = 0.1)

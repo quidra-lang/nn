@@ -196,7 +196,7 @@ void | error save<M>(M model, string path)
     internal.StateEntrySchema[] expected := model_schema(&model)
     try internal.validate_model_schema(expected, "nn.save")
     file.write output := try file.write(path)
-    internal.StateChecksum checksum := internal.StateChecksum()
+    checksum := internal.StateChecksum()
     try internal.write_checked_line(&output, &checksum, "QUIDRA_DNN_STATE")
     try internal.write_checked_line(&output, &checksum, "5")
     try internal.write_checked_line(&output, &checksum, "model")
@@ -210,7 +210,7 @@ void | error load<M>(M &model, string path)
     internal.StateEntrySchema[] expected := model_schema(&model)
     try internal.validate_model_schema(expected, "nn.load")
     file.read input := try file.read(path)
-    internal.StateChecksum checksum := internal.StateChecksum()
+    checksum := internal.StateChecksum()
     string magic := try internal.read_checked_line(&input, &checksum, "magic")
     if magic != "QUIDRA_DNN_STATE"
         return error("nn.load state file has an unsupported magic", code = "NN_CHECKPOINT_FILE")
@@ -856,7 +856,7 @@ class Conv2D(
         // algorithm choice, groups, padding, and bias stay entirely in NN.
         int32 cuda_device := native.cuda_device_f32(value)
         if cuda_device >= int32(0)
-            int device_index := int(cuda_device)
+            device_index := int(cuda_device)
             tensor<real32> cuda_input := value
             tensor<real32> cuda_weight := parameter_weight
             tensor<real32> cuda_bias := parameter_bias
@@ -1492,7 +1492,7 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
     // sum_last preserves the reduced axis by broadcasting the sum. Select
     // one representative from each spatial plane after dividing by its size.
     tensor<real32> spatial_sums := math.sum_last(flattened)
-    real32 spatial_count := real32(count)
+    spatial_count := real32(count)
     tensor<real32> means := spatial_sums / spatial_count
     int output_count := batches * channels
     int[] indices := array(nat(output_count), fill = 0)
@@ -1569,9 +1569,9 @@ tensor<real32> local_response_normalization(
             )
             square_sum = square_sum + neighbor_value * neighbor_value
 
-        real32 base_k := real32(k)
-        real32 coefficient := real32(alpha)
-        real32 exponent := real32(beta)
+        base_k := real32(k)
+        coefficient := real32(alpha)
+        exponent := real32(beta)
         tensor<real32> base := base_k + square_sum * coefficient
         tensor<real32> denominator := math.exp(
             math.log(base) * exponent
@@ -1861,7 +1861,7 @@ class Dropout(local real64 rate, local int seed := 0, local bool inverted := tru
     tensor<real32> infer(tensor<real32> value)
         if inverted_scaling
             return value
-        real32 keep := real32(1.0 - drop_rate)
+        keep := real32(1.0 - drop_rate)
         return value * keep
 
 // ReLU is the expression (x + |x|) / 2 and GELU is
@@ -2039,7 +2039,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 next64 = next64.append(tensor.zeros<real64>(shape))
 
     private bool same_device(int observed_device, int64 recorded_device)
-        int64 observed := int64(observed_device)
+        observed := int64(observed_device)
         return observed == recorded_device
 
     private void | error check_binding(string operation)
@@ -2109,7 +2109,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         return
 
     private void | error .compute16(nat index, tensor<real16> value, tensor<real16> gradient)
-        int32 status := int32(-1)
+        status := int32(-1)
         tensor<real16> dense := gradient
         if native.is_cpu_floating<real16>(value) == int32(1)
             status = native.sgd_update<real16>(value, dense, &next16[index], learning_rate)
@@ -2125,7 +2125,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         return
 
     private void | error .compute16b(nat index, tensor<real16b> value, tensor<real16b> gradient)
-        int32 status := int32(-1)
+        status := int32(-1)
         tensor<real16b> dense := gradient
         if native.is_cpu_floating<real16b>(value) == int32(1)
             status = native.sgd_update<real16b>(value, dense, &next16b[index], learning_rate)
@@ -2141,7 +2141,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         return
 
     private void | error .compute32(nat index, tensor<real32> value, tensor<real32> gradient)
-        int32 status := int32(-1)
+        status := int32(-1)
         tensor<real32> dense := gradient
         if native.is_cpu_floating<real32>(value) == int32(1)
             status = native.sgd_update<real32>(value, dense, &next32[index], learning_rate)
@@ -2157,7 +2157,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         return
 
     private void | error .compute64(nat index, tensor<real64> value, tensor<real64> gradient)
-        int32 status := int32(-1)
+        status := int32(-1)
         tensor<real64> dense := gradient
         if native.is_cpu_floating<real64>(value) == int32(1)
             status = native.sgd_update<real64>(value, dense, &next64[index], learning_rate)
@@ -2383,7 +2383,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 next64 = next64.append(tensor.zeros<real64>(shape))
 
     private bool same_device(int observed_device, int64 recorded_device)
-        int64 observed := int64(observed_device)
+        observed := int64(observed_device)
         return observed == recorded_device
 
     private void | error check_binding(string operation)
@@ -2462,7 +2462,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         internal.StateEntrySchema[] expected := model_schema(&model_argument)
         try internal.validate_model_schema(expected, "nn.Adam.save")
         file.write output := try file.write(path)
-        internal.StateChecksum checksum := internal.StateChecksum()
+        checksum := internal.StateChecksum()
         try internal.write_checked_line(&output, &checksum, "QUIDRA_DNN_STATE")
         try internal.write_checked_line(&output, &checksum, "5")
         try internal.write_checked_line(&output, &checksum, "model+Adam")
@@ -2515,7 +2515,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamFirst", dtype_initial = "real64", path_initial = entry_path, shape_initial = shapes64[index]), "first"))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamSecond", dtype_initial = "real64", path_initial = entry_path, shape_initial = shapes64[index]), "second"))
         file.read input := try file.read(path)
-        internal.StateChecksum checksum := internal.StateChecksum()
+        checksum := internal.StateChecksum()
         string magic := try internal.read_checked_line(&input, &checksum, "magic")
         if magic != "QUIDRA_DNN_STATE"
             return error("nn.Adam.load state file has an unsupported magic", code = "NN_CHECKPOINT_FILE")
@@ -2553,8 +2553,8 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 return error("nn.Adam.load Adam slot count overflows the storage limit", code = "NN_CHECKPOINT_FILE")
             slot_count = legacy_count32 + legacy_count64
         internal.StoredAdamStep[] stored_steps := []
-        internal.StateTable stored_first := internal.StateTable()
-        internal.StateTable stored_second := internal.StateTable()
+        stored_first := internal.StateTable()
+        stored_second := internal.StateTable()
         for 0 <= int index < slot_count
             internal.StoredAdamStep step
             if version == "5"
@@ -2568,11 +2568,11 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 else
                     try .stored_first.read_legacy64(&input, &checksum, "AdamFirst")
                     try .stored_second.read_legacy64(&input, &checksum, "AdamSecond")
-                nat legacy_schema_index := nat(index)
+                legacy_schema_index := nat(index)
                 step = internal.StoredAdamStep(path_initial = stored_first.schemas[legacy_schema_index].path, step_initial = internal.adam_step(loaded_iteration, loaded_first_correction, loaded_second_correction))
-            nat first_schema_index := nat(index)
+            first_schema_index := nat(index)
             internal.StateEntrySchema first := stored_first.schemas[first_schema_index]
-            nat second_schema_index := nat(index)
+            second_schema_index := nat(index)
             internal.StateEntrySchema second := stored_second.schemas[second_schema_index]
             if first.path != step.path or second.path != step.path
                 return error("nn.Adam.load Adam step and moments must carry one path", code = "NN_CHECKPOINT_FILE")
@@ -2792,10 +2792,10 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         nat coefficient := .coefficients(steps16[index] + 1, first_corrections16[index], second_corrections16[index])
         real32 step_scale := real32(coefficient_scales[coefficient])
         real32 adjusted_epsilon := real32(coefficient_epsilons[coefficient])
-        real32 beta1 := real32(first_decay)
-        real32 beta2 := real32(second_decay)
-        real32 one_minus_beta1 := real32(1.0 - first_decay)
-        real32 one_minus_beta2 := real32(1.0 - second_decay)
+        beta1 := real32(first_decay)
+        beta2 := real32(second_decay)
+        one_minus_beta1 := real32(1.0 - first_decay)
+        one_minus_beta2 := real32(1.0 - second_decay)
         tensor<real16> dense_source := gradient
         if not dense_source.is_contiguous()
             dense_source = dense_source.contiguous()
@@ -2826,10 +2826,10 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         nat coefficient := .coefficients(steps16b[index] + 1, first_corrections16b[index], second_corrections16b[index])
         real32 step_scale := real32(coefficient_scales[coefficient])
         real32 adjusted_epsilon := real32(coefficient_epsilons[coefficient])
-        real32 beta1 := real32(first_decay)
-        real32 beta2 := real32(second_decay)
-        real32 one_minus_beta1 := real32(1.0 - first_decay)
-        real32 one_minus_beta2 := real32(1.0 - second_decay)
+        beta1 := real32(first_decay)
+        beta2 := real32(second_decay)
+        one_minus_beta1 := real32(1.0 - first_decay)
+        one_minus_beta2 := real32(1.0 - second_decay)
         tensor<real16b> dense_source := gradient
         if not dense_source.is_contiguous()
             dense_source = dense_source.contiguous()
@@ -2866,7 +2866,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         real64 one_minus_beta1 := 1.0 - first_decay
         real64 one_minus_beta2 := 1.0 - second_decay
         tensor<real32> dense := gradient
-        int32 native_status := int32(-1)
+        native_status := int32(-1)
         if native.is_cpu_floating<real32>(value) == int32(1)
             native_status = native.adam_update<real32>(
                 value,
@@ -2907,12 +2907,12 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         tensor<real32> first := first32[index]
         tensor<real32> second := second32[index]
 
-        real32 beta1_32 := real32(first_decay)
-        real32 beta2_32 := real32(second_decay)
-        real32 one_minus_beta1_32 := real32(1.0 - first_decay)
-        real32 one_minus_beta2_32 := real32(1.0 - second_decay)
-        real32 adjusted_epsilon32 := real32(adjusted_epsilon)
-        real32 step_scale32 := real32(step_scale)
+        beta1_32 := real32(first_decay)
+        beta2_32 := real32(second_decay)
+        one_minus_beta1_32 := real32(1.0 - first_decay)
+        one_minus_beta2_32 := real32(1.0 - second_decay)
+        adjusted_epsilon32 := real32(adjusted_epsilon)
+        step_scale32 := real32(step_scale)
         tensor<real32> next_first := (
             first * beta1_32
             + dense * one_minus_beta1_32
@@ -2947,7 +2947,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         real64 adjusted_epsilon := coefficient_epsilons[coefficient]
         real64 one_minus_beta1 := 1.0 - first_decay
         real64 one_minus_beta2 := 1.0 - second_decay
-        int32 native_status := int32(-1)
+        native_status := int32(-1)
         if native.is_cpu_floating<real64>(value) == int32(1)
             native_status = native.adam_update<real64>(
                 value,

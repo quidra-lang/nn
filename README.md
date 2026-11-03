@@ -21,7 +21,7 @@ Core owns language, tensor/autograd/device substrate, basic operators, and gener
 ```quidra
 import nn
 
-nn.FC layer := nn.FC(128, 64)
+layer := nn.FC(128, 64)
 tensor<real32> output := nn.relu(.layer.forward(input))
 optimizer := nn.Adam(&model, 0.001)
 loss.backward(&model)
