@@ -5,15 +5,15 @@ class Model()
     nn.FC output
 
 void train()
-    Model model = Model()
+    Model model := Model()
     model.hidden = nn.FC(features_in = 2, features_out = 4)
     model.output = nn.FC(features_in = 4, features_out = 1, seed = 2)
-    auto optimizer = nn.SGD(&model, rate = 0.1)
+    optimizer := nn.SGD(&model, rate = 0.1)
 
-    tensor<real32> samples = tensor.ones([1, 2])
-    tensor<real32> targets = tensor.ones([1, 1])
+    tensor<real32> samples := tensor.ones([1, 2])
+    tensor<real32> targets := tensor.ones([1, 1])
 
-    tensor<real32> first = nn.mse(
+    tensor<real32> first := nn.mse(
         .model.output.forward(
             nn.relu(.model.hidden.forward(samples.track()))
         ),
@@ -21,12 +21,12 @@ void train()
     )
     print.line(first.item())
 
-    real32 latest = first.item()
+    real32 latest := first.item()
     for 0 <= nat iteration < 100
-        tensor<real32> activated = nn.relu(
+        tensor<real32> activated := nn.relu(
             .model.hidden.forward(samples.track())
         )
-        tensor<real32> loss = nn.mse(.model.output.forward(activated), targets)
+        tensor<real32> loss := nn.mse(.model.output.forward(activated), targets)
 
         loss.backward(&model)
         .optimizer.update()

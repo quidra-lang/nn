@@ -16,7 +16,7 @@ class Pair()
     nn.Parameter<real32> weight
     nn.Parameter<real32> bias
 
-Pair pair = Pair()
+Pair pair := Pair()
 pair.weight = nn.Parameter<real32>(value = tensor.ones<real32>([2, 2]))
 pair.bias = nn.Parameter<real32>(value = tensor.zeros<real32>([2]))
 
@@ -24,8 +24,8 @@ pair.bias = nn.Parameter<real32>(value = tensor.zeros<real32>([2]))
 .nn.mode.deterministic()
 .nn.mode.fast()
 
-bool fc_rejected = false
-nn.FC | error bad_fc = nn.FC(features_in = 2, features_out = 0)
+bool fc_rejected := false
+nn.FC | error bad_fc := nn.FC(features_in = 2, features_out = 0)
 match bad_fc
     nn.FC
         fc_rejected = false
@@ -33,8 +33,8 @@ match bad_fc
         fc_rejected = true
 print.line(fc_rejected)
 
-bool conv_rejected = false
-nn.Conv2D | error bad_conv = nn.Conv2D(
+bool conv_rejected := false
+nn.Conv2D | error bad_conv := nn.Conv2D(
     channels_in = 1,
     channels_out = 1,
     kernel = 3,
@@ -47,8 +47,8 @@ match bad_conv
         conv_rejected = true
 print.line(conv_rejected)
 
-bool norm_rejected = false
-nn.BatchNorm | error bad_norm = nn.BatchNorm(features = 2, momentum = 1.5)
+bool norm_rejected := false
+nn.BatchNorm | error bad_norm := nn.BatchNorm(features = 2, momentum = 1.5)
 match bad_norm
     nn.BatchNorm
         norm_rejected = false
@@ -56,8 +56,8 @@ match bad_norm
         norm_rejected = true
 print.line(norm_rejected)
 
-bool dropout_rejected = false
-nn.Dropout | error bad_dropout = nn.Dropout(rate = 1.0)
+bool dropout_rejected := false
+nn.Dropout | error bad_dropout := nn.Dropout(rate = 1.0)
 match bad_dropout
     nn.Dropout
         dropout_rejected = false
@@ -65,8 +65,8 @@ match bad_dropout
         dropout_rejected = true
 print.line(dropout_rejected)
 
-bool sgd_rejected = false
-nn.SGD<Pair> | error bad_sgd = nn.SGD(&pair, rate = 0.0)
+bool sgd_rejected := false
+nn.SGD<Pair> | error bad_sgd := nn.SGD(&pair, rate = 0.0)
 match bad_sgd
     nn.SGD<Pair>
         sgd_rejected = false
@@ -74,8 +74,8 @@ match bad_sgd
         sgd_rejected = true
 print.line(sgd_rejected)
 
-bool adam_rejected = false
-nn.Adam<Pair> | error bad_adam = nn.Adam(&pair, beta1 = 1.0)
+bool adam_rejected := false
+nn.Adam<Pair> | error bad_adam := nn.Adam(&pair, beta1 = 1.0)
 match bad_adam
     nn.Adam<Pair>
         adam_rejected = false
@@ -83,10 +83,10 @@ match bad_adam
         adam_rejected = true
 print.line(adam_rejected)
 
-real64 invalid_rate = -0.5
+real64 invalid_rate := -0.5
 
-bool dropout_rate_rejected = false
-nn.Dropout | error invalid_dropout = nn.Dropout(rate = invalid_rate)
+bool dropout_rate_rejected := false
+nn.Dropout | error invalid_dropout := nn.Dropout(rate = invalid_rate)
 match invalid_dropout
     nn.Dropout
         dropout_rate_rejected = false
@@ -94,8 +94,8 @@ match invalid_dropout
         dropout_rate_rejected = true
 print.line(dropout_rate_rejected)
 
-bool adam_decay_rejected = false
-nn.Adam<Pair> | error invalid_adam = nn.Adam(&pair, beta1 = invalid_rate)
+bool adam_decay_rejected := false
+nn.Adam<Pair> | error invalid_adam := nn.Adam(&pair, beta1 = invalid_rate)
 match invalid_adam
     nn.Adam<Pair>
         adam_decay_rejected = false
@@ -103,8 +103,8 @@ match invalid_adam
         adam_decay_rejected = true
 print.line(adam_decay_rejected)
 
-bool initializer_bound_rejected = false
-tensor<real32> | error bad_bound = nn.uniform_weights(
+bool initializer_bound_rejected := false
+tensor<real32> | error bad_bound := nn.uniform_weights(
     count = 1, bound = invalid_rate, seed = 1
 )
 match bad_bound
@@ -114,7 +114,7 @@ match bad_bound
         initializer_bound_rejected = true
 print.line(initializer_bound_rejected)
 
-nn.FC dense = nn.normal_fc(
+nn.FC dense := nn.normal_fc(
     features_in = 2,
     features_out = 1,
     standard_deviation = 0.0,
@@ -124,7 +124,7 @@ nn.FC dense = nn.normal_fc(
 print.line(dense.weight.raw()[0, 0].item() == real32(0))
 print.line(dense.bias.raw()[0].item() == real32(1))
 
-nn.Conv2D convolution = nn.normal_conv2d(
+nn.Conv2D convolution := nn.normal_conv2d(
     channels_in = 1,
     channels_out = 1,
     kernel = 1,
@@ -138,26 +138,26 @@ print.line(convolution.bias.raw()[0].item() == real32(1))
 // Optimizers are bound at construction: a bound Parameter whose shape or
 // device changed makes update() fail, before anything is updated, until the
 // a new optimizer is constructed for the changed structure.
-auto bound_sgd = nn.SGD(&pair, rate = 0.5)
-auto bound_adam = nn.Adam(&pair, 0.1)
+bound_sgd := nn.SGD(&pair, rate = 0.5)
+bound_adam := nn.Adam(&pair, 0.1)
 .pair.weight.replace(tensor.ones<real32>([3, 3]))
-bool sgd_reshape_rejected = false
+bool sgd_reshape_rejected := false
 match .bound_sgd.update()
     void
         sgd_reshape_rejected = false
     error
         sgd_reshape_rejected = true
 print.line(sgd_reshape_rejected)
-bool adam_reshape_rejected = false
+bool adam_reshape_rejected := false
 match .bound_adam.update()
     void
         adam_reshape_rejected = false
     error
         adam_reshape_rejected = true
 print.line(adam_reshape_rejected and pair.weight.raw().shape()[0] == 3)
-auto rebound_sgd = nn.SGD(&pair, rate = 0.5)
-auto rebound_adam = nn.Adam(&pair, 0.1)
-tensor<real32> rebound_weight = .pair.weight.track()
+rebound_sgd := nn.SGD(&pair, rate = 0.5)
+rebound_adam := nn.Adam(&pair, 0.1)
+tensor<real32> rebound_weight := .pair.weight.track()
 math.sum(rebound_weight * rebound_weight).backward(&pair)
 // update() consumes the gradients it used.
 .rebound_adam.update()
@@ -180,9 +180,9 @@ import nn
 class Model()
     nn.Parameter<real32> weight
 
-Model model = Model()
+Model model := Model()
 model.weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
-const auto optimizer = nn.SGD(&model)
+const optimizer := nn.SGD(&model)
 .optimizer.update()
 QUI
 set +e
@@ -201,9 +201,9 @@ import nn
 class Model()
     nn.Parameter<real32> weight
 
-Model model = Model()
+Model model := Model()
 model.weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
-const auto optimizer = nn.Adam(&model)
+const optimizer := nn.Adam(&model)
 .optimizer.update()
 QUI
 set +e
@@ -224,10 +224,10 @@ import nn
 class Model()
     nn.Parameter<real32> weight
 
-Model model = Model()
+Model model := Model()
 model.weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
-auto adam = nn.Adam(&model)
-auto sgd = nn.SGD(&model)
+adam := nn.Adam(&model)
+sgd := nn.SGD(&model)
 adam.zero_grad()
 adam.step()
 sgd.zero_grad()
@@ -250,9 +250,9 @@ import nn
 class Model()
     nn.Parameter<real32> weight
 
-Model model = Model()
+Model model := Model()
 model.weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
-nn.SGD<Model> | error invalid_rate = nn.SGD(&model, rate = real64(-1.0))
+nn.SGD<Model> | error invalid_rate := nn.SGD(&model, rate = real64(-1.0))
 match invalid_rate
     nn.SGD<Model>
         print(false)
@@ -287,10 +287,10 @@ cat > "$TMP/state-leaves-initialized.qui" <<'QUI'
 import nn
 
 class Model()
-    nn.Parameter<real32> weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
-    nn.State<real32> running = nn.State<real32>(value = tensor.zeros<real32>([1]))
+    nn.Parameter<real32> weight := nn.Parameter<real32>(value = tensor.ones<real32>([1]))
+    nn.State<real32> running := nn.State<real32>(value = tensor.zeros<real32>([1]))
 
-Model model = Model()
+Model model := Model()
 nn.load(&model, "unused-state-file")
 QUI
 QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" check "$TMP/state-leaves-initialized.qui" --json >"$TMP/state-leaves-initialized.out" 2>&1
@@ -300,7 +300,7 @@ import nn
 class Model()
     nn.Parameter<real32> weight
 
-Model model = Model()
+Model model := Model()
 nn.load(&model, "unused-state-file")
 QUI
 set +e
@@ -318,7 +318,7 @@ import nn
 class Model()
     nn.State<real32> running
 
-Model model = Model()
+Model model := Model()
 nn.load(&model, "unused-state-file")
 QUI
 set +e
@@ -335,38 +335,38 @@ fi
 cat > "$TMP/prepared-layer-generation.qui" <<'QUI'
 import nn
 
-nn.Parameter<real32> weight_fc = nn.Parameter<real32>(value = tensor.ones<real32>([1, 2]) * real32(3.0))
-nn.Parameter<real32> bias_fc = nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(4.0))
-nn.FC dense = nn.FC(2, 1, initial_weight = weight_fc, initial_bias = bias_fc)
+nn.Parameter<real32> weight_fc := nn.Parameter<real32>(value = tensor.ones<real32>([1, 2]) * real32(3.0))
+nn.Parameter<real32> bias_fc := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(4.0))
+nn.FC dense := nn.FC(2, 1, initial_weight = weight_fc, initial_bias = bias_fc)
 print.line(dense.weight.raw()[0, 0].item() == real32(3.0) and dense.bias.raw()[0].item() == real32(4.0))
 
-nn.Parameter<real32> weight_conv = nn.Parameter<real32>(value = tensor.ones<real32>([1, 1, 1, 1]) * real32(2.0))
-nn.Parameter<real32> bias_conv = nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(3.0))
-nn.Conv2D convolution = nn.Conv2D(1, 1, 1, stride = 2, padding = 1, initial_weight = weight_conv, initial_bias = bias_conv)
+nn.Parameter<real32> weight_conv := nn.Parameter<real32>(value = tensor.ones<real32>([1, 1, 1, 1]) * real32(2.0))
+nn.Parameter<real32> bias_conv := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(3.0))
+nn.Conv2D convolution := nn.Conv2D(1, 1, 1, stride = 2, padding = 1, initial_weight = weight_conv, initial_bias = bias_conv)
 print.line(convolution.weight.raw()[0, 0, 0, 0].item() == real32(2.0) and convolution.bias.raw()[0].item() == real32(3.0) and convolution.step == 2 and convolution.border == 1 and convolution.group_count == 1)
 
-nn.Parameter<real32> scale_norm = nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(5.0))
-nn.Parameter<real32> bias_norm = nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(6.0))
-nn.State<real32> mean_norm = nn.State<real32>(value = tensor.ones<real32>([1]) * real32(7.0))
-nn.State<real32> variance_norm = nn.State<real32>(value = tensor.ones<real32>([1]) * real32(8.0))
-nn.BatchNorm normalization = nn.BatchNorm(1, initial_scale = scale_norm, initial_bias = bias_norm, initial_mean = mean_norm, initial_variance = variance_norm, initial_momentum = real32(0.25), initial_epsilon = real32(0.125))
+nn.Parameter<real32> scale_norm := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(5.0))
+nn.Parameter<real32> bias_norm := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(6.0))
+nn.State<real32> mean_norm := nn.State<real32>(value = tensor.ones<real32>([1]) * real32(7.0))
+nn.State<real32> variance_norm := nn.State<real32>(value = tensor.ones<real32>([1]) * real32(8.0))
+nn.BatchNorm normalization := nn.BatchNorm(1, initial_scale = scale_norm, initial_bias = bias_norm, initial_mean = mean_norm, initial_variance = variance_norm, initial_momentum = real32(0.25), initial_epsilon = real32(0.125))
 print.line(normalization.scale.raw()[0].item() == real32(5.0) and normalization.bias.raw()[0].item() == real32(6.0) and normalization.running_mean.raw()[0].item() == real32(7.0) and normalization.running_variance.raw()[0].item() == real32(8.0) and normalization.running_momentum == real32(0.25) and normalization.variance_epsilon == real32(0.125))
 
-bool rejected_fc = false
+bool rejected_fc := false
 match nn.FC(2, 1, initial_weight = weight_fc)
     nn.FC
         rejected_fc = false
     error problem
         rejected_fc = problem.code == "NN_ARGUMENT"
 print.line(rejected_fc)
-bool rejected_conv = false
+bool rejected_conv := false
 match nn.Conv2D(1, 1, 1, initial_bias = bias_conv)
     nn.Conv2D
         rejected_conv = false
     error problem
         rejected_conv = problem.code == "NN_ARGUMENT"
 print.line(rejected_conv)
-bool rejected_norm = false
+bool rejected_norm := false
 match nn.BatchNorm(1, initial_scale = scale_norm)
     nn.BatchNorm
         rejected_norm = false
@@ -375,10 +375,10 @@ match nn.BatchNorm(1, initial_scale = scale_norm)
 print.line(rejected_norm)
 
 bool rejects_settings(real32 configured_momentum, real32 configured_epsilon)
-    nn.Parameter<real32> prepared_scale = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
-    nn.Parameter<real32> prepared_bias = nn.Parameter<real32>(value = tensor.zeros<real32>([1]))
-    nn.State<real32> prepared_mean = nn.State<real32>(value = tensor.zeros<real32>([1]))
-    nn.State<real32> prepared_variance = nn.State<real32>(value = tensor.ones<real32>([1]))
+    nn.Parameter<real32> prepared_scale := nn.Parameter<real32>(value = tensor.ones<real32>([1]))
+    nn.Parameter<real32> prepared_bias := nn.Parameter<real32>(value = tensor.zeros<real32>([1]))
+    nn.State<real32> prepared_mean := nn.State<real32>(value = tensor.zeros<real32>([1]))
+    nn.State<real32> prepared_variance := nn.State<real32>(value = tensor.ones<real32>([1]))
     match nn.BatchNorm(1, initial_scale = prepared_scale, initial_bias = prepared_bias, initial_mean = prepared_mean, initial_variance = prepared_variance, initial_momentum = configured_momentum, initial_epsilon = configured_epsilon)
         nn.BatchNorm
             return false

@@ -11,28 +11,28 @@ tensor<T> placed<T: floating>(tensor<T> value, int device)
     return value
 
 if args.moment
-    tensor<real16b> parameter = placed(tensor.zeros<real16b>([1]), args.device)
-    tensor<real16b> gradient = placed(tensor.ones<real16b>([1]) * real16b(300000000000000000000000000000000000000.0), args.device)
-    tensor<real32> first = placed(tensor.zeros<real32>([1]), args.device)
-    tensor<real32> second = placed(tensor.zeros<real32>([1]), args.device)
-    tensor<real16b> output = placed(tensor.zeros<real16b>([1]), args.device)
-    int32 status = probe.adam_half_update<real16b>(parameter, gradient, &first, &second, &output,
+    tensor<real16b> parameter := placed(tensor.zeros<real16b>([1]), args.device)
+    tensor<real16b> gradient := placed(tensor.ones<real16b>([1]) * real16b(300000000000000000000000000000000000000.0), args.device)
+    tensor<real32> first := placed(tensor.zeros<real32>([1]), args.device)
+    tensor<real32> second := placed(tensor.zeros<real32>([1]), args.device)
+    tensor<real16b> output := placed(tensor.zeros<real16b>([1]), args.device)
+    int32 status := probe.adam_half_update<real16b>(parameter, gradient, &first, &second, &output,
         0.5, 0.5, 0.5, 0.5, 0.125, 0.125)
     // The second moment overflows to +inf, which is now a legal numeric
     // value. The update still has a determinate zero step (finite / inf).
-    tensor<real32> checked_second = second.cpu()
-    tensor<real32> checked_first = first.cpu()
-    tensor<real16b> checked_output = output.cpu()
+    tensor<real32> checked_second := second.cpu()
+    tensor<real32> checked_first := first.cpu()
+    tensor<real16b> checked_output := output.cpu()
     print.line(status == int32(0) and checked_second[0].item() == real32(inf) and
           checked_first[0].item() > real32(0) and checked_output[0].item() == real16b(0))
 else
-    tensor<real16> parameter = placed(tensor.ones<real16>([1]) * real16(65504.0), args.device)
-    tensor<real16> gradient = placed(tensor.ones<real16>([1]) * real16(-65504.0), args.device)
-    tensor<real16> output = placed(tensor.zeros<real16>([1]), args.device)
-    int32 status = 1
+    tensor<real16> parameter := placed(tensor.ones<real16>([1]) * real16(65504.0), args.device)
+    tensor<real16> gradient := placed(tensor.ones<real16>([1]) * real16(-65504.0), args.device)
+    tensor<real16> output := placed(tensor.zeros<real16>([1]), args.device)
+    int32 status := 1
     if args.device >= 0
         status = probe.sgd_half_metal_update<real16>(parameter, gradient, &output, 2.0)
     else
         status = probe.sgd_update<real16>(parameter, gradient, &output, 2.0)
-    tensor<real16> checked = output.cpu()
+    tensor<real16> checked := output.cpu()
     print.line("unexpected success {status} {checked[0].item()}")

@@ -21,9 +21,9 @@ Core owns language, tensor/autograd/device substrate, basic operators, and gener
 ```quidra
 import nn
 
-nn.FC layer = nn.FC(128, 64)
-tensor<real32> output = nn.relu(.layer.forward(input))
-auto optimizer = nn.Adam(&model, 0.001)
+nn.FC layer := nn.FC(128, 64)
+tensor<real32> output := nn.relu(.layer.forward(input))
+optimizer := nn.Adam(&model, 0.001)
 loss.backward(&model)
 .optimizer.update()
 ```
@@ -94,7 +94,7 @@ class Scale16()
     weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
 
     tensor<real16> .forward(tensor<real16> input)
-        tensor<real16> low_weight = real16(.weight.track())
+        tensor<real16> low_weight := real16(.weight.track())
         return input * low_weight
 
 class Scale16b()
@@ -103,12 +103,12 @@ class Scale16b()
     weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
 
     tensor<real16b> .forward(tensor<real16b> input)
-        tensor<real16b> low_weight = real16b(.weight.track())
+        tensor<real16b> low_weight := real16b(.weight.track())
         return input * low_weight
 ```
 
 Initialize the complete model first, then keep its optimizer in a separate
-variable: `auto optimizer = nn.Adam(&model, rate = 0.001)`. After a loss uses
+variable: `optimizer := nn.Adam(&model, rate = 0.001)`. After a loss uses
 `.model.forward(input)`, call `loss.backward(&model)` and
 `.optimizer.update()`. Do not copy the Parameter into a second model to use
 it as a master, and do not store the optimizer inside its bound model.

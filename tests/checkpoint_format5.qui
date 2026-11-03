@@ -14,7 +14,7 @@ class Leaf<T: floating> instance_self(local int64 device)
 
     private nn.Parameter<T> weight
     nn.State<T> running
-    local tensor<T> value = tensor.zeros<T>([8])
+    local tensor<T> value := tensor.zeros<T>([8])
     if device >= 0
         value = value.gpu(nat(device))
     weight = nn.Parameter<T>(value = value)
@@ -26,8 +26,8 @@ class Leaf<T: floating> instance_self(local int64 device)
     string gradient_text()
         if not weight.has_grad()
             return "absent"
-        tensor<T> flat = weight.gradient().cpu().reshape([8])
-        string result = ""
+        tensor<T> flat := weight.gradient().cpu().reshape([8])
+        string result := ""
         for 0 <= nat index < 8
             result = result + flat[index].item().string() + ";"
         return result
@@ -39,7 +39,7 @@ class FormatModel(local int64 device, local bool host64)
     Leaf<real16>[] blocks
     Leaf<real32> single
     Leaf<real16b> bfloat
-    local int64 wide_device = device
+    local int64 wide_device := device
     if host64
         wide_device = -1
     wide = Leaf<real64>(wide_device)
@@ -57,8 +57,8 @@ class FormatModel(local int64 device, local bool host64)
     string gradient_text()
         return blocks[0].gradient_text() + ";" + bfloat.gradient_text() + ";" + single.gradient_text() + ";" + wide.gradient_text()
 
-FormatModel model = FormatModel(args.device, args.host64)
-auto optimizer = nn.Adam(&model, rate = 0.125)
+FormatModel model := FormatModel(args.device, args.host64)
+optimizer := nn.Adam(&model, rate = 0.125)
 if args.action == "seed"
     if args.checkpoint
         nn.checkpoint(&model, optimizer, args.output)
@@ -68,7 +68,7 @@ else
     if args.action == "reject"
         // Pending gradients must survive every rejected load as well.
         .model.backward()
-        string gradients = model.gradient_text()
+        string gradients := model.gradient_text()
         if args.checkpoint
             nn.checkpoint(&model, optimizer, args.output + ".before")
         else

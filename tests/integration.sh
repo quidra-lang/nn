@@ -23,25 +23,25 @@ class Model()
     nn.FC dense
 
 int | error run()
-    nn.FC dense = try nn.FC(features_in = 2, features_out = 1)
-    Model model = Model()
+    nn.FC dense := try nn.FC(features_in = 2, features_out = 1)
+    Model model := Model()
     model.dense = dense
-    tensor<real32> samples = tensor.ones<real32>([1, 2])
-    tensor<real32> targets = tensor.zeros<real32>([1, 1])
-    tensor<real32> prediction = nn.relu(.model.dense.forward(samples.track()))
-    tensor<real32> loss = nn.mse(prediction, targets)
-    auto optimizer = try nn.SGD(&model, rate = 0.1)
+    tensor<real32> samples := tensor.ones<real32>([1, 2])
+    tensor<real32> targets := tensor.zeros<real32>([1, 1])
+    tensor<real32> prediction := nn.relu(.model.dense.forward(samples.track()))
+    tensor<real32> loss := nn.mse(prediction, targets)
+    optimizer := try nn.SGD(&model, rate = 0.1)
     loss.backward(&model)
     .optimizer.update()
     print.line(prediction.shape()[0] == 1)
     print.line(prediction.shape()[1] == 1)
 
-    nn.Conv2D conv = try nn.Conv2D(1, 1, 1)
+    nn.Conv2D conv := try nn.Conv2D(1, 1, 1)
     .conv.weight.replace(tensor.ones<real32>([1, 1, 1, 1]))
     .conv.bias.replace(tensor.zeros<real32>([1]))
-    tensor<real32> image = tensor.ones<real32>([1, 1, 2, 2])
-    tensor<real32> activated = nn.relu(.conv.forward(image))
-    nat[] activated_shape = activated.shape()
+    tensor<real32> image := tensor.ones<real32>([1, 1, 2, 2])
+    tensor<real32> activated := nn.relu(.conv.forward(image))
+    nat[] activated_shape := activated.shape()
     print.line(
         len(activated_shape) == 4
         and activated_shape[0] == 1
@@ -50,9 +50,9 @@ int | error run()
         and activated_shape[3] == 2
     )
 
-    nn.BatchNorm norm = try nn.BatchNorm(1)
-    tensor<real32> normalized = .norm.infer(activated)
-    nat[] normalized_shape = normalized.shape()
+    nn.BatchNorm norm := try nn.BatchNorm(1)
+    tensor<real32> normalized := .norm.infer(activated)
+    nat[] normalized_shape := normalized.shape()
     print.line(
         len(normalized_shape) == 4
         and normalized_shape[0] == 1
@@ -61,15 +61,15 @@ int | error run()
         and normalized_shape[3] == 2
     )
 
-    nn.Dropout dropout = try nn.Dropout(0.5, seed = 1)
-    tensor<real32> inference = dropout.infer(activated)
+    nn.Dropout dropout := try nn.Dropout(0.5, seed = 1)
+    tensor<real32> inference := dropout.infer(activated)
     print.line(inference[0, 0, 0, 0].item() == activated[0, 0, 0, 0].item())
     return 0
 
-auto | error result = run()
+int | error result := run()
 match result
     int
-        int ignored = result
+        int ignored := result
     error problem
         print.line(problem)
 QUI

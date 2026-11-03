@@ -15,27 +15,27 @@ class Model()
 void backward(Model &model)
     math.sum(.model.first.track() + .model.second.track()).backward(&model)
 
-Model model = Model()
-auto optimizer = nn.Adam(&model, rate = 0.125)
+Model model := Model()
+optimizer := nn.Adam(&model, rate = 0.125)
 backward(&model)
 .optimizer.update()
 nn.checkpoint(&model, optimizer, "{args.scratch}/before.qnn")
 backward(&model)
 probe.optimizer_failure_after(int64(1))
-void | error result = .optimizer.update()
+void | error result := .optimizer.update()
 match result
     void
         print("unexpected success" + NL)
     error problem
-        bool code = problem.code == "NN_UPDATE_FAILED"
-        bool text = problem.message == "nn.Adam.update failed during computation at first; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer"
+        bool code := problem.code == "NN_UPDATE_FAILED"
+        bool text := problem.message == "nn.Adam.update failed during computation at first; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer"
         print.line("computation error contract {code} {text}")
 // Continuing on the failed optimizer is deliberately not a supported action.
-Model restored = Model()
-auto restored_optimizer = nn.Adam(&restored, rate = 0.125)
+Model restored := Model()
+restored_optimizer := nn.Adam(&restored, rate = 0.125)
 nn.resume(&restored, &restored_optimizer, "{args.scratch}/before.qnn")
-Model control = Model()
-auto control_optimizer = nn.Adam(&control, rate = 0.125)
+Model control := Model()
+control_optimizer := nn.Adam(&control, rate = 0.125)
 backward(&control)
 .control_optimizer.update()
 backward(&control)
@@ -44,6 +44,6 @@ backward(&restored)
 .restored_optimizer.update()
 nn.checkpoint(&restored, restored_optimizer, "{args.scratch}/restored.qnn")
 nn.checkpoint(&control, control_optimizer, "{args.scratch}/control.qnn")
-string restored_bytes = string.from_utf8(file.read_bin("{args.scratch}/restored.qnn"))
-string control_bytes = string.from_utf8(file.read_bin("{args.scratch}/control.qnn"))
+string restored_bytes := string.from_utf8(file.read_bin("{args.scratch}/restored.qnn"))
+string control_bytes := string.from_utf8(file.read_bin("{args.scratch}/control.qnn"))
 print("fresh optimizer resumes training " + (restored_bytes == control_bytes).string() + NL)

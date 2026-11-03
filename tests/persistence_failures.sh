@@ -22,21 +22,21 @@ class Model()
     nn.State<real64> total
 
 Model make_model()
-    Leaf first = Leaf()
+    Leaf first := Leaf()
     first.weight = nn.Parameter<real32>(
         value = tensor.ones<real32>([1]) * real32(2)
     )
     first.running = nn.State<real32>(
         value = tensor.ones<real32>([1]) * real32(3)
     )
-    Leaf second = Leaf()
+    Leaf second := Leaf()
     second.weight = nn.Parameter<real32>(
         value = tensor.ones<real32>([1]) * real32(4)
     )
     second.running = nn.State<real32>(
         value = tensor.ones<real32>([1]) * real32(5)
     )
-    Model model = Model()
+    Model model := Model()
     model.layers = [first, second]
     model.scale = nn.Parameter<real64>(
         value = tensor.ones<real64>([1]) * 6.0
@@ -46,9 +46,9 @@ Model make_model()
     )
     return model
 
-Model model = make_model()
-nn.Parameter<real32> &first_identity = &model.layers[0].weight
-nn.State<real32> &state_identity = &model.layers[0].running
+Model model := make_model()
+nn.Parameter<real32> &first_identity := &model.layers[0].weight
+nn.State<real32> &state_identity := &model.layers[0].running
 nn.save(model, path = "$TMP/model-base.qnn")
 
 .model.layers[0].weight.replace(tensor.zeros<real32>([1]))
@@ -67,11 +67,11 @@ print.line(model.total.raw()[0].item() == 7.0)
 print.line(&first_identity == &model.layers[0].weight)
 print.line(&state_identity == &model.layers[0].running)
 
-auto optimizer = nn.Adam(&model, rate = 0.01)
-tensor<real32> first_weight = .model.layers[0].weight.track()
-tensor<real32> second_weight = .model.layers[1].weight.track()
+optimizer := nn.Adam(&model, rate = 0.01)
+tensor<real32> first_weight := .model.layers[0].weight.track()
+tensor<real32> second_weight := .model.layers[1].weight.track()
 math.sum(first_weight * second_weight).backward(&model)
-tensor<real64> scale = .model.scale.track()
+tensor<real64> scale := .model.scale.track()
 math.sum(scale * scale).backward(&model)
 .optimizer.update()
 nn.checkpoint(&model, optimizer, path = "$TMP/checkpoint-base.qnn")
@@ -158,21 +158,21 @@ class Model()
     nn.State<real64> total
 
 Model make_model()
-    Leaf first = Leaf()
+    Leaf first := Leaf()
     first.weight = nn.Parameter<real32>(
         value = tensor.ones<real32>([1]) * real32(2)
     )
     first.running = nn.State<real32>(
         value = tensor.ones<real32>([1]) * real32(3)
     )
-    Leaf second = Leaf()
+    Leaf second := Leaf()
     second.weight = nn.Parameter<real32>(
         value = tensor.ones<real32>([1]) * real32(4)
     )
     second.running = nn.State<real32>(
         value = tensor.ones<real32>([1]) * real32(5)
     )
-    Model model = Model()
+    Model model := Model()
     model.layers = [first, second]
     model.scale = nn.Parameter<real64>(
         value = tensor.ones<real64>([1]) * 6.0
@@ -182,9 +182,9 @@ Model make_model()
     )
     return model
 
-Model model = make_model()
+Model model := make_model()
 nn.save(model, path = "$before")
-void | error loaded = nn.load(&model, path = "$bad")
+void | error loaded := nn.load(&model, path = "$bad")
 match loaded
     void
         print.line(false)
@@ -243,21 +243,21 @@ class Model()
     nn.State<real64> total
 
 Model make_model()
-    Leaf first = Leaf()
+    Leaf first := Leaf()
     first.weight = nn.Parameter<real32>(
         value = tensor.ones<real32>([1]) * real32(2)
     )
     first.running = nn.State<real32>(
         value = tensor.ones<real32>([1]) * real32(3)
     )
-    Leaf second = Leaf()
+    Leaf second := Leaf()
     second.weight = nn.Parameter<real32>(
         value = tensor.ones<real32>([1]) * real32(4)
     )
     second.running = nn.State<real32>(
         value = tensor.ones<real32>([1]) * real32(5)
     )
-    Model model = Model()
+    Model model := Model()
     model.layers = [first, second]
     model.scale = nn.Parameter<real64>(
         value = tensor.ones<real64>([1]) * 6.0
@@ -267,17 +267,17 @@ Model make_model()
     )
     return model
 
-Model model = make_model()
-auto optimizer = nn.Adam(&model, rate = 0.01)
+Model model := make_model()
+optimizer := nn.Adam(&model, rate = 0.01)
 for 0 <= nat round < 2
-    tensor<real32> first_weight = .model.layers[0].weight.track()
-    tensor<real32> second_weight = .model.layers[1].weight.track()
+    tensor<real32> first_weight := .model.layers[0].weight.track()
+    tensor<real32> second_weight := .model.layers[1].weight.track()
     math.sum(first_weight * second_weight).backward(&model)
-    tensor<real64> scale = .model.scale.track()
+    tensor<real64> scale := .model.scale.track()
     math.sum(scale * scale).backward(&model)
     .optimizer.update()
 nn.checkpoint(&model, optimizer, path = "$before")
-void | error loaded = nn.resume(&model, &optimizer, path = "$bad")
+void | error loaded := nn.resume(&model, &optimizer, path = "$bad")
 match loaded
     void
         print.line(false)
@@ -334,20 +334,20 @@ class Model()
     nn.State<real64> total
 
 Model make_model()
-    Leaf first = Leaf()
+    Leaf first := Leaf()
     first.weight = nn.Parameter<real32>(value = tensor.zeros<real32>([1]))
     first.running = nn.State<real32>(value = tensor.zeros<real32>([1]))
-    Leaf second = Leaf()
+    Leaf second := Leaf()
     second.weight = nn.Parameter<real32>(value = tensor.zeros<real32>([1]))
     second.running = nn.State<real32>(value = tensor.zeros<real32>([1]))
-    Model model = Model()
+    Model model := Model()
     model.layers = [first, second]
     model.scale = nn.Parameter<real64>(value = tensor.zeros<real64>([1]))
     model.total = nn.State<real64>(value = tensor.zeros<real64>([1]))
     return model
 
-Model model = make_model()
-auto optimizer = nn.Adam(&model, rate = 0.5)
+Model model := make_model()
+optimizer := nn.Adam(&model, rate = 0.5)
 nn.resume(&model, &optimizer, path = "$TMP/checkpoint-legacy-$version.qnn")
 nn.checkpoint(&model, optimizer, path = "$TMP/checkpoint-legacy-$version-resaved.qnn")
 QUI

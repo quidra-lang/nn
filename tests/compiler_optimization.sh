@@ -15,25 +15,25 @@ cat > "$TMP/fusion.qui" <<'QUI'
 import nn
 
 int | error run()
-    nn.Conv2D layer = try nn.Conv2D(
+    nn.Conv2D layer := try nn.Conv2D(
         channels_in = 1,
         channels_out = 1,
         kernel = 1
     )
     .layer.weight.replace(tensor.ones<real32>([1, 1, 1, 1]))
-    tensor<real32> bias = tensor.zeros<real32>([1])
+    tensor<real32> bias := tensor.zeros<real32>([1])
     bias[0] = real32(-2)
     .layer.bias.replace(bias)
-    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1])
-    tensor<real32> output = nn.relu(.layer.forward(input))
+    tensor<real32> input := tensor.ones<real32>([1, 1, 1, 1])
+    tensor<real32> output := nn.relu(.layer.forward(input))
     print.line(output.shape()[1] == 1)
     print.line(output[0, 0, 0, 0].item() == real32(0))
     return 0
 
-auto | error result = run()
+int | error result := run()
 match result
     int
-        int ignored = result
+        int ignored := result
     error problem
         print.line(problem)
 QUI
@@ -76,137 +76,137 @@ cat > "$TMP/stages.qui" <<'QUI'
 import nn
 
 int | error conv_cpu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> output = .layer.forward(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> output := .layer.forward(
         tensor.ones<real32>([1, 1, 1, 1])
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_gpu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> output = .layer.forward(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> output := .layer.forward(
         tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error .conv_gpu_fast_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> input := tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
     .nn.mode.fast()
-    tensor<real32> output = .layer.forward(input)
-    int ignored = int(output.shape()[0])
+    tensor<real32> output := .layer.forward(input)
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error .conv_gpu_deterministic_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> input := tensor.ones<real32>([1, 1, 1, 1], gpu = 0)
     .nn.mode.deterministic()
-    tensor<real32> output = .layer.forward(input)
-    int ignored = int(output.shape()[0])
+    tensor<real32> output := .layer.forward(input)
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_relu_cpu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> output = nn.relu(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> output := nn.relu(
         .layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_relu_gpu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> output = nn.relu(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> output := nn.relu(
         .layer.forward(tensor.ones<real32>([1, 1, 1, 1], gpu = 0))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error fc_relu_cpu_probe()
-    nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<real32> output = nn.relu(
+    nn.FC layer := try nn.FC(features_in = 2, features_out = 1)
+    tensor<real32> output := nn.relu(
         .layer.forward(tensor.ones<real32>([1, 2]))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error fc_relu_gpu_probe()
-    nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<real32> output = nn.relu(
+    nn.FC layer := try nn.FC(features_in = 2, features_out = 1)
+    tensor<real32> output := nn.relu(
         .layer.forward(tensor.ones<real32>([1, 2], gpu = 0))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error fc_gelu_cpu_probe()
-    nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<real32> output = nn.gelu(
+    nn.FC layer := try nn.FC(features_in = 2, features_out = 1)
+    tensor<real32> output := nn.gelu(
         .layer.forward(tensor.ones<real32>([1, 2]))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error fc_gelu_gpu_probe()
-    nn.FC layer = try nn.FC(features_in = 2, features_out = 1)
-    tensor<real32> output = nn.gelu(
+    nn.FC layer := try nn.FC(features_in = 2, features_out = 1)
+    tensor<real32> output := nn.gelu(
         .layer.forward(tensor.ones<real32>([1, 2], gpu = 0))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_gelu_cpu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> output = nn.gelu(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> output := nn.gelu(
         .layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_gelu_gpu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> output = nn.gelu(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> output := nn.gelu(
         .layer.forward(tensor.ones<real32>([1, 1, 1, 1], gpu = 0))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_batchnorm_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    nn.BatchNorm normalizer = try nn.BatchNorm(1)
-    tensor<real32> output = .normalizer.infer(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    nn.BatchNorm normalizer := try nn.BatchNorm(1)
+    tensor<real32> output := .normalizer.infer(
         .layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_batchnorm_relu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    nn.BatchNorm normalizer = try nn.BatchNorm(1)
-    tensor<real32> output = nn.relu(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    nn.BatchNorm normalizer := try nn.BatchNorm(1)
+    tensor<real32> output := nn.relu(
         .normalizer.infer(
             .layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
         )
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error conv_batchnorm_gelu_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    nn.BatchNorm normalizer = try nn.BatchNorm(1)
-    tensor<real32> output = nn.gelu(
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    nn.BatchNorm normalizer := try nn.BatchNorm(1)
+    tensor<real32> output := nn.gelu(
         .normalizer.infer(
             .layer.forward(tensor.ones<real32>([1, 1, 1, 1]))
         )
     )
-    int ignored = int(output.shape()[0])
+    int ignored := int(output.shape()[0])
     return 0
 
 int | error tracked_fusion_probe()
-    nn.Conv2D layer = try nn.Conv2D(1, 1, 1)
-    tensor<real32> input = tensor.ones<real32>([1, 1, 1, 1]).track()
-    tensor<real32> output = nn.relu(.layer.forward(input))
-    int ignored = int(output.shape()[0])
+    nn.Conv2D layer := try nn.Conv2D(1, 1, 1)
+    tensor<real32> input := tensor.ones<real32>([1, 1, 1, 1]).track()
+    tensor<real32> output := nn.relu(.layer.forward(input))
+    int ignored := int(output.shape()[0])
     return 0
 QUI
 
@@ -250,27 +250,27 @@ cat > "$TMP/memory.qui" <<'QUI'
 import nn
 
 int unique_probe()
-    tensor<real32> output = nn.relu(tensor.ones<real32>([4]))
+    tensor<real32> output := nn.relu(tensor.ones<real32>([4]))
     print.line(output[0].item() == real32(1))
     return 0
 
 int alias_probe()
-    tensor<real32> values = tensor.ones<real32>([2])
+    tensor<real32> values := tensor.ones<real32>([2])
     values[0] = real32(-1)
-    tensor<real32> output = nn.relu(values)
+    tensor<real32> output := nn.relu(values)
     print.line(output[0].item() == real32(0))
     print.line(values[0].item() == real32(-1))
     return 0
 
 int tracked_probe()
-    tensor<real32> values = tensor.ones<real32>([2]).track()
-    tensor<real32> output = nn.relu(values)
-    int ignored = int(output.shape()[0])
+    tensor<real32> values := tensor.ones<real32>([2]).track()
+    tensor<real32> output := nn.relu(values)
+    int ignored := int(output.shape()[0])
     return 0
 
-int unique_status = unique_probe()
-int alias_status = alias_probe()
-int tracked_status = tracked_probe()
+int unique_status := unique_probe()
+int alias_status := alias_probe()
+int tracked_status := tracked_probe()
 QUI
 
 memory_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/memory.qui")"
@@ -304,12 +304,12 @@ import nn
 import math
 
 int run()
-    tensor<real32> seed = tensor.zeros<real32>([1])
-    tensor<real32> optimized = seed.track()
-    tensor<real32> reference = seed.track()
+    tensor<real32> seed := tensor.zeros<real32>([1])
+    tensor<real32> optimized := seed.track()
+    tensor<real32> reference := seed.track()
 
-    tensor<real32> optimized_output = nn.relu(optimized)
-    tensor<real32> reference_output = (
+    tensor<real32> optimized_output := nn.relu(optimized)
+    tensor<real32> reference_output := (
         reference + math.abs(reference)
     ) / 2.0
     print(
@@ -320,8 +320,8 @@ int run()
 
     math.mean(optimized_output).backward(&optimized, track = true)
     math.mean(reference_output).backward(&reference, track = true)
-    tensor<real32> optimized_first = optimized.grad
-    tensor<real32> reference_first = reference.grad
+    tensor<real32> optimized_first := optimized.grad
+    tensor<real32> reference_first := reference.grad
     print.line(optimized_first.is_tracked())
     print.line(reference_first.is_tracked())
     print(
@@ -341,7 +341,7 @@ int run()
     print.line()
     return 0
 
-int ignored = run()
+int ignored := run()
 QUI
 
 training_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/training.qui")"
