@@ -74,7 +74,7 @@ void | error all_reduce_sum<T: floating>(
     if len(values) == 0
         return
 
-    nat[] shape := values[0].shape()
+    shape := values[0].shape()
     for 0 <= nat index < len(values)
         if values[index].is_tracked()
             return error("nn.all_reduce_sum requires untracked tensors; reduce gradients after backward or call untrack() explicitly", code = "NN_TRACKED")
@@ -83,7 +83,7 @@ void | error all_reduce_sum<T: floating>(
         if devices[index] < -1
             return error("nn.all_reduce_sum device must be -1 for CPU or a nonnegative GPU index", code = "NN_DEVICE")
 
-    bool all_gpu_destinations := len(values) > 1
+    all_gpu_destinations := len(values) > 1
     for device := devices[]
         if device < 0
             all_gpu_destinations = false
@@ -96,7 +96,7 @@ void | error all_reduce_sum<T: floating>(
                 all_gpu_destinations = false
 
     if all_gpu_destinations
-        int32 status := native.nccl_collective<T>(&values)
+        status := native.nccl_collective<T>(&values)
         if status == int32(0)
             return
         if status == int32(2)
@@ -106,7 +106,7 @@ void | error all_reduce_sum<T: floating>(
         if status != int32(1)
             return error("nn.all_reduce_sum NCCL collective failed", code = "NN_COLLECTIVE")
 
-    tensor<T> total := values[0].cpu()
+    total := values[0].cpu()
     for 1 <= nat index < len(values)
         total = total + values[index].cpu()
 
@@ -127,75 +127,75 @@ void | error all_reduce_sum<T: floating>(
 
 private Parameter<T>[] parameter_values<T: floating, M>(M model)
     Parameter<T>[] result := []
-    for Parameter<T> value := reflect.each<Parameter<T>>(model)[]
+    for value := reflect.each<Parameter<T>>(model)[]
         result = result.append(value)
     return result
 
 private State<T>[] state_values<T: floating, M>(M model)
     State<T>[] result := []
-    for State<T> value := reflect.each<State<T>>(model)[]
+    for value := reflect.each<State<T>>(model)[]
         result = result.append(value)
     return result
 
 private internal.StateEntrySchema[] model_schema<M>(M &model)
     internal.StateEntrySchema[] entries := []
-    string[] parameter_paths16 := reflect.each_paths<Parameter<real16>>(model)
+    parameter_paths16 := reflect.each_paths<Parameter<real16>>(model)
     for Parameter<real16> &value := &reflect.each<Parameter<real16>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real16", path_initial = parameter_paths16[index], shape_initial = value.raw().shape()))
-    string[] parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model)
+    parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model)
     for Parameter<real16b> &value := &reflect.each<Parameter<real16b>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real16b", path_initial = parameter_paths16b[index], shape_initial = value.raw().shape()))
-    string[] parameter_paths32 := reflect.each_paths<Parameter<real32>>(model)
+    parameter_paths32 := reflect.each_paths<Parameter<real32>>(model)
     for Parameter<real32> &value := &reflect.each<Parameter<real32>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real32", path_initial = parameter_paths32[index], shape_initial = value.raw().shape()))
-    string[] parameter_paths64 := reflect.each_paths<Parameter<real64>>(model)
+    parameter_paths64 := reflect.each_paths<Parameter<real64>>(model)
     for Parameter<real64> &value := &reflect.each<Parameter<real64>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real64", path_initial = parameter_paths64[index], shape_initial = value.raw().shape()))
-    string[] state_paths16 := reflect.each_paths<State<real16>>(model)
+    state_paths16 := reflect.each_paths<State<real16>>(model)
     for State<real16> &value := &reflect.each<State<real16>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real16", path_initial = state_paths16[index], shape_initial = value.raw().shape()))
-    string[] state_paths16b := reflect.each_paths<State<real16b>>(model)
+    state_paths16b := reflect.each_paths<State<real16b>>(model)
     for State<real16b> &value := &reflect.each<State<real16b>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real16b", path_initial = state_paths16b[index], shape_initial = value.raw().shape()))
-    string[] state_paths32 := reflect.each_paths<State<real32>>(model)
+    state_paths32 := reflect.each_paths<State<real32>>(model)
     for State<real32> &value := &reflect.each<State<real32>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real32", path_initial = state_paths32[index], shape_initial = value.raw().shape()))
-    string[] state_paths64 := reflect.each_paths<State<real64>>(model)
+    state_paths64 := reflect.each_paths<State<real64>>(model)
     for State<real64> &value := &reflect.each<State<real64>>(&model)[nat index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real64", path_initial = state_paths64[index], shape_initial = value.raw().shape()))
     return entries
 
 private void | error write_model_entries<M>(file.write &output, internal.StateChecksum &checksum, M &model)
-    string[] parameter_paths16 := reflect.each_paths<Parameter<real16>>(model)
+    parameter_paths16 := reflect.each_paths<Parameter<real16>>(model)
     for Parameter<real16> &value := &reflect.each<Parameter<real16>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real16", parameter_paths16[index], value.raw())
-    string[] parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model)
+    parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model)
     for Parameter<real16b> &value := &reflect.each<Parameter<real16b>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real16b", parameter_paths16b[index], value.raw())
-    string[] parameter_paths32 := reflect.each_paths<Parameter<real32>>(model)
+    parameter_paths32 := reflect.each_paths<Parameter<real32>>(model)
     for Parameter<real32> &value := &reflect.each<Parameter<real32>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real32", parameter_paths32[index], value.raw())
-    string[] parameter_paths64 := reflect.each_paths<Parameter<real64>>(model)
+    parameter_paths64 := reflect.each_paths<Parameter<real64>>(model)
     for Parameter<real64> &value := &reflect.each<Parameter<real64>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real64", parameter_paths64[index], value.raw())
-    string[] state_paths16 := reflect.each_paths<State<real16>>(model)
+    state_paths16 := reflect.each_paths<State<real16>>(model)
     for State<real16> &value := &reflect.each<State<real16>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "State", "real16", state_paths16[index], value.raw())
-    string[] state_paths16b := reflect.each_paths<State<real16b>>(model)
+    state_paths16b := reflect.each_paths<State<real16b>>(model)
     for State<real16b> &value := &reflect.each<State<real16b>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "State", "real16b", state_paths16b[index], value.raw())
-    string[] state_paths32 := reflect.each_paths<State<real32>>(model)
+    state_paths32 := reflect.each_paths<State<real32>>(model)
     for State<real32> &value := &reflect.each<State<real32>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "State", "real32", state_paths32[index], value.raw())
-    string[] state_paths64 := reflect.each_paths<State<real64>>(model)
+    state_paths64 := reflect.each_paths<State<real64>>(model)
     for State<real64> &value := &reflect.each<State<real64>>(&model)[nat index]
         try internal.write_state_entry(&output, &checksum, "State", "real64", state_paths64[index], value.raw())
     return
 
 void | error save<M>(M model, string path)
-    internal.StateEntrySchema[] expected := model_schema(&model)
+    expected := model_schema(&model)
     try internal.validate_model_schema(expected, "nn.save")
-    file.write output := try file.write(path)
+    output := try file.write(path)
     checksum := internal.StateChecksum()
     try internal.write_checked_line(&output, &checksum, "QUIDRA_DNN_STATE")
     try internal.write_checked_line(&output, &checksum, "5")
@@ -207,54 +207,54 @@ void | error save<M>(M model, string path)
     return
 
 void | error load<M>(M &model, string path)
-    internal.StateEntrySchema[] expected := model_schema(&model)
+    expected := model_schema(&model)
     try internal.validate_model_schema(expected, "nn.load")
-    file.read input := try file.read(path)
+    input := try file.read(path)
     checksum := internal.StateChecksum()
-    string magic := try internal.read_checked_line(&input, &checksum, "magic")
+    magic := try internal.read_checked_line(&input, &checksum, "magic")
     if magic != "QUIDRA_DNN_STATE"
         return error("nn.load state file has an unsupported magic", code = "NN_CHECKPOINT_FILE")
-    string version := try internal.read_checked_line(&input, &checksum, "format version")
+    version := try internal.read_checked_line(&input, &checksum, "format version")
     if version != "2" and version != "5"
         return error("nn.load state file has an unsupported format version", code = "NN_CHECKPOINT_FILE")
-    string container_kind := try internal.read_checked_line(&input, &checksum, "container kind")
+    container_kind := try internal.read_checked_line(&input, &checksum, "container kind")
     if container_kind != "model"
         return error("nn.load state file is not a model-only container", code = "NN_CHECKPOINT_FILE")
-    string root_type := try internal.read_checked_line(&input, &checksum, "root model type")
-    internal.StateTable stored := try internal.read_model_entries(&input, &checksum, version)
+    root_type := try internal.read_checked_line(&input, &checksum, "root model type")
+    stored := try internal.read_model_entries(&input, &checksum, version)
     try internal.verify_state_checksum(&input, checksum)
     try internal.compare_state_schema(expected, stored.schemas, root_type, reflect.type_name(model), "nn.load", path)
     tensor<real16>[] loaded_parameter16 := []
     for entry_path := reflect.each_paths<Parameter<real16>>(model)[]
-        tensor<real16> value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
+        value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
         loaded_parameter16 = loaded_parameter16.append(value)
     tensor<real16b>[] loaded_parameter16b := []
     for entry_path := reflect.each_paths<Parameter<real16b>>(model)[]
-        tensor<real16b> value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
+        value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
         loaded_parameter16b = loaded_parameter16b.append(value)
     tensor<real32>[] loaded_parameter32 := []
     for entry_path := reflect.each_paths<Parameter<real32>>(model)[]
-        tensor<real32> value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
+        value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
         loaded_parameter32 = loaded_parameter32.append(value)
     tensor<real64>[] loaded_parameter64 := []
     for entry_path := reflect.each_paths<Parameter<real64>>(model)[]
-        tensor<real64> value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
+        value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
         loaded_parameter64 = loaded_parameter64.append(value)
     tensor<real16>[] loaded_state16 := []
     for entry_path := reflect.each_paths<State<real16>>(model)[]
-        tensor<real16> value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
+        value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
         loaded_state16 = loaded_state16.append(value)
     tensor<real16b>[] loaded_state16b := []
     for entry_path := reflect.each_paths<State<real16b>>(model)[]
-        tensor<real16b> value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
+        value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
         loaded_state16b = loaded_state16b.append(value)
     tensor<real32>[] loaded_state32 := []
     for entry_path := reflect.each_paths<State<real32>>(model)[]
-        tensor<real32> value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
+        value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
         loaded_state32 = loaded_state32.append(value)
     tensor<real64>[] loaded_state64 := []
     for entry_path := reflect.each_paths<State<real64>>(model)[]
-        tensor<real64> value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
+        value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
         loaded_state64 = loaded_state64.append(value)
     // All fallible reads, comparisons and preparation precede this commit.
     for Parameter<real16> &entry := &reflect.each<Parameter<real16>>(&model)[nat index]
@@ -280,10 +280,10 @@ tensor<real32> | error uniform_weights(int count, real64 bound, int seed)
         return error("nn.uniform_weights count must be nonnegative", code = "NN_ARGUMENT")
     if not math.is_finite(bound) or bound < 0.0
         return error("nn.uniform_weights bound must be finite and nonnegative", code = "NN_ARGUMENT")
-    tensor<real32> values := tensor.zeros<real32>([nat(count)])
-    random.Generator generator := random.generator(seed = seed)
+    values := tensor.zeros<real32>([nat(count)])
+    generator := random.generator(seed = seed)
     for 0 <= int index < count
-        real64 unit := .generator.real64()
+        unit := .generator.real64()
         values[index] = real32((unit * 2.0 - 1.0) * bound)
     return values
 
@@ -296,11 +296,11 @@ tensor<real32> | error normal_weights(
         return error("nn.normal_weights count must be nonnegative", code = "NN_ARGUMENT")
     if not math.is_finite(standard_deviation) or standard_deviation < 0.0
         return error("nn.normal_weights standard deviation must be finite and nonnegative", code = "NN_ARGUMENT")
-    tensor<real32> values := tensor.zeros<real32>([nat(count)])
+    values := tensor.zeros<real32>([nat(count)])
     if standard_deviation == 0.0
         return values
 
-    random.Generator generator := random.generator(seed = seed)
+    generator := random.generator(seed = seed)
     for 0 <= int index < count
         // 1-u avoids the common zero endpoint; the guard also keeps
         // Box-Muller defined for any future generator endpoint policy.
@@ -309,8 +309,8 @@ tensor<real32> | error normal_weights(
             radius_uniform = 0.0000000000000001
         real64 angle_uniform := .generator.real64()
         real64 log_radius := try math.log(radius_uniform)
-        real64 radius := try math.sqrt(real64(-2.0) * log_radius)
-        real64 standard_normal := (
+        radius := try math.sqrt(real64(-2.0) * log_radius)
+        standard_normal := (
             radius
             * math.cos(
                 real64(6.283185307179586476925286766559005768)
@@ -364,16 +364,16 @@ class FC(
                     )
 
     tensor<real32> .forward(tensor<real32> value)
-        int[] input_shape := int(value.shape())
-        int rank := int(len(input_shape))
+        input_shape := int(value.shape())
+        rank := int(len(input_shape))
         if rank < 1
             error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
-        int features_in := input_shape[rank - 1]
-        int[] weight_shape := int(weight.raw().shape())
-        int[] bias_shape := int(bias.raw().shape())
+        features_in := input_shape[rank - 1]
+        weight_shape := int(weight.raw().shape())
+        bias_shape := int(bias.raw().shape())
         if len(weight_shape) != 2 or len(bias_shape) != 1
             error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
-        int features_out := weight_shape[0]
+        features_out := weight_shape[0]
         if weight_shape[1] != features_in or bias_shape[0] != features_out
             error("nn.FC input, weight, and bias dimensions do not match", code = "NN_SHAPE")
 
@@ -386,7 +386,7 @@ class FC(
             parameter_weight = weight.raw()
             parameter_bias = bias.raw()
 
-        tensor<real32> output := math.matmul(
+        output := math.matmul(
             value,
             parameter_weight.transpose(0, 1)
         )
@@ -403,22 +403,22 @@ class FC(
     // higher-order semantics without a NN semantic primitive in Core.
     private tensor<real32> .forward_relu(tensor<real32> value)
         if not value.is_tracked()
-            int[] input_shape := int(value.shape())
-            int rank := int(len(input_shape))
+            input_shape := int(value.shape())
+            rank := int(len(input_shape))
             if rank < 1
                 error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
-            int features_in := input_shape[rank - 1]
-            int[] weight_shape := int(weight.raw().shape())
-            int[] bias_shape := int(bias.raw().shape())
+            features_in := input_shape[rank - 1]
+            weight_shape := int(weight.raw().shape())
+            bias_shape := int(bias.raw().shape())
             if len(weight_shape) != 2 or len(bias_shape) != 1
                 error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
-            int features_out := weight_shape[0]
+            features_out := weight_shape[0]
             if weight_shape[1] != features_in or bias_shape[0] != features_out
                 error("nn.FC input, weight, and bias dimensions do not match", code = "NN_SHAPE")
 
-            tensor<real32> native_input := value
-            tensor<real32> native_weight := weight.raw()
-            tensor<real32> native_bias := bias.raw()
+            native_input := value
+            native_weight := weight.raw()
+            native_bias := bias.raw()
             if native.is_cpu_f32(native_input) == int32(1) and native.is_cpu_f32(native_weight) == int32(1) and native.is_cpu_f32(native_bias) == int32(1)
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
@@ -426,10 +426,10 @@ class FC(
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-                int[] output_shape := input_shape
+                output_shape := input_shape
                 output_shape[rank - 1] = features_out
-                tensor<real32> native_output := tensor.zeros<real32>(nat(output_shape))
-                int32 native_status := native.fc_relu_inference_f32(
+                native_output := tensor.zeros<real32>(nat(output_shape))
+                native_status := native.fc_relu_inference_f32(
                     native_input,
                     native_weight,
                     native_bias,
@@ -438,7 +438,7 @@ class FC(
                 if native_status == int32(0)
                     return native_output
 
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         return internal.relu_fused(output)
 
     // Package-owned compiler fusion target for linear+bias+GELU. The native
@@ -447,22 +447,22 @@ class FC(
     // GELU expression and carries its own first- and second-order autograd.
     private tensor<real32> .forward_gelu(tensor<real32> value)
         if not value.is_tracked()
-            int[] input_shape := int(value.shape())
-            int rank := int(len(input_shape))
+            input_shape := int(value.shape())
+            rank := int(len(input_shape))
             if rank < 1
                 error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
-            int features_in := input_shape[rank - 1]
-            int[] weight_shape := int(weight.raw().shape())
-            int[] bias_shape := int(bias.raw().shape())
+            features_in := input_shape[rank - 1]
+            weight_shape := int(weight.raw().shape())
+            bias_shape := int(bias.raw().shape())
             if len(weight_shape) != 2 or len(bias_shape) != 1
                 error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
-            int features_out := weight_shape[0]
+            features_out := weight_shape[0]
             if weight_shape[1] != features_in or bias_shape[0] != features_out
                 error("nn.FC input, weight, and bias dimensions do not match", code = "NN_SHAPE")
 
-            tensor<real32> native_input := value
-            tensor<real32> native_weight := weight.raw()
-            tensor<real32> native_bias := bias.raw()
+            native_input := value
+            native_weight := weight.raw()
+            native_bias := bias.raw()
             if native.is_cpu_f32(native_input) == int32(1) and native.is_cpu_f32(native_weight) == int32(1) and native.is_cpu_f32(native_bias) == int32(1)
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
@@ -470,10 +470,10 @@ class FC(
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-                int[] output_shape := input_shape
+                output_shape := input_shape
                 output_shape[rank - 1] = features_out
-                tensor<real32> native_output := tensor.zeros<real32>(nat(output_shape))
-                int32 native_status := native.fc_gelu_inference_f32(
+                native_output := tensor.zeros<real32>(nat(output_shape))
+                native_status := native.fc_gelu_inference_f32(
                     native_input,
                     native_weight,
                     native_bias,
@@ -482,7 +482,7 @@ class FC(
                 if native_status == int32(0)
                     return native_output
 
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         return internal.gelu_fused(output)
 
 
@@ -497,9 +497,9 @@ class FC(
         return .forward_relu(value)
 
     private tensor<real32> .forward_relu_cuda(tensor<real32> value)
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
-            int32 status := native.cuda_activation_inplace_f32(&output, 1)
+            status := native.cuda_activation_inplace_f32(&output, 1)
             if status == int32(0)
                 return output
         return internal.relu_fused(output)
@@ -511,9 +511,9 @@ class FC(
         return .forward_gelu(value)
 
     private tensor<real32> .forward_gelu_cuda(tensor<real32> value)
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
-            int32 status := native.cuda_activation_inplace_f32(&output, 2)
+            status := native.cuda_activation_inplace_f32(&output, 2)
             if status == int32(0)
                 return output
         return internal.gelu_fused(output)
@@ -598,8 +598,8 @@ class Conv2D(
         int output_height,
         int output_width
     )
-        int patch_width := weight_channels * kernel_height * kernel_width
-        int patch_rows := batches * output_height * output_width
+        patch_width := weight_channels * kernel_height * kernel_width
+        patch_rows := batches * output_height * output_width
 
         if not group_input.is_tracked() and kernel_height == 1 and kernel_width == 1 and step == 1
             // 1x1/stride-1 needs no patch index map. The NHWC transpose is a
@@ -610,20 +610,20 @@ class Conv2D(
 
         if patch_width > 0 and patch_rows > 9223372036854775807 / patch_width
             error("nn.Conv2D patch matrix is too large", code = "NN_SIZE")
-        int patch_count := patch_rows * patch_width
+        patch_count := patch_rows * patch_width
 
         // Native patch extraction is NN-owned and CPU-only today. Probe the
         // borrowed tensor before allocating an output so a GPU fallback never
         // creates an unrelated host patch buffer.
         if not group_input.is_tracked()
             if native.is_cpu_f32(group_input) == int32(1)
-                tensor<real32> native_input := group_input
+                native_input := group_input
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
-                tensor<real32> native_patches := tensor.zeros<real32>(
+                native_patches := tensor.zeros<real32>(
                     [nat(patch_rows), nat(patch_width)]
                 )
-                int32 native_status := native.im2col_f32(
+                native_status := native.im2col_f32(
                     native_input,
                     &native_patches,
                     int64(weight_channels),
@@ -643,21 +643,21 @@ class Conv2D(
         // visible instead of being hidden behind a NN-specific Core primitive.
         int[] patch_indices := array(nat(patch_count), fill = 0)
         for 0 <= int flat_index < patch_count
-            int patch_column := flat_index % patch_width
-            int patch_row := flat_index / patch_width
+            patch_column := flat_index % patch_width
+            patch_row := flat_index / patch_width
 
-            int kernel_x := patch_column % kernel_width
-            int patch_remaining := patch_column / kernel_width
-            int kernel_y := patch_remaining % kernel_height
-            int local_channel := patch_remaining / kernel_height
+            kernel_x := patch_column % kernel_width
+            patch_remaining := patch_column / kernel_width
+            kernel_y := patch_remaining % kernel_height
+            local_channel := patch_remaining / kernel_height
 
-            int output_x := patch_row % output_width
-            int output_remaining := patch_row / output_width
-            int output_y := output_remaining % output_height
-            int batch := output_remaining / output_height
+            output_x := patch_row % output_width
+            output_remaining := patch_row / output_width
+            output_y := output_remaining % output_height
+            batch := output_remaining / output_height
 
-            int source_y := output_y * step + kernel_y
-            int source_x := output_x * step + kernel_x
+            source_y := output_y * step + kernel_y
+            source_x := output_x * step + kernel_x
             patch_indices[flat_index] = (
                 ((batch * weight_channels + local_channel) * padded_height
                 + source_y) * padded_width + source_x
@@ -682,31 +682,31 @@ class Conv2D(
         int output_height,
         int output_width
     )
-        int outputs_per_group := channels_out / group_count
-        int input_channel_start := group_index * weight_channels
-        int output_channel_start := group_index * outputs_per_group
-        int patch_width := weight_channels * kernel_height * kernel_width
-        int patch_rows := batches * output_height * output_width
+        outputs_per_group := channels_out / group_count
+        input_channel_start := group_index * weight_channels
+        output_channel_start := group_index * outputs_per_group
+        patch_width := weight_channels * kernel_height * kernel_width
+        patch_rows := batches * output_height * output_width
 
         // NN owns Conv2D patch extraction. Keep grouped channel isolation
         // inside the package rather than depending on a Core image/NN-shaped
         // primitive.
-        tensor<real32> group_input := padded_input
+        group_input := padded_input
         if group_count > 1
             if padded_input.is_tracked()
                 // Core tensor slices are views but are not yet differentiable.
                 // Preserve grouped training semantics by using the existing
                 // autograd-aware gather path only while the input is tracked.
-                int input_count := batches * weight_channels * padded_height * padded_width
+                input_count := batches * weight_channels * padded_height * padded_width
                 int[] input_indices := array(nat(input_count), fill = 0)
                 for 0 <= int flat_index < input_count
-                    int x := flat_index % padded_width
-                    int remaining := flat_index / padded_width
-                    int y := remaining % padded_height
+                    x := flat_index % padded_width
+                    remaining := flat_index / padded_width
+                    y := remaining % padded_height
                     remaining = remaining / padded_height
-                    int local_channel := remaining % weight_channels
-                    int batch := remaining / weight_channels
-                    int input_channel := input_channel_start + local_channel
+                    local_channel := remaining % weight_channels
+                    batch := remaining / weight_channels
+                    input_channel := input_channel_start + local_channel
                     input_indices[flat_index] = (
                         ((batch * channels_in + input_channel) * padded_height + y)
                         * padded_width + x
@@ -723,7 +723,7 @@ class Conv2D(
                     :
                 ]
 
-        tensor<real32> patches := extract_patches(
+        patches := extract_patches(
             group_input,
             batches,
             weight_channels,
@@ -745,8 +745,8 @@ class Conv2D(
                 // As with the grouped input, retain the autograd-aware gather
                 // path for tracked Parameters until Core slice views carry a
                 // differentiable view graph.
-                int weight_count := outputs_per_group * patch_width
-                int weight_offset := output_channel_start * patch_width
+                weight_count := outputs_per_group * patch_width
+                weight_offset := output_channel_start * patch_width
                 int[] weight_indices := array(nat(weight_count), fill = 0)
                 for 0 <= int index < weight_count
                     weight_indices[index] = weight_offset + index
@@ -757,7 +757,7 @@ class Conv2D(
                 // Output-channel groups are contiguous OIHW slices. Keep the
                 // untracked view and reshape it directly instead of building a
                 // second index array.
-                tensor<real32> weight_view := parameter_weight[
+                weight_view := parameter_weight[
                     output_channel_start:<output_channel_start + outputs_per_group,
                     :,
                     :,
@@ -767,7 +767,7 @@ class Conv2D(
                     [nat(outputs_per_group), nat(patch_width)]
                 )
 
-        tensor<real32> matrix := math.matmul(
+        matrix := math.matmul(
             patches,
             group_weight.transpose(0, 1)
         )
@@ -780,16 +780,16 @@ class Conv2D(
                 [nat(batches), nat(output_height), nat(output_width), nat(channels_out)]
             ).transpose(1, 3).transpose(2, 3)
 
-        int output_count := patch_rows * outputs_per_group
+        output_count := patch_rows * outputs_per_group
         int[] output_indices := array(nat(output_count), fill = 0)
         for 0 <= int flat_index < output_count
-            int local_output_channel := flat_index % outputs_per_group
-            int patch_index := flat_index / outputs_per_group
-            int output_x := patch_index % output_width
-            int patch_remaining := patch_index / output_width
-            int output_y := patch_remaining % output_height
-            int batch := patch_remaining / output_height
-            int output_channel := output_channel_start + local_output_channel
+            local_output_channel := flat_index % outputs_per_group
+            patch_index := flat_index / outputs_per_group
+            output_x := patch_index % output_width
+            patch_remaining := patch_index / output_width
+            output_y := patch_remaining % output_height
+            batch := patch_remaining / output_height
+            output_channel := output_channel_start + local_output_channel
             output_indices[flat_index] = (
                 ((batch * channels_out + output_channel) * output_height
                 + output_y) * output_width + output_x
@@ -801,22 +801,22 @@ class Conv2D(
         )
 
     tensor<real32> .forward(tensor<real32> value)
-        int[] input_shape := int(value.shape())
-        int[] weight_shape := int(weight.raw().shape())
-        int[] bias_shape := int(bias.raw().shape())
+        input_shape := int(value.shape())
+        weight_shape := int(weight.raw().shape())
+        bias_shape := int(bias.raw().shape())
         if len(input_shape) != 4
             error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
         if len(weight_shape) != 4 or len(bias_shape) != 1
             error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
-        int batches := input_shape[0]
-        int channels_in := input_shape[1]
-        int height := input_shape[2]
-        int width := input_shape[3]
-        int channels_out := weight_shape[0]
-        int weight_channels := weight_shape[1]
-        int kernel_height := weight_shape[2]
-        int kernel_width := weight_shape[3]
+        batches := input_shape[0]
+        channels_in := input_shape[1]
+        height := input_shape[2]
+        width := input_shape[3]
+        channels_out := weight_shape[0]
+        weight_channels := weight_shape[1]
+        kernel_height := weight_shape[2]
+        kernel_width := weight_shape[3]
         if batches <= 0 or channels_in <= 0 or channels_out <= 0
             error("nn.Conv2D requires positive batch and channel dimensions", code = "NN_SHAPE")
         if height <= 0 or width <= 0
@@ -834,12 +834,12 @@ class Conv2D(
         if step <= 0 or border < 0
             error("nn.Conv2D requires stride > 0 and padding >= 0", code = "NN_ARGUMENT")
 
-        int padded_height := height + border * 2
-        int padded_width := width + border * 2
+        padded_height := height + border * 2
+        padded_width := width + border * 2
         if padded_height < kernel_height or padded_width < kernel_width
             error("nn.Conv2D kernel is larger than padded input", code = "NN_SHAPE")
-        int output_height := (padded_height - kernel_height) / step + 1
-        int output_width := (padded_width - kernel_width) / step + 1
+        output_height := (padded_height - kernel_height) / step + 1
+        output_width := (padded_width - kernel_width) / step + 1
 
         tensor<real32> parameter_weight
         tensor<real32> parameter_bias
@@ -854,12 +854,12 @@ class Conv2D(
         // exposes only backend-neutral borrowed device handles plus the generic
         // custom-autograd attachment point; cuDNN forward/backward, descriptors,
         // algorithm choice, groups, padding, and bias stay entirely in NN.
-        int32 cuda_device := native.cuda_device_f32(value)
+        cuda_device := native.cuda_device_f32(value)
         if cuda_device >= int32(0)
             device_index := int(cuda_device)
-            tensor<real32> cuda_input := value
-            tensor<real32> cuda_weight := parameter_weight
-            tensor<real32> cuda_bias := parameter_bias
+            cuda_input := value
+            cuda_weight := parameter_weight
+            cuda_bias := parameter_bias
             // Tracked tensors cannot be silently materialized because that
             // would cut their graph. A non-contiguous tracked input therefore
             // falls through to the portable graph; untracked inference may
@@ -871,11 +871,11 @@ class Conv2D(
                     cuda_weight = cuda_weight.contiguous()
                 if not cuda_bias.is_contiguous()
                     cuda_bias = cuda_bias.contiguous()
-            tensor<real32> cuda_output := tensor.zeros<real32>(
+            cuda_output := tensor.zeros<real32>(
                 [nat(batches), nat(channels_out), nat(output_height), nat(output_width)],
                 gpu = nat(device_index)
             )
-            int32 cuda_status := native.conv2d_cuda_f32(
+            cuda_status := native.conv2d_cuda_f32(
                 cuda_input,
                 cuda_weight,
                 cuda_bias,
@@ -893,11 +893,11 @@ class Conv2D(
         // a tracked non-contiguous tensor because that would cut its graph; the
         // native bridge rejects it and we fall through to the portable graph.
         // Untracked inference may explicitly densify inputs.
-        int32 native_device := native.fused_device_f32(value)
+        native_device := native.fused_device_f32(value)
         if native_device >= int32(-1)
-            tensor<real32> native_input := value
-            tensor<real32> native_weight := parameter_weight
-            tensor<real32> native_bias := parameter_bias
+            native_input := value
+            native_weight := parameter_weight
+            native_bias := parameter_bias
             if not value.is_tracked()
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
@@ -919,7 +919,7 @@ class Conv2D(
                     [nat(batches), nat(channels_out), nat(output_height), nat(output_width)],
                     gpu = nat(native_device)
                 )
-            int32 native_status := native.conv2d_f32(
+            native_status := native.conv2d_f32(
                 native_input,
                 native_weight,
                 native_bias,
@@ -933,17 +933,17 @@ class Conv2D(
 
         // Padding is common to every output channel. Build it once instead of
         // rebuilding the same mapping for every output channel.
-        tensor<real32> padded_input := value
+        padded_input := value
         if border > 0
-            int input_count := batches * channels_in * height * width
+            input_count := batches * channels_in * height * width
             int[] padded_indices := array(nat(input_count), fill = 0)
             for 0 <= int flat_index < input_count
-                int x := flat_index % width
-                int remaining := flat_index / width
-                int y := remaining % height
+                x := flat_index % width
+                remaining := flat_index / width
+                y := remaining % height
                 remaining = remaining / height
-                int channel := remaining % channels_in
-                int batch := remaining / channels_in
+                channel := remaining % channels_in
+                batch := remaining / channels_in
                 padded_indices[flat_index] = (
                     ((batch * channels_in + channel) * padded_height
                     + y + border) * padded_width + x + border
@@ -953,7 +953,7 @@ class Conv2D(
                 [batches, channels_in, padded_height, padded_width]
             )
 
-        tensor<real32> output := convolve_group(
+        output := convolve_group(
             padded_input,
             parameter_weight,
             0,
@@ -987,7 +987,7 @@ class Conv2D(
 
         // NCHW bias is a [1,C,1,1] singleton view. Core broadcasting
         // expands it without constructing or transferring an index tensor.
-        tensor<real32> broadcast_bias := parameter_bias.reshape(
+        broadcast_bias := parameter_bias.reshape(
             [1, nat(channels_out), 1, 1]
         )
         return output + broadcast_bias
@@ -1003,23 +1003,23 @@ class Conv2D(
     )
         if native.metal_device_f32(value) < int32(0)
             return false
-        int[] input_shape := int(value.shape())
-        int[] weight_shape := int(weight.raw().shape())
+        input_shape := int(value.shape())
+        weight_shape := int(weight.raw().shape())
         if len(input_shape) != 4 or len(weight_shape) != 4
             return false
         if step <= 0 or border < 0
             return false
-        int padded_height := input_shape[2] + border * 2
-        int padded_width := input_shape[3] + border * 2
+        padded_height := input_shape[2] + border * 2
+        padded_width := input_shape[3] + border * 2
         if padded_height < weight_shape[2] or padded_width < weight_shape[3]
             return false
-        int[] output_shape := [
+        output_shape := [
             input_shape[0],
             weight_shape[0],
             (padded_height - weight_shape[2]) / step + 1,
             (padded_width - weight_shape[3]) / step + 1
         ]
-        tensor<real32> metal_input := value
+        metal_input := value
         tensor<real32> metal_weight
         tensor<real32> metal_bias
         if value.is_tracked()
@@ -1035,10 +1035,10 @@ class Conv2D(
             if not metal_bias.is_contiguous()
                 metal_bias = metal_bias.contiguous()
         // Both outputs are write-only: the kernels store every element.
-        int device_index := int(native.metal_device_f32(value))
-        tensor<real32> convolved := tensor<real32>(nat(output_shape), gpu = nat(device_index))
-        tensor<real32> activated := tensor<real32>(nat(output_shape), gpu = nat(device_index))
-        int32 status := native.conv2d_activation_f32(
+        device_index := int(native.metal_device_f32(value))
+        convolved := tensor<real32>(nat(output_shape), gpu = nat(device_index))
+        activated := tensor<real32>(nat(output_shape), gpu = nat(device_index))
+        status := native.conv2d_activation_f32(
             metal_input,
             metal_weight,
             metal_bias,
@@ -1062,24 +1062,24 @@ class Conv2D(
     // reproduces the compositional first- and higher-order semantics.
     private tensor<real32> .forward_relu(tensor<real32> value)
         if not value.is_tracked()
-            tensor<real32> parameter_weight := weight.raw()
-            tensor<real32> parameter_bias := bias.raw()
-            int[] input_shape := int(value.shape())
-            int[] weight_shape := int(parameter_weight.shape())
-            int[] bias_shape := int(parameter_bias.shape())
+            parameter_weight := weight.raw()
+            parameter_bias := bias.raw()
+            input_shape := int(value.shape())
+            weight_shape := int(parameter_weight.shape())
+            bias_shape := int(parameter_bias.shape())
             if len(input_shape) != 4
                 error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
             if len(weight_shape) != 4 or len(bias_shape) != 1
                 error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
-            int batches := input_shape[0]
-            int channels_in := input_shape[1]
-            int height := input_shape[2]
-            int width := input_shape[3]
-            int channels_out := weight_shape[0]
-            int weight_channels := weight_shape[1]
-            int kernel_height := weight_shape[2]
-            int kernel_width := weight_shape[3]
+            batches := input_shape[0]
+            channels_in := input_shape[1]
+            height := input_shape[2]
+            width := input_shape[3]
+            channels_out := weight_shape[0]
+            weight_channels := weight_shape[1]
+            kernel_height := weight_shape[2]
+            kernel_width := weight_shape[3]
             if batches <= 0 or channels_in <= 0 or channels_out <= 0
                 error("nn.Conv2D requires positive batch and channel dimensions", code = "NN_SHAPE")
             if height <= 0 or width <= 0
@@ -1097,12 +1097,12 @@ class Conv2D(
             if step <= 0 or border < 0
                 error("nn.Conv2D requires stride > 0 and padding >= 0", code = "NN_ARGUMENT")
 
-            int padded_height := height + border * 2
-            int padded_width := width + border * 2
+            padded_height := height + border * 2
+            padded_width := width + border * 2
             if padded_height < kernel_height or padded_width < kernel_width
                 error("nn.Conv2D kernel is larger than padded input", code = "NN_SHAPE")
-            int output_height := (padded_height - kernel_height) / step + 1
-            int output_width := (padded_width - kernel_width) / step + 1
+            output_height := (padded_height - kernel_height) / step + 1
+            output_width := (padded_width - kernel_width) / step + 1
 
             // cuDNN's built-in ReLU is max-like and is not exactly the
             // package expression (x + abs(x)) / 2 for all IEEE values.
@@ -1110,19 +1110,19 @@ class Conv2D(
             // then applies NN's exact activation semantics through Math.
 
             if native.is_cpu_f32(value) == int32(1) and native.is_cpu_f32(parameter_weight) == int32(1) and native.is_cpu_f32(parameter_bias) == int32(1)
-                tensor<real32> native_input := value
-                tensor<real32> native_weight := parameter_weight
-                tensor<real32> native_bias := parameter_bias
+                native_input := value
+                native_weight := parameter_weight
+                native_bias := parameter_bias
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
                 if not native_weight.is_contiguous()
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-                tensor<real32> native_output := tensor.zeros<real32>(
+                native_output := tensor.zeros<real32>(
                     [nat(batches), nat(channels_out), nat(output_height), nat(output_width)]
                 )
-                int32 native_status := native.conv2d_relu_inference_f32(
+                native_status := native.conv2d_relu_inference_f32(
                     native_input,
                     native_weight,
                     native_bias,
@@ -1134,12 +1134,12 @@ class Conv2D(
                 if native_status == int32(0)
                     return native_output
 
-        tensor<real32> fused := value
+        fused := value
         if .metal_activation(value, 1, &fused)
             return fused
 
         // Keep the input borrowed, as forward() does, and own its result.
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         return internal.relu_fused(output)
 
     // Package-owned Conv+bias+GELU fusion target. CPU inference applies GELU
@@ -1147,24 +1147,24 @@ class Conv2D(
     // runs the convolution and the fused GELU in one native call.
     private tensor<real32> .forward_gelu(tensor<real32> value)
         if not value.is_tracked()
-            tensor<real32> parameter_weight := weight.raw()
-            tensor<real32> parameter_bias := bias.raw()
-            int[] input_shape := int(value.shape())
-            int[] weight_shape := int(parameter_weight.shape())
-            int[] bias_shape := int(parameter_bias.shape())
+            parameter_weight := weight.raw()
+            parameter_bias := bias.raw()
+            input_shape := int(value.shape())
+            weight_shape := int(parameter_weight.shape())
+            bias_shape := int(parameter_bias.shape())
             if len(input_shape) != 4
                 error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
             if len(weight_shape) != 4 or len(bias_shape) != 1
                 error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
-            int batches := input_shape[0]
-            int channels_in := input_shape[1]
-            int height := input_shape[2]
-            int width := input_shape[3]
-            int channels_out := weight_shape[0]
-            int weight_channels := weight_shape[1]
-            int kernel_height := weight_shape[2]
-            int kernel_width := weight_shape[3]
+            batches := input_shape[0]
+            channels_in := input_shape[1]
+            height := input_shape[2]
+            width := input_shape[3]
+            channels_out := weight_shape[0]
+            weight_channels := weight_shape[1]
+            kernel_height := weight_shape[2]
+            kernel_width := weight_shape[3]
             if batches <= 0 or channels_in <= 0 or channels_out <= 0
                 error("nn.Conv2D requires positive batch and channel dimensions", code = "NN_SHAPE")
             if height <= 0 or width <= 0
@@ -1182,27 +1182,27 @@ class Conv2D(
             if step <= 0 or border < 0
                 error("nn.Conv2D requires stride > 0 and padding >= 0", code = "NN_ARGUMENT")
 
-            int padded_height := height + border * 2
-            int padded_width := width + border * 2
+            padded_height := height + border * 2
+            padded_width := width + border * 2
             if padded_height < kernel_height or padded_width < kernel_width
                 error("nn.Conv2D kernel is larger than padded input", code = "NN_SHAPE")
-            int output_height := (padded_height - kernel_height) / step + 1
-            int output_width := (padded_width - kernel_width) / step + 1
+            output_height := (padded_height - kernel_height) / step + 1
+            output_width := (padded_width - kernel_width) / step + 1
 
             if native.is_cpu_f32(value) == int32(1) and native.is_cpu_f32(parameter_weight) == int32(1) and native.is_cpu_f32(parameter_bias) == int32(1)
-                tensor<real32> native_input := value
-                tensor<real32> native_weight := parameter_weight
-                tensor<real32> native_bias := parameter_bias
+                native_input := value
+                native_weight := parameter_weight
+                native_bias := parameter_bias
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
                 if not native_weight.is_contiguous()
                     native_weight = native_weight.contiguous()
                 if not native_bias.is_contiguous()
                     native_bias = native_bias.contiguous()
-                tensor<real32> native_output := tensor.zeros<real32>(
+                native_output := tensor.zeros<real32>(
                     [nat(batches), nat(channels_out), nat(output_height), nat(output_width)]
                 )
-                int32 native_status := native.conv2d_gelu_inference_f32(
+                native_status := native.conv2d_gelu_inference_f32(
                     native_input,
                     native_weight,
                     native_bias,
@@ -1214,11 +1214,11 @@ class Conv2D(
                 if native_status == int32(0)
                     return native_output
 
-        tensor<real32> fused := value
+        fused := value
         if .metal_activation(value, 2, &fused)
             return fused
 
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         return internal.gelu_fused(output)
 
 
@@ -1248,9 +1248,9 @@ class Conv2D(
         return .forward_relu(value)
 
     private tensor<real32> .forward_relu_cuda(tensor<real32> value)
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
-            int32 status := native.cuda_activation_inplace_f32(&output, 1)
+            status := native.cuda_activation_inplace_f32(&output, 1)
             if status == int32(0)
                 return output
         return internal.relu_fused(output)
@@ -1262,9 +1262,9 @@ class Conv2D(
         return .forward_gelu(value)
 
     private tensor<real32> .forward_gelu_cuda(tensor<real32> value)
-        tensor<real32> output := .forward(value)
+        output := .forward(value)
         if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
-            int32 status := native.cuda_activation_inplace_f32(&output, 2)
+            status := native.cuda_activation_inplace_f32(&output, 2)
             if status == int32(0)
                 return output
         return internal.gelu_fused(output)
@@ -1283,19 +1283,19 @@ FC | error normal_fc(
     if not math.is_finite(bias_value)
         return error("nn.normal_fc bias must be finite", code = "NN_ARGUMENT")
 
-    int weight_count := features_out * features_in
-    tensor<real32> weight_values := try normal_weights(
+    weight_count := features_out * features_in
+    weight_values := try normal_weights(
         weight_count, standard_deviation, seed
     )
 
-    real32 bias32 := try real32(bias_value)
-    Parameter<real32> prepared_weight := Parameter<real32>(
+    bias32 := try real32(bias_value)
+    prepared_weight := Parameter<real32>(
         value = weight_values.reshape([nat(features_out), nat(features_in)])
     )
-    Parameter<real32> prepared_bias := Parameter<real32>(
+    prepared_bias := Parameter<real32>(
         value = tensor.ones<real32>([nat(features_out)]) * bias32
     )
-    FC layer := try FC(
+    layer := try FC(
         features_in, features_out, seed = seed,
         initial_weight = prepared_weight, initial_bias = prepared_bias
     )
@@ -1329,28 +1329,28 @@ Conv2D | error normal_conv2d(
     if kernel > 9223372036854775807 / kernel
         return error("nn.normal_conv2d dimensions are too large", code = "NN_SHAPE")
 
-    int kernel_area := kernel * kernel
-    int channels_per_group := channels_in / groups
+    kernel_area := kernel * kernel
+    channels_per_group := channels_in / groups
     if channels_per_group > 9223372036854775807 / kernel_area
         return error("nn.normal_conv2d dimensions are too large", code = "NN_SHAPE")
-    int fan_in := channels_per_group * kernel_area
+    fan_in := channels_per_group * kernel_area
     if channels_out > 9223372036854775807 / fan_in
         return error("nn.normal_conv2d dimensions are too large", code = "NN_SHAPE")
-    int weight_count := channels_out * fan_in
+    weight_count := channels_out * fan_in
 
-    tensor<real32> weight_values := try normal_weights(
+    weight_values := try normal_weights(
         weight_count, standard_deviation, seed
     )
-    real32 bias32 := try real32(bias_value)
-    Parameter<real32> prepared_weight := Parameter<real32>(
+    bias32 := try real32(bias_value)
+    prepared_weight := Parameter<real32>(
         value = weight_values.reshape(
             [nat(channels_out), nat(channels_per_group), nat(kernel), nat(kernel)]
         )
     )
-    Parameter<real32> prepared_bias := Parameter<real32>(
+    prepared_bias := Parameter<real32>(
         value = tensor.ones<real32>([nat(channels_out)]) * bias32
     )
-    Conv2D layer := try Conv2D(
+    layer := try Conv2D(
         channels_in, channels_out, kernel, stride = stride, padding = padding, seed = seed, groups = groups,
         initial_weight = prepared_weight, initial_bias = prepared_bias
     )
@@ -1363,39 +1363,39 @@ tensor<real32> max_pool2d(
     int stride,
     int padding := 0
 )
-    int[] shape := int(value.shape())
+    shape := int(value.shape())
     if len(shape) != 4
         error("nn.max_pool2d requires NCHW rank-4 input", code = "NN_SHAPE")
     if kernel <= 0 or stride <= 0 or padding < 0
         error("nn.max_pool2d requires kernel/stride > 0 and padding >= 0", code = "NN_ARGUMENT")
-    int batches := shape[0]
-    int channels := shape[1]
-    int height := shape[2]
-    int width := shape[3]
+    batches := shape[0]
+    channels := shape[1]
+    height := shape[2]
+    width := shape[3]
     if batches <= 0 or channels <= 0 or height <= 0 or width <= 0
         error("nn.max_pool2d requires positive input dimensions", code = "NN_SHAPE")
-    int padded_height := height + padding * 2
-    int padded_width := width + padding * 2
+    padded_height := height + padding * 2
+    padded_width := width + padding * 2
     if padded_height < kernel or padded_width < kernel
         error("nn.max_pool2d kernel is larger than padded input", code = "NN_SHAPE")
-    int output_height := (padded_height - kernel) / stride + 1
-    int output_width := (padded_width - kernel) / stride + 1
-    int[] output_shape := [batches, channels, output_height, output_width]
-    tensor<real32> output := (
+    output_height := (padded_height - kernel) / stride + 1
+    output_width := (padded_width - kernel) / stride + 1
+    output_shape := [batches, channels, output_height, output_width]
+    output := (
         value.untrack().gather([0], [1]) * real32(0)
     ).scatter([0], output_shape)
 
     for 0 <= int channel < channels
         for 0 <= int output_y < output_height
             for 0 <= int output_x < output_width
-                int start_y := output_y * stride - padding
-                int start_x := output_x * stride - padding
+                start_y := output_y * stride - padding
+                start_x := output_x * stride - padding
                 int valid_count := 0
                 for 0 <= int kernel_y < kernel
-                    int source_y := start_y + kernel_y
+                    source_y := start_y + kernel_y
                     if source_y >= 0 and source_y < height
                         for 0 <= int kernel_x < kernel
-                            int source_x := start_x + kernel_x
+                            source_x := start_x + kernel_x
                             if source_x >= 0 and source_x < width
                                 valid_count = valid_count + 1
                 if valid_count <= 0
@@ -1407,10 +1407,10 @@ tensor<real32> max_pool2d(
                 int cursor := 0
                 for 0 <= int batch < batches
                     for 0 <= int kernel_y < kernel
-                        int source_y := start_y + kernel_y
+                        source_y := start_y + kernel_y
                         if source_y >= 0 and source_y < height
                             for 0 <= int kernel_x < kernel
-                                int source_x := start_x + kernel_x
+                                source_x := start_x + kernel_x
                                 if source_x >= 0 and source_x < width
                                     input_indices[cursor] = (
                                         ((batch * channels + channel) * height + source_y)
@@ -1418,16 +1418,16 @@ tensor<real32> max_pool2d(
                                     )
                                     cursor = cursor + 1
 
-                tensor<real32> window := value.gather(
+                window := value.gather(
                     input_indices, [batches, valid_count]
                 )
                 // max_last preserves shape by broadcasting each row maximum;
                 // gather one representative value per batch for the pool output.
-                tensor<real32> maxima := math.max_last(window)
+                maxima := math.max_last(window)
                 int[] maximum_indices := array(nat(batches), fill = 0)
                 for 0 <= int batch < batches
                     maximum_indices[batch] = batch * valid_count
-                tensor<real32> pooled := maxima.gather(
+                pooled := maxima.gather(
                     maximum_indices, [batches]
                 )
                 int[] output_indices := array(nat(batches), fill = 0)
@@ -1440,32 +1440,32 @@ tensor<real32> max_pool2d(
     return output
 
 tensor<real32> global_average_pool2d(tensor<real32> value)
-    int[] shape := int(value.shape())
+    shape := int(value.shape())
     if len(shape) != 4
         error("nn.global_average_pool2d requires NCHW rank-4 input", code = "NN_SHAPE")
-    int batches := shape[0]
-    int channels := shape[1]
-    int height := shape[2]
-    int width := shape[3]
+    batches := shape[0]
+    channels := shape[1]
+    height := shape[2]
+    width := shape[3]
     if batches <= 0 or channels <= 0 or height <= 0 or width <= 0
         error("nn.global_average_pool2d requires positive input dimensions", code = "NN_SHAPE")
     if height > 9223372036854775807 / width
         error("nn.global_average_pool2d input is too large", code = "NN_SIZE")
-    int count := height * width
+    count := height * width
     if channels > 9223372036854775807 / count
         error("nn.global_average_pool2d input is too large", code = "NN_SIZE")
-    int batch_count := channels * count
+    batch_count := channels * count
     if batches > 9223372036854775807 / batch_count
         error("nn.global_average_pool2d input is too large", code = "NN_SIZE")
-    int total_count := batches * batch_count
+    total_count := batches * batch_count
 
     // NN's pooling kernel on CPU and Metal: one pass per plane and one custom
     // autograd node (any order) instead of the gather/sum_last graph below.
     // Only untracked views are densified; tracked views keep the graph.
-    int32 device := native.fused_device_f32(value)
+    device := native.fused_device_f32(value)
     if device >= int32(-1)
-        tensor<real32> input := value
-        bool dense := input.is_contiguous()
+        input := value
+        dense := input.is_contiguous()
         if not dense and not input.is_tracked()
             input = input.contiguous()
             dense = true
@@ -1485,16 +1485,16 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
     int[] flatten_indices := array(nat(total_count), fill = 0)
     for 0 <= int index < total_count
         flatten_indices[index] = index
-    tensor<real32> flattened := value.gather(
+    flattened := value.gather(
         flatten_indices, [batches, channels, count]
     )
 
     // sum_last preserves the reduced axis by broadcasting the sum. Select
     // one representative from each spatial plane after dividing by its size.
-    tensor<real32> spatial_sums := math.sum_last(flattened)
+    spatial_sums := math.sum_last(flattened)
     spatial_count := real32(count)
-    tensor<real32> means := spatial_sums / spatial_count
-    int output_count := batches * channels
+    means := spatial_sums / spatial_count
+    output_count := batches * channels
     int[] indices := array(nat(output_count), fill = 0)
     for 0 <= int index < output_count
         indices[index] = index * count
@@ -1507,7 +1507,7 @@ tensor<real32> local_response_normalization(
     real64 beta := 0.75,
     real64 k := 2.0
 )
-    int[] shape := int(value.shape())
+    shape := int(value.shape())
     if len(shape) != 4
         error("nn.local_response_normalization requires NCHW rank-4 input", code = "NN_SHAPE")
     if size <= 0 or size % 2 == 0
@@ -1519,52 +1519,52 @@ tensor<real32> local_response_normalization(
     if not math.is_finite(k) or k <= 0.0
         error("nn.local_response_normalization k must be finite and positive", code = "NN_ARGUMENT")
 
-    int batches := shape[0]
-    int channels := shape[1]
-    int height := shape[2]
-    int width := shape[3]
+    batches := shape[0]
+    channels := shape[1]
+    height := shape[2]
+    width := shape[3]
     if batches <= 0 or channels <= 0 or height <= 0 or width <= 0
         error("nn.local_response_normalization requires positive input dimensions", code = "NN_SHAPE")
 
-    tensor<real32> output := (
+    output := (
         value.untrack().gather([0], [1]) * real32(0)
     ).scatter([0], shape)
-    int plane_count := batches * height * width
-    int radius := size / 2
+    plane_count := batches * height * width
+    radius := size / 2
 
     for 0 <= int channel < channels
-        int first_channel := channel - radius
+        first_channel := channel - radius
         if first_channel < 0
             first_channel = 0
-        int last_channel := channel + radius
+        last_channel := channel + radius
         if last_channel >= channels
             last_channel = channels - 1
 
         int[] current_indices := array(nat(plane_count), fill = 0)
         for 0 <= int flat_index < plane_count
-            int x := flat_index % width
-            int remaining := flat_index / width
-            int y := remaining % height
-            int batch := remaining / height
+            x := flat_index % width
+            remaining := flat_index / width
+            y := remaining % height
+            batch := remaining / height
             current_indices[flat_index] = (
                 ((batch * channels + channel) * height + y) * width + x
             )
-        tensor<real32> current := value.gather(
+        current := value.gather(
             current_indices, [batches, height, width]
         )
-        tensor<real32> square_sum := current.untrack() * real32(0)
+        square_sum := current.untrack() * real32(0)
 
         for first_channel <= int neighbor < last_channel + 1
             int[] neighbor_indices := array(nat(plane_count), fill = 0)
             for 0 <= int flat_index < plane_count
-                int x := flat_index % width
-                int remaining := flat_index / width
-                int y := remaining % height
-                int batch := remaining / height
+                x := flat_index % width
+                remaining := flat_index / width
+                y := remaining % height
+                batch := remaining / height
                 neighbor_indices[flat_index] = (
                     ((batch * channels + neighbor) * height + y) * width + x
                 )
-            tensor<real32> neighbor_value := value.gather(
+            neighbor_value := value.gather(
                 neighbor_indices, [batches, height, width]
             )
             square_sum = square_sum + neighbor_value * neighbor_value
@@ -1572,11 +1572,11 @@ tensor<real32> local_response_normalization(
         base_k := real32(k)
         coefficient := real32(alpha)
         exponent := real32(beta)
-        tensor<real32> base := base_k + square_sum * coefficient
-        tensor<real32> denominator := math.exp(
+        base := base_k + square_sum * coefficient
+        denominator := math.exp(
             math.log(base) * exponent
         )
-        tensor<real32> normalized := current / denominator
+        normalized := current / denominator
         output = output + normalized.scatter(current_indices, shape)
 
     return output
@@ -1673,18 +1673,18 @@ class BatchNorm(
         tensor<real32> value,
         bool training
     )
-        int[] shape := int(value.shape())
-        int rank := int(len(shape))
+        shape := int(value.shape())
+        rank := int(len(shape))
         if rank < 2
             error("nn.BatchNorm requires rank >= 2 with feature/channel axis 1", code = "NN_SHAPE")
 
-        int features := shape[1]
+        features := shape[1]
         if features <= 0
             error("nn.BatchNorm feature/channel dimension must be positive", code = "NN_SHAPE")
-        int[] scale_shape := int(scale.raw().shape())
-        int[] bias_shape := int(bias.raw().shape())
-        int[] mean_shape := int(running_mean.raw().shape())
-        int[] variance_shape := int(running_variance.raw().shape())
+        scale_shape := int(scale.raw().shape())
+        bias_shape := int(bias.raw().shape())
+        mean_shape := int(running_mean.raw().shape())
+        variance_shape := int(running_variance.raw().shape())
         if len(scale_shape) != 1 or len(bias_shape) != 1
             error("nn.BatchNorm requires rank-1 scale and bias", code = "NN_SHAPE")
         if len(mean_shape) != 1 or len(variance_shape) != 1
@@ -1705,7 +1705,7 @@ class BatchNorm(
             error("nn.BatchNorm received an invalid tensor shape", code = "NN_INTERNAL")
         if inner != 0 and shape[0] > 9223372036854775807 / inner
             error("nn.BatchNorm tensor shape is too large", code = "NN_SIZE")
-        int samples := shape[0] * inner
+        samples := shape[0] * inner
         if training and samples == 0
             error("nn.BatchNorm training requires at least one sample per feature", code = "NN_SHAPE")
 
@@ -1718,45 +1718,45 @@ class BatchNorm(
             parameter_scale = scale.raw()
             parameter_bias = bias.raw()
 
-        tensor<real32> output := value * real32(0)
-        tensor<real32> next_running_mean := running_mean.raw() * real32(0)
-        tensor<real32> next_running_variance := running_variance.raw() * real32(0)
+        output := value * real32(0)
+        next_running_mean := running_mean.raw() * real32(0)
+        next_running_variance := running_variance.raw() * real32(0)
 
         for 0 <= int feature < features
             int[] indices := array(nat(samples), fill = 0)
             for 0 <= int sample < samples
-                int outer := sample / inner
-                int offset := sample % inner
+                outer := sample / inner
+                offset := sample % inner
                 indices[sample] = ((outer * features + feature) * inner) + offset
 
-            tensor<real32> feature_values := value.gather(indices, [samples])
+            feature_values := value.gather(indices, [samples])
             tensor<real32> mean
             tensor<real32> variance
 
             if training
                 mean = internal.mean_all(feature_values).reshape([1])
-                tensor<real32> centered := feature_values - mean
+                centered := feature_values - mean
                 variance = internal.mean_all(centered * centered).reshape([1])
 
-                tensor<real32> old_mean := running_mean.raw().gather(
+                old_mean := running_mean.raw().gather(
                     [feature], [1]
                 )
-                tensor<real32> old_variance := running_variance.raw().gather(
+                old_variance := running_variance.raw().gather(
                     [feature], [1]
                 )
-                tensor<real32> updated_mean := (
+                updated_mean := (
                     old_mean * (real32(1) - running_momentum)
                     + mean.untrack() * running_momentum
                 )
-                tensor<real32> updated_variance := (
+                updated_variance := (
                     old_variance * (real32(1) - running_momentum)
                     + variance.untrack() * running_momentum
                 )
 
-                tensor<real32> mean_piece := updated_mean.scatter(
+                mean_piece := updated_mean.scatter(
                     [feature], [features]
                 )
-                tensor<real32> variance_piece := updated_variance.scatter(
+                variance_piece := updated_variance.scatter(
                     [feature], [features]
                 )
                 next_running_mean = next_running_mean + mean_piece
@@ -1765,20 +1765,20 @@ class BatchNorm(
                 mean = running_mean.raw().gather([feature], [1])
                 variance = running_variance.raw().gather([feature], [1])
 
-            tensor<real32> shifted_variance := variance + variance_epsilon
-            tensor<real32> denominator := math.exp(
+            shifted_variance := variance + variance_epsilon
+            denominator := math.exp(
                 math.log(shifted_variance) * real32(0.5)
             )
-            tensor<real32> feature_scale := parameter_scale.gather(
+            feature_scale := parameter_scale.gather(
                 [feature], [1]
             )
-            tensor<real32> feature_bias := parameter_bias.gather(
+            feature_bias := parameter_bias.gather(
                 [feature], [1]
             )
-            tensor<real32> normalized := (
+            normalized := (
                 (feature_values - mean) / denominator
             ) * feature_scale + feature_bias
-            tensor<real32> piece := normalized.scatter(indices, shape)
+            piece := normalized.scatter(indices, shape)
             output = output + piece
 
         return (output, next_running_mean, next_running_variance)
@@ -1802,7 +1802,7 @@ class BatchNorm(
         Conv2D convolution,
         tensor<real32> value
     )
-        tensor<real32> convolved := .convolution.forward(value)
+        convolved := .convolution.forward(value)
         (tensor<real32> output, _, _) := .normalize_value(convolved, false)
         return output
 
@@ -1810,7 +1810,7 @@ class BatchNorm(
         Conv2D convolution,
         tensor<real32> value
     )
-        tensor<real32> convolved := .convolution.forward(value)
+        convolved := .convolution.forward(value)
         (tensor<real32> output, _, _) := .normalize_value(convolved, false)
         return relu(output)
 
@@ -1818,11 +1818,11 @@ class BatchNorm(
         Conv2D convolution,
         tensor<real32> value
     )
-        tensor<real32> convolved := .convolution.forward(value)
+        convolved := .convolution.forward(value)
         (tensor<real32> output, _, _) := .normalize_value(convolved, false)
         return gelu(output)
 
-class Dropout(local real64 rate, local int seed := 0, local bool inverted := true) | error
+class Dropout(local real64 rate, local int seed := 0, local inverted := true) | error
 
     real64 drop_rate
     random.Generator rng
@@ -1837,7 +1837,7 @@ class Dropout(local real64 rate, local int seed := 0, local bool inverted := tru
         if drop_rate == 0.0
             return value
 
-        int[] shape := int(value.shape())
+        shape := int(value.shape())
         int count := 1
         for 0 <= nat axis < len(shape)
             if shape[axis] < 0
@@ -1846,7 +1846,7 @@ class Dropout(local real64 rate, local int seed := 0, local bool inverted := tru
                 error("nn.Dropout tensor is too large", code = "NN_SIZE")
             count = count * shape[axis]
 
-        tensor<real32> mask := (value.untrack() * real32(0)).reshape([nat(count)])
+        mask := (value.untrack() * real32(0)).reshape([nat(count)])
         real64 scale := 1.0
         if inverted_scaling
             scale = 1.0 / (1.0 - drop_rate)
@@ -1872,59 +1872,59 @@ tensor<real32> relu(tensor<real32> value)
     return internal.relu_fused(value)
 
 tensor<real32> tanh(tensor<real32> value)
-    tensor<real32> lifted := (value - 20.0 + math.abs(value + 20.0)) / 2.0
-    tensor<real32> limited := (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
-    tensor<real32> exponent := math.exp(limited * 2.0)
+    lifted := (value - 20.0 + math.abs(value + 20.0)) / 2.0
+    limited := (lifted + 20.0 - math.abs(lifted - 20.0)) / 2.0
+    exponent := math.exp(limited * 2.0)
     return (exponent - 1.0) / (exponent + 1.0)
 
 tensor<real32> sigmoid(tensor<real32> value)
     return (tanh(value * 0.5) + 1.0) * 0.5
 
 tensor<real32> softmax(tensor<real32> value)
-    tensor<real32> shifted := value - math.max_last(value)
-    tensor<real32> weights := math.exp(shifted)
+    shifted := value - math.max_last(value)
+    weights := math.exp(shifted)
     return weights / math.sum_last(weights)
 
 tensor<real32> gelu(tensor<real32> value)
     return internal.gelu_fused(value)
 
 tensor<real32> mse(tensor<real32> prediction, tensor<real32> target)
-    tensor<real32> difference := prediction - target
+    difference := prediction - target
     return internal.mean_all(difference * difference)
 
 tensor<real32> binary_cross_entropy(
     tensor<real32> prediction,
     tensor<real32> target
 )
-    tensor<real32> lifted := (
+    lifted := (
         prediction + real32(0.000001)
         + math.abs(prediction - real32(0.000001))
     ) / 2.0
-    tensor<real32> limited := (
+    limited := (
         lifted + real32(0.999999)
         - math.abs(lifted - real32(0.999999))
     ) / 2.0
-    tensor<real32> first := target * math.log(limited)
-    tensor<real32> second := (1.0 - target) * math.log(1.0 - limited)
+    first := target * math.log(limited)
+    second := (1.0 - target) * math.log(1.0 - limited)
     return internal.mean_all(0.0 - first - second)
 
 tensor<real32> binary_cross_entropy_with_logits(
     tensor<real32> logits,
     tensor<real32> target
 )
-    tensor<real32> magnitude := math.abs(logits)
-    tensor<real32> positive := (logits + magnitude) / 2.0
-    tensor<real32> tail := math.log(1.0 + math.exp(0.0 - magnitude))
+    magnitude := math.abs(logits)
+    positive := (logits + magnitude) / 2.0
+    tail := math.log(1.0 + math.exp(0.0 - magnitude))
     return internal.mean_all(positive - logits * target + tail)
 
 tensor<real32> cross_entropy(
     tensor<real32> logits,
     tensor<real32> target
 )
-    tensor<real32> shifted := logits - math.max_last(logits)
-    tensor<real32> total := math.sum_last(math.exp(shifted))
-    tensor<real32> log_probabilities := shifted - math.log(total)
-    tensor<real32> per_class := target * log_probabilities
+    shifted := logits - math.max_last(logits)
+    total := math.sum_last(math.exp(shifted))
+    log_probabilities := shifted - math.log(total)
+    per_class := target * log_probabilities
     return internal.mean_all(0.0 - math.sum_last(per_class))
 
 
@@ -1945,13 +1945,13 @@ reflect.Each<Parameter<T>> parameters<T: floating, M>(M &model)
     return reflect.each<Parameter<T>>(&model)
 
 void clear_grad<M>(M &model)
-    for Parameter<real16> &parameter := &parameters(&model)[]
+    for &parameter := &parameters(&model)[]
         .parameter.clear_grad()
-    for Parameter<real16b> &parameter := &parameters(&model)[]
+    for &parameter := &parameters(&model)[]
         .parameter.clear_grad()
-    for Parameter<real32> &parameter := &parameters(&model)[]
+    for &parameter := &parameters(&model)[]
         .parameter.clear_grad()
-    for Parameter<real64> &parameter := &parameters(&model)[]
+    for &parameter := &parameters(&model)[]
         .parameter.clear_grad()
 
 class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
@@ -1986,9 +1986,9 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         next16 = []
         paths16 = reflect.each_paths<Parameter<real16>>(model)
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
-            tensor<real16> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes16 = shapes16.append(shape)
             devices16 = devices16.append(device)
             if device >= 0
@@ -2000,9 +2000,9 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         next16b = []
         paths16b = reflect.each_paths<Parameter<real16b>>(model)
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
-            tensor<real16b> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes16b = shapes16b.append(shape)
             devices16b = devices16b.append(device)
             if device >= 0
@@ -2014,9 +2014,9 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         next32 = []
         paths32 = reflect.each_paths<Parameter<real32>>(model)
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
-            tensor<real32> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes32 = shapes32.append(shape)
             devices32 = devices32.append(device)
             if device >= 0
@@ -2028,9 +2028,9 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         next64 = []
         paths64 = reflect.each_paths<Parameter<real64>>(model)
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
-            tensor<real64> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes64 = shapes64.append(shape)
             devices64 = devices64.append(device)
             if device >= 0
@@ -2047,7 +2047,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
             if index >= len(shapes16)
                 return error("nn.SGD.{operation}: Parameter<real16> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real16> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes16[index] or not same_device(raw.device(), devices16[index])
                 return error("nn.SGD.{operation}: Parameter<real16> at index {index}, " + paths16[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16 += 1
@@ -2057,7 +2057,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
             if index >= len(shapes16b)
                 return error("nn.SGD.{operation}: Parameter<real16b> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real16b> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes16b[index] or not same_device(raw.device(), devices16b[index])
                 return error("nn.SGD.{operation}: Parameter<real16b> at index {index}, " + paths16b[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16b += 1
@@ -2067,7 +2067,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
             if index >= len(shapes32)
                 return error("nn.SGD.{operation}: Parameter<real32> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real32> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes32[index] or not same_device(raw.device(), devices32[index])
                 return error("nn.SGD.{operation}: Parameter<real32> at index {index}, " + paths32[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count32 += 1
@@ -2077,7 +2077,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
             if index >= len(shapes64)
                 return error("nn.SGD.{operation}: Parameter<real64> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real64> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes64[index] or not same_device(raw.device(), devices64[index])
                 return error("nn.SGD.{operation}: Parameter<real64> at index {index}, " + paths64[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count64 += 1
@@ -2088,29 +2088,29 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
     private void | error check_gradients(string operation)
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real16> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes16[index] or not same_device(gradient.device(), devices16[index])
                     return error("nn.SGD.{operation}: gradient of Parameter<real16> at index {index}, " + paths16[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real16b> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes16b[index] or not same_device(gradient.device(), devices16b[index])
                     return error("nn.SGD.{operation}: gradient of Parameter<real16b> at index {index}, " + paths16b[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real32> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes32[index] or not same_device(gradient.device(), devices32[index])
                     return error("nn.SGD.{operation}: gradient of Parameter<real32> at index {index}, " + paths32[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real64> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes64[index] or not same_device(gradient.device(), devices64[index])
                     return error("nn.SGD.{operation}: gradient of Parameter<real64> at index {index}, " + paths64[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         return
 
     private void | error .compute16(nat index, tensor<real16> value, tensor<real16> gradient)
         status := int32(-1)
-        tensor<real16> dense := gradient
+        dense := gradient
         if native.is_cpu_floating<real16>(value) == int32(1)
             status = native.sgd_update<real16>(value, dense, &next16[index], learning_rate)
         elif value.device() >= int(0) and value.is_contiguous()
@@ -2126,7 +2126,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
 
     private void | error .compute16b(nat index, tensor<real16b> value, tensor<real16b> gradient)
         status := int32(-1)
-        tensor<real16b> dense := gradient
+        dense := gradient
         if native.is_cpu_floating<real16b>(value) == int32(1)
             status = native.sgd_update<real16b>(value, dense, &next16b[index], learning_rate)
         elif value.device() >= int(0) and value.is_contiguous()
@@ -2142,7 +2142,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
 
     private void | error .compute32(nat index, tensor<real32> value, tensor<real32> gradient)
         status := int32(-1)
-        tensor<real32> dense := gradient
+        dense := gradient
         if native.is_cpu_floating<real32>(value) == int32(1)
             status = native.sgd_update<real32>(value, dense, &next32[index], learning_rate)
         elif value.is_contiguous() and native.metal_device_f32(value) >= int32(0)
@@ -2158,7 +2158,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
 
     private void | error .compute64(nat index, tensor<real64> value, tensor<real64> gradient)
         status := int32(-1)
-        tensor<real64> dense := gradient
+        dense := gradient
         if native.is_cpu_floating<real64>(value) == int32(1)
             status = native.sgd_update<real64>(value, dense, &next64[index], learning_rate)
         if status == int32(0)
@@ -2176,8 +2176,8 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 try .compute16(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != int32(0)
                     return error("nn.SGD.update failed during computation at " + paths16[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-                tensor<real16> old := parameter.raw()
-                tensor<real16> next := next16[index]
+                old := parameter.raw()
+                next := next16[index]
                 next16[index] = old
                 .parameter.replace(next)
                 .parameter.clear_grad()
@@ -2186,8 +2186,8 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 try .compute16b(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != int32(0)
                     return error("nn.SGD.update failed during computation at " + paths16b[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-                tensor<real16b> old := parameter.raw()
-                tensor<real16b> next := next16b[index]
+                old := parameter.raw()
+                next := next16b[index]
                 next16b[index] = old
                 .parameter.replace(next)
                 .parameter.clear_grad()
@@ -2196,8 +2196,8 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 try .compute32(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != int32(0)
                     return error("nn.SGD.update failed during computation at " + paths32[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-                tensor<real32> old := parameter.raw()
-                tensor<real32> next := next32[index]
+                old := parameter.raw()
+                next := next32[index]
                 next32[index] = old
                 .parameter.replace(next)
                 .parameter.clear_grad()
@@ -2206,8 +2206,8 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 try .compute64(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != int32(0)
                     return error("nn.SGD.update failed during computation at " + paths64[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-                tensor<real64> old := parameter.raw()
-                tensor<real64> next := next64[index]
+                old := parameter.raw()
+                next := next64[index]
                 next64[index] = old
                 .parameter.replace(next)
                 .parameter.clear_grad()
@@ -2295,9 +2295,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         second16 = []
         paths16 = reflect.each_paths<Parameter<real16>>(model)
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
-            tensor<real16> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes16 = shapes16.append(shape)
             devices16 = devices16.append(device)
             steps16 = steps16.append(0)
@@ -2319,9 +2319,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         second16b = []
         paths16b = reflect.each_paths<Parameter<real16b>>(model)
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
-            tensor<real16b> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes16b = shapes16b.append(shape)
             devices16b = devices16b.append(device)
             steps16b = steps16b.append(0)
@@ -2343,9 +2343,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         second32 = []
         paths32 = reflect.each_paths<Parameter<real32>>(model)
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
-            tensor<real32> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes32 = shapes32.append(shape)
             devices32 = devices32.append(device)
             steps32 = steps32.append(0)
@@ -2367,9 +2367,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         second64 = []
         paths64 = reflect.each_paths<Parameter<real64>>(model)
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
-            tensor<real64> raw := parameter.raw()
-            nat[] shape := raw.shape()
-            int64 device := int64(raw.device())
+            raw := parameter.raw()
+            shape := raw.shape()
+            device := int64(raw.device())
             shapes64 = shapes64.append(shape)
             devices64 = devices64.append(device)
             steps64 = steps64.append(0)
@@ -2391,7 +2391,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
             if index >= len(shapes16)
                 return error("nn.Adam.{operation}: Parameter<real16> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real16> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes16[index] or not same_device(raw.device(), devices16[index])
                 return error("nn.Adam.{operation}: Parameter<real16> at index {index}, " + paths16[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16 += 1
@@ -2401,7 +2401,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
             if index >= len(shapes16b)
                 return error("nn.Adam.{operation}: Parameter<real16b> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real16b> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes16b[index] or not same_device(raw.device(), devices16b[index])
                 return error("nn.Adam.{operation}: Parameter<real16b> at index {index}, " + paths16b[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16b += 1
@@ -2411,7 +2411,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
             if index >= len(shapes32)
                 return error("nn.Adam.{operation}: Parameter<real32> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real32> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes32[index] or not same_device(raw.device(), devices32[index])
                 return error("nn.Adam.{operation}: Parameter<real32> at index {index}, " + paths32[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count32 += 1
@@ -2421,7 +2421,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
             if index >= len(shapes64)
                 return error("nn.Adam.{operation}: Parameter<real64> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
-            tensor<real64> raw := parameter.raw()
+            raw := parameter.raw()
             if raw.shape() != shapes64[index] or not same_device(raw.device(), devices64[index])
                 return error("nn.Adam.{operation}: Parameter<real64> at index {index}, " + paths64[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count64 += 1
@@ -2432,22 +2432,22 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
     private void | error check_gradients(string operation)
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real16> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes16[index] or not same_device(gradient.device(), devices16[index])
                     return error("nn.Adam.{operation}: gradient of Parameter<real16> at index {index}, " + paths16[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real16b> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes16b[index] or not same_device(gradient.device(), devices16b[index])
                     return error("nn.Adam.{operation}: gradient of Parameter<real16b> at index {index}, " + paths16b[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real32> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes32[index] or not same_device(gradient.device(), devices32[index])
                     return error("nn.Adam.{operation}: gradient of Parameter<real32> at index {index}, " + paths32[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
             if parameter.has_grad()
-                tensor<real64> gradient := parameter.gradient()
+                gradient := parameter.gradient()
                 if gradient.shape() != shapes64[index] or not same_device(gradient.device(), devices64[index])
                     return error("nn.Adam.{operation}: gradient of Parameter<real64> at index {index}, " + paths64[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
         return
@@ -2459,9 +2459,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         return
     void | error save(M &model_argument, string path)
         try check_model("save", &model_argument)
-        internal.StateEntrySchema[] expected := model_schema(&model_argument)
+        expected := model_schema(&model_argument)
         try internal.validate_model_schema(expected, "nn.Adam.save")
-        file.write output := try file.write(path)
+        output := try file.write(path)
         checksum := internal.StateChecksum()
         try internal.write_checked_line(&output, &checksum, "QUIDRA_DNN_STATE")
         try internal.write_checked_line(&output, &checksum, "5")
@@ -2496,7 +2496,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
 
     void | error .load(M &model_argument, string path)
         try check_model("load", &model_argument)
-        internal.StateEntrySchema[] expected := model_schema(&model_argument)
+        expected := model_schema(&model_argument)
         try internal.validate_model_schema(expected, "nn.Adam.load")
         for entry_path := paths16[nat index]
             expected = expected.append(internal.adam_step_schema(internal.StoredAdamStep(path_initial = entry_path, step_initial = internal.adam_step(0, 0.0, 0.0))))
@@ -2514,21 +2514,21 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             expected = expected.append(internal.adam_step_schema(internal.StoredAdamStep(path_initial = entry_path, step_initial = internal.adam_step(0, 0.0, 0.0))))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamFirst", dtype_initial = "real64", path_initial = entry_path, shape_initial = shapes64[index]), "first"))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamSecond", dtype_initial = "real64", path_initial = entry_path, shape_initial = shapes64[index]), "second"))
-        file.read input := try file.read(path)
+        input := try file.read(path)
         checksum := internal.StateChecksum()
-        string magic := try internal.read_checked_line(&input, &checksum, "magic")
+        magic := try internal.read_checked_line(&input, &checksum, "magic")
         if magic != "QUIDRA_DNN_STATE"
             return error("nn.Adam.load state file has an unsupported magic", code = "NN_CHECKPOINT_FILE")
-        string version := try internal.read_checked_line(&input, &checksum, "format version")
+        version := try internal.read_checked_line(&input, &checksum, "format version")
         if version != "2" and version != "3" and version != "5"
             return error("nn.Adam.load state file has an unsupported format version", code = "NN_CHECKPOINT_FILE")
-        string container_kind := try internal.read_checked_line(&input, &checksum, "container kind")
+        container_kind := try internal.read_checked_line(&input, &checksum, "container kind")
         if container_kind != "model+Adam"
             return error("nn.Adam.load state file is not an Adam checkpoint", code = "NN_CHECKPOINT_FILE")
-        string root_type := try internal.read_checked_line(&input, &checksum, "root model type")
-        internal.StateTable stored := try internal.read_model_entries(&input, &checksum, version)
-        internal.StateEntrySchema[] actual := stored.schemas
-        string optimizer_kind := try internal.read_checked_line(&input, &checksum, "optimizer kind")
+        root_type := try internal.read_checked_line(&input, &checksum, "root model type")
+        stored := try internal.read_model_entries(&input, &checksum, version)
+        actual := stored.schemas
+        optimizer_kind := try internal.read_checked_line(&input, &checksum, "optimizer kind")
         if optimizer_kind != "Adam"
             return error("nn.Adam.load invalid optimizer kind", code = "NN_CHECKPOINT_FILE")
         real64 loaded_learning_rate := try internal.parse_state_real64(try internal.read_checked_line(&input, &checksum, "Adam learning rate"), "Adam learning rate")
@@ -2548,7 +2548,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 loaded_first_correction = try internal.parse_state_real64(try internal.read_checked_line(&input, &checksum, "Adam beta1 correction"), "Adam beta1 correction")
                 loaded_second_correction = try internal.parse_state_real64(try internal.read_checked_line(&input, &checksum, "Adam beta2 correction"), "Adam beta2 correction")
             legacy_count32 = try internal.parse_nonnegative_state_int(try internal.read_checked_line(&input, &checksum, "Adam real32 count"), "Adam real32 count")
-            int legacy_count64 := try internal.parse_nonnegative_state_int(try internal.read_checked_line(&input, &checksum, "Adam real64 count"), "Adam real64 count")
+            legacy_count64 := try internal.parse_nonnegative_state_int(try internal.read_checked_line(&input, &checksum, "Adam real64 count"), "Adam real64 count")
             if legacy_count32 > 9223372036854775807 - legacy_count64
                 return error("nn.Adam.load Adam slot count overflows the storage limit", code = "NN_CHECKPOINT_FILE")
             slot_count = legacy_count32 + legacy_count64
@@ -2571,9 +2571,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 legacy_schema_index := nat(index)
                 step = internal.StoredAdamStep(path_initial = stored_first.schemas[legacy_schema_index].path, step_initial = internal.adam_step(loaded_iteration, loaded_first_correction, loaded_second_correction))
             first_schema_index := nat(index)
-            internal.StateEntrySchema first := stored_first.schemas[first_schema_index]
+            first := stored_first.schemas[first_schema_index]
             second_schema_index := nat(index)
-            internal.StateEntrySchema second := stored_second.schemas[second_schema_index]
+            second := stored_second.schemas[second_schema_index]
             if first.path != step.path or second.path != step.path
                 return error("nn.Adam.load Adam step and moments must carry one path", code = "NN_CHECKPOINT_FILE")
             stored_steps = stored_steps.append(step)
@@ -2598,45 +2598,45 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 stored_steps[index].step = internal.adam_step(loaded_iteration, loaded_first_correction, loaded_second_correction)
         for step := stored_steps[]
             try internal.check_adam_step(step.step.count, step.step.first_correction, step.step.second_correction)
-        string[] parameter_paths16 := reflect.each_paths<Parameter<real16>>(model_argument)
+        parameter_paths16 := reflect.each_paths<Parameter<real16>>(model_argument)
         tensor<real16>[] loaded_parameter16 := []
         for entry_path := parameter_paths16[]
-            tensor<real16> value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
+            value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
             loaded_parameter16 = loaded_parameter16.append(value)
-        string[] parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model_argument)
+        parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model_argument)
         tensor<real16b>[] loaded_parameter16b := []
         for entry_path := parameter_paths16b[]
-            tensor<real16b> value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
+            value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
             loaded_parameter16b = loaded_parameter16b.append(value)
-        string[] parameter_paths32 := reflect.each_paths<Parameter<real32>>(model_argument)
+        parameter_paths32 := reflect.each_paths<Parameter<real32>>(model_argument)
         tensor<real32>[] loaded_parameter32 := []
         for entry_path := parameter_paths32[]
-            tensor<real32> value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
+            value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
             loaded_parameter32 = loaded_parameter32.append(value)
-        string[] parameter_paths64 := reflect.each_paths<Parameter<real64>>(model_argument)
+        parameter_paths64 := reflect.each_paths<Parameter<real64>>(model_argument)
         tensor<real64>[] loaded_parameter64 := []
         for entry_path := parameter_paths64[]
-            tensor<real64> value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
+            value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
             loaded_parameter64 = loaded_parameter64.append(value)
-        string[] state_paths16 := reflect.each_paths<State<real16>>(model_argument)
+        state_paths16 := reflect.each_paths<State<real16>>(model_argument)
         tensor<real16>[] loaded_state16 := []
         for entry_path := state_paths16[]
-            tensor<real16> value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
+            value := try internal.select_stored_tensor<real16>(stored.values16, entry_path)
             loaded_state16 = loaded_state16.append(value)
-        string[] state_paths16b := reflect.each_paths<State<real16b>>(model_argument)
+        state_paths16b := reflect.each_paths<State<real16b>>(model_argument)
         tensor<real16b>[] loaded_state16b := []
         for entry_path := state_paths16b[]
-            tensor<real16b> value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
+            value := try internal.select_stored_tensor<real16b>(stored.values16b, entry_path)
             loaded_state16b = loaded_state16b.append(value)
-        string[] state_paths32 := reflect.each_paths<State<real32>>(model_argument)
+        state_paths32 := reflect.each_paths<State<real32>>(model_argument)
         tensor<real32>[] loaded_state32 := []
         for entry_path := state_paths32[]
-            tensor<real32> value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
+            value := try internal.select_stored_tensor<real32>(stored.values32, entry_path)
             loaded_state32 = loaded_state32.append(value)
-        string[] state_paths64 := reflect.each_paths<State<real64>>(model_argument)
+        state_paths64 := reflect.each_paths<State<real64>>(model_argument)
         tensor<real64>[] loaded_state64 := []
         for entry_path := state_paths64[]
-            tensor<real64> value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
+            value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
             loaded_state64 = loaded_state64.append(value)
         nat[] loaded_steps16 := []
         real64[] loaded_first_corrections16 := []
@@ -2644,14 +2644,14 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         tensor<real32>[] loaded_first16 := []
         tensor<real32>[] loaded_second16 := []
         for entry_path := parameter_paths16[nat index]
-            internal.AdamStep step := try internal.select_adam_step(stored_steps, entry_path)
+            step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps16 = loaded_steps16.append(step.count)
             loaded_first_corrections16 = loaded_first_corrections16.append(step.first_correction)
             loaded_second_corrections16 = loaded_second_corrections16.append(step.second_correction)
-            tensor<real16> value := loaded_parameter16[index]
-            tensor<real32> first := try internal.select_stored_tensor<real32>(stored_first.values32, entry_path)
-            tensor<real32> second := try internal.select_stored_tensor<real32>(stored_second.values32, entry_path)
-            int64 device := devices16[index]
+            value := loaded_parameter16[index]
+            first := try internal.select_stored_tensor<real32>(stored_first.values32, entry_path)
+            second := try internal.select_stored_tensor<real32>(stored_second.values32, entry_path)
+            device := devices16[index]
             if device >= 0
                 value = value.gpu(nat(device))
                 first = first.gpu(nat(device))
@@ -2665,14 +2665,14 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         tensor<real32>[] loaded_first16b := []
         tensor<real32>[] loaded_second16b := []
         for entry_path := parameter_paths16b[nat index]
-            internal.AdamStep step := try internal.select_adam_step(stored_steps, entry_path)
+            step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps16b = loaded_steps16b.append(step.count)
             loaded_first_corrections16b = loaded_first_corrections16b.append(step.first_correction)
             loaded_second_corrections16b = loaded_second_corrections16b.append(step.second_correction)
-            tensor<real16b> value := loaded_parameter16b[index]
-            tensor<real32> first := try internal.select_stored_tensor<real32>(stored_first.values32, entry_path)
-            tensor<real32> second := try internal.select_stored_tensor<real32>(stored_second.values32, entry_path)
-            int64 device := devices16b[index]
+            value := loaded_parameter16b[index]
+            first := try internal.select_stored_tensor<real32>(stored_first.values32, entry_path)
+            second := try internal.select_stored_tensor<real32>(stored_second.values32, entry_path)
+            device := devices16b[index]
             if device >= 0
                 value = value.gpu(nat(device))
                 first = first.gpu(nat(device))
@@ -2686,14 +2686,14 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         tensor<real32>[] loaded_first32 := []
         tensor<real32>[] loaded_second32 := []
         for entry_path := parameter_paths32[nat index]
-            internal.AdamStep step := try internal.select_adam_step(stored_steps, entry_path)
+            step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps32 = loaded_steps32.append(step.count)
             loaded_first_corrections32 = loaded_first_corrections32.append(step.first_correction)
             loaded_second_corrections32 = loaded_second_corrections32.append(step.second_correction)
-            tensor<real32> value := loaded_parameter32[index]
-            tensor<real32> first := try internal.select_stored_tensor<real32>(stored_first.values32, entry_path)
-            tensor<real32> second := try internal.select_stored_tensor<real32>(stored_second.values32, entry_path)
-            int64 device := devices32[index]
+            value := loaded_parameter32[index]
+            first := try internal.select_stored_tensor<real32>(stored_first.values32, entry_path)
+            second := try internal.select_stored_tensor<real32>(stored_second.values32, entry_path)
+            device := devices32[index]
             if device >= 0
                 value = value.gpu(nat(device))
                 first = first.gpu(nat(device))
@@ -2707,14 +2707,14 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         tensor<real64>[] loaded_first64 := []
         tensor<real64>[] loaded_second64 := []
         for entry_path := parameter_paths64[nat index]
-            internal.AdamStep step := try internal.select_adam_step(stored_steps, entry_path)
+            step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps64 = loaded_steps64.append(step.count)
             loaded_first_corrections64 = loaded_first_corrections64.append(step.first_correction)
             loaded_second_corrections64 = loaded_second_corrections64.append(step.second_correction)
-            tensor<real64> value := loaded_parameter64[index]
-            tensor<real64> first := try internal.select_stored_tensor<real64>(stored_first.values64, entry_path)
-            tensor<real64> second := try internal.select_stored_tensor<real64>(stored_second.values64, entry_path)
-            int64 device := devices64[index]
+            value := loaded_parameter64[index]
+            first := try internal.select_stored_tensor<real64>(stored_first.values64, entry_path)
+            second := try internal.select_stored_tensor<real64>(stored_second.values64, entry_path)
+            device := devices64[index]
             if device >= 0
                 value = value.gpu(nat(device))
                 first = first.gpu(nat(device))
@@ -2771,12 +2771,12 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         for 0 <= nat index < coefficient_used
             if coefficient_steps[index] == count and coefficient_first[index] == first and coefficient_second[index] == second
                 return index
-        nat index := coefficient_used
+        index := coefficient_used
         if index >= len(coefficient_steps)
             error("nn.Adam coefficient cache exceeds the recorded Parameter count", code = "NN_INTERNAL")
-        real64 first_correction := advanced(first, first_decay)
-        real64 second_correction := advanced(second, second_decay)
-        real64 correction2_root := math.sqrt(second_correction)
+        first_correction := advanced(first, first_decay)
+        second_correction := advanced(second, second_decay)
+        correction2_root := math.sqrt(second_correction)
         coefficient_steps[index] = count
         coefficient_first[index] = first
         coefficient_second[index] = second
@@ -2789,26 +2789,26 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         return correction + (1.0 - correction) * (1.0 - decay)
 
     private void | error .compute16(nat index, tensor<real16> raw, tensor<real16> gradient)
-        nat coefficient := .coefficients(steps16[index] + 1, first_corrections16[index], second_corrections16[index])
-        real32 step_scale := real32(coefficient_scales[coefficient])
-        real32 adjusted_epsilon := real32(coefficient_epsilons[coefficient])
+        coefficient := .coefficients(steps16[index] + 1, first_corrections16[index], second_corrections16[index])
+        step_scale := real32(coefficient_scales[coefficient])
+        adjusted_epsilon := real32(coefficient_epsilons[coefficient])
         beta1 := real32(first_decay)
         beta2 := real32(second_decay)
         one_minus_beta1 := real32(1.0 - first_decay)
         one_minus_beta2 := real32(1.0 - second_decay)
-        tensor<real16> dense_source := gradient
+        dense_source := gradient
         if not dense_source.is_contiguous()
             dense_source = dense_source.contiguous()
-        int32 status := native.adam_half_update<real16>(raw, dense_source, &first16[index], &second16[index], &next16[index], first_decay, second_decay, 1.0 - first_decay, 1.0 - second_decay, coefficient_epsilons[coefficient], coefficient_scales[coefficient])
+        status := native.adam_half_update<real16>(raw, dense_source, &first16[index], &second16[index], &next16[index], first_decay, second_decay, 1.0 - first_decay, 1.0 - second_decay, coefficient_epsilons[coefficient], coefficient_scales[coefficient])
         if status == int32(0)
             return
         if status >= int32(6)
             return error("nn.Adam.update failed during computation at " + paths16[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-        tensor<real32> value := real32(raw)
-        tensor<real32> dense := real32(gradient)
-        tensor<real32> next_first := first16[index] * beta1 + dense * one_minus_beta1
-        tensor<real32> next_second := second16[index] * beta2 + dense * dense * one_minus_beta2
-        tensor<real32> denominator := math.sqrt(next_second) + adjusted_epsilon
+        value := real32(raw)
+        dense := real32(gradient)
+        next_first := first16[index] * beta1 + dense * one_minus_beta1
+        next_second := second16[index] * beta2 + dense * dense * one_minus_beta2
+        denominator := math.sqrt(next_second) + adjusted_epsilon
         next16[index] = real16(value - (next_first / denominator) * step_scale)
         first16[index] = next_first
         second16[index] = next_second
@@ -2818,31 +2818,31 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         steps16[index] += 1
         first_corrections16[index] = advanced(first_corrections16[index], first_decay)
         second_corrections16[index] = advanced(second_corrections16[index], second_decay)
-        tensor<real16> next := next16[index]
+        next := next16[index]
         next16[index] = parameter.raw()
         .parameter.replace(next)
 
     private void | error .compute16b(nat index, tensor<real16b> raw, tensor<real16b> gradient)
-        nat coefficient := .coefficients(steps16b[index] + 1, first_corrections16b[index], second_corrections16b[index])
-        real32 step_scale := real32(coefficient_scales[coefficient])
-        real32 adjusted_epsilon := real32(coefficient_epsilons[coefficient])
+        coefficient := .coefficients(steps16b[index] + 1, first_corrections16b[index], second_corrections16b[index])
+        step_scale := real32(coefficient_scales[coefficient])
+        adjusted_epsilon := real32(coefficient_epsilons[coefficient])
         beta1 := real32(first_decay)
         beta2 := real32(second_decay)
         one_minus_beta1 := real32(1.0 - first_decay)
         one_minus_beta2 := real32(1.0 - second_decay)
-        tensor<real16b> dense_source := gradient
+        dense_source := gradient
         if not dense_source.is_contiguous()
             dense_source = dense_source.contiguous()
-        int32 status := native.adam_half_update<real16b>(raw, dense_source, &first16b[index], &second16b[index], &next16b[index], first_decay, second_decay, 1.0 - first_decay, 1.0 - second_decay, coefficient_epsilons[coefficient], coefficient_scales[coefficient])
+        status := native.adam_half_update<real16b>(raw, dense_source, &first16b[index], &second16b[index], &next16b[index], first_decay, second_decay, 1.0 - first_decay, 1.0 - second_decay, coefficient_epsilons[coefficient], coefficient_scales[coefficient])
         if status == int32(0)
             return
         if status >= int32(6)
             return error("nn.Adam.update failed during computation at " + paths16b[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-        tensor<real32> value := real32(raw)
-        tensor<real32> dense := real32(gradient)
-        tensor<real32> next_first := first16b[index] * beta1 + dense * one_minus_beta1
-        tensor<real32> next_second := second16b[index] * beta2 + dense * dense * one_minus_beta2
-        tensor<real32> denominator := math.sqrt(next_second) + adjusted_epsilon
+        value := real32(raw)
+        dense := real32(gradient)
+        next_first := first16b[index] * beta1 + dense * one_minus_beta1
+        next_second := second16b[index] * beta2 + dense * dense * one_minus_beta2
+        denominator := math.sqrt(next_second) + adjusted_epsilon
         next16b[index] = real16b(value - (next_first / denominator) * step_scale)
         first16b[index] = next_first
         second16b[index] = next_second
@@ -2852,7 +2852,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         steps16b[index] += 1
         first_corrections16b[index] = advanced(first_corrections16b[index], first_decay)
         second_corrections16b[index] = advanced(second_corrections16b[index], second_decay)
-        tensor<real16b> next := next16b[index]
+        next := next16b[index]
         next16b[index] = parameter.raw()
         .parameter.replace(next)
     private void | error .compute32(
@@ -2860,12 +2860,12 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         tensor<real32> value,
         tensor<real32> gradient
     )
-        nat coefficient := .coefficients(steps32[index] + 1, first_corrections32[index], second_corrections32[index])
-        real64 step_scale := coefficient_scales[coefficient]
-        real64 adjusted_epsilon := coefficient_epsilons[coefficient]
-        real64 one_minus_beta1 := 1.0 - first_decay
-        real64 one_minus_beta2 := 1.0 - second_decay
-        tensor<real32> dense := gradient
+        coefficient := .coefficients(steps32[index] + 1, first_corrections32[index], second_corrections32[index])
+        step_scale := coefficient_scales[coefficient]
+        adjusted_epsilon := coefficient_epsilons[coefficient]
+        one_minus_beta1 := 1.0 - first_decay
+        one_minus_beta2 := 1.0 - second_decay
+        dense := gradient
         native_status := int32(-1)
         if native.is_cpu_floating<real32>(value) == int32(1)
             native_status = native.adam_update<real32>(
@@ -2904,8 +2904,8 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             return
         if native_status >= int32(6)
             return error("nn.Adam.update failed during computation at " + paths32[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-        tensor<real32> first := first32[index]
-        tensor<real32> second := second32[index]
+        first := first32[index]
+        second := second32[index]
 
         beta1_32 := real32(first_decay)
         beta2_32 := real32(second_decay)
@@ -2913,15 +2913,15 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         one_minus_beta2_32 := real32(1.0 - second_decay)
         adjusted_epsilon32 := real32(adjusted_epsilon)
         step_scale32 := real32(step_scale)
-        tensor<real32> next_first := (
+        next_first := (
             first * beta1_32
             + dense * one_minus_beta1_32
         )
-        tensor<real32> next_second := (
+        next_second := (
             second * beta2_32
             + dense * dense * one_minus_beta2_32
         )
-        tensor<real32> denominator := (
+        denominator := (
             math.sqrt(next_second) + adjusted_epsilon32
         )
         next32[index] = value - (next_first / denominator) * step_scale32
@@ -2934,7 +2934,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         steps32[index] += 1
         first_corrections32[index] = advanced(first_corrections32[index], first_decay)
         second_corrections32[index] = advanced(second_corrections32[index], second_decay)
-        tensor<real32> next := next32[index]
+        next := next32[index]
         next32[index] = parameter.raw()
         .parameter.replace(next)
     private void | error .compute64(
@@ -2942,11 +2942,11 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         tensor<real64> value,
         tensor<real64> gradient
     )
-        nat coefficient := .coefficients(steps64[index] + 1, first_corrections64[index], second_corrections64[index])
-        real64 step_scale := coefficient_scales[coefficient]
-        real64 adjusted_epsilon := coefficient_epsilons[coefficient]
-        real64 one_minus_beta1 := 1.0 - first_decay
-        real64 one_minus_beta2 := 1.0 - second_decay
+        coefficient := .coefficients(steps64[index] + 1, first_corrections64[index], second_corrections64[index])
+        step_scale := coefficient_scales[coefficient]
+        adjusted_epsilon := coefficient_epsilons[coefficient]
+        one_minus_beta1 := 1.0 - first_decay
+        one_minus_beta2 := 1.0 - second_decay
         native_status := int32(-1)
         if native.is_cpu_floating<real64>(value) == int32(1)
             native_status = native.adam_update<real64>(
@@ -2966,18 +2966,18 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             return
         if native_status >= int32(6)
             return error("nn.Adam.update failed during computation at " + paths64[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
-        tensor<real64> first := first64[index]
-        tensor<real64> second := second64[index]
+        first := first64[index]
+        second := second64[index]
 
-        tensor<real64> next_first := (
+        next_first := (
             first * first_decay
             + gradient * one_minus_beta1
         )
-        tensor<real64> next_second := (
+        next_second := (
             second * second_decay
             + gradient * gradient * one_minus_beta2
         )
-        tensor<real64> denominator := (
+        denominator := (
             math.sqrt(next_second) + adjusted_epsilon
         )
         next64[index] = value - (next_first / denominator) * step_scale
@@ -2990,7 +2990,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         steps64[index] += 1
         first_corrections64[index] = advanced(first_corrections64[index], first_decay)
         second_corrections64[index] = advanced(second_corrections64[index], second_decay)
-        tensor<real64> next := next64[index]
+        next := next64[index]
         next64[index] = parameter.raw()
         .parameter.replace(next)
 

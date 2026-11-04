@@ -13,7 +13,7 @@ void train()
     tensor<real32> samples := tensor.ones([1, 2])
     tensor<real32> targets := tensor.ones([1, 1])
 
-    tensor<real32> first := nn.mse(
+    first := nn.mse(
         .model.output.forward(
             nn.relu(.model.hidden.forward(samples.track()))
         ),
@@ -21,12 +21,12 @@ void train()
     )
     print.line(first.item())
 
-    real32 latest := first.item()
+    latest := first.item()
     for 0 <= nat iteration < 100
-        tensor<real32> activated := nn.relu(
+        activated := nn.relu(
             .model.hidden.forward(samples.track())
         )
-        tensor<real32> loss := nn.mse(.model.output.forward(activated), targets)
+        loss := nn.mse(.model.output.forward(activated), targets)
 
         loss.backward(&model)
         .optimizer.update()

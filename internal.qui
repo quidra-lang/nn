@@ -11,18 +11,18 @@ tensor<real32> relu_expression(tensor<real32> value)
     return (value + math.abs(value)) / 2.0
 
 tensor<real32> gelu_expression(tensor<real32> value)
-    tensor<real32> cubic := value * value * value
-    tensor<real32> inner := (
+    cubic := value * value * value
+    inner := (
         value + cubic * real32(0.044715)
     ) * real32(0.7978845608028654)
-    tensor<real32> lifted := (
+    lifted := (
         inner - 20.0 + math.abs(inner + 20.0)
     ) / 2.0
-    tensor<real32> limited := (
+    limited := (
         lifted + 20.0 - math.abs(lifted - 20.0)
     ) / 2.0
-    tensor<real32> exponent := math.exp(limited * 2.0)
-    tensor<real32> hyperbolic := (exponent - 1.0) / (exponent + 1.0)
+    exponent := math.exp(limited * 2.0)
+    hyperbolic := (exponent - 1.0) / (exponent + 1.0)
     return value * 0.5 * (1.0 + hyperbolic)
 
 // Fused activation for CPU and Metal real32 tensors, tracked or not: one
@@ -31,10 +31,10 @@ tensor<real32> gelu_expression(tensor<real32> value)
 // materialized (that would cut its graph); it and every other backend keep
 // the compositional expression.
 tensor<real32> fused_activation(tensor<real32> value, int activation)
-    int32 device := native.fused_device_f32(value)
+    device := native.fused_device_f32(value)
     if device >= int32(-1)
-        tensor<real32> input := value
-        bool dense := input.is_contiguous()
+        input := value
+        dense := input.is_contiguous()
         if not dense and not input.is_tracked()
             input = input.contiguous()
             dense = true
@@ -66,12 +66,12 @@ tensor<real32> relu_reuse(tensor<real32> value)
     if value.is_tracked() or not value.is_contiguous()
         return relu_fused(value)
     if native.is_cpu_f32(value) == int32(1)
-        int32 status := native.relu_reuse_f32(&value)
+        status := native.relu_reuse_f32(&value)
         if status != int32(0)
             error("nn compiler memory-reuse target failed", code = "NN_INTERNAL")
         return value
     if native.cuda_device_f32(value) >= int32(0)
-        int32 status := native.cuda_activation_inplace_f32(&value, 1)
+        status := native.cuda_activation_inplace_f32(&value, 1)
         if status == int32(0)
             return value
     return relu_fused(value)
@@ -80,17 +80,17 @@ tensor<real32> relu_reuse(tensor<real32> value)
 // CPU real32 tensors. NN owns the activation and custom-autograd semantics;
 // Core only proves the generic replacement constraints.
 tensor<real32> relu_training(tensor<real32> value)
-    tensor<real32> input := value
+    input := value
     if not input.is_tracked() or not input.is_contiguous() or native.is_cpu_f32(input) != int32(1)
         return relu_fused(input)
-    tensor<real32> output := tensor.zeros<real32>(input.shape())
-    int32 status := native.relu_training_f32(input, &output)
+    output := tensor.zeros<real32>(input.shape())
+    status := native.relu_training_f32(input, &output)
     if status != int32(0)
         error("nn compiler training ReLU target failed", code = "NN_INTERNAL")
     return output
 
 tensor<real32> mean_all(tensor<real32> value)
-    int[] shape := int(value.shape())
+    shape := int(value.shape())
     int count := 1
     for dimension := shape[]
         if dimension < 0
@@ -113,7 +113,7 @@ class StateChecksum()
     second = 0
 
     void .update(string text)
-        nat8[] bytes := nat8[](text.utf8())
+        bytes := nat8[](text.utf8())
         for byte := bytes[]
             first = (first + int(byte)) % 65521
             second = (second + first) % 65521
@@ -148,7 +148,7 @@ string | error read_checked_line(
     StateChecksum &checksum,
     string context
 )
-    string text := try read_required_line(&input, context)
+    text := try read_required_line(&input, context)
     .checksum.update(text)
     return text
 
@@ -172,10 +172,10 @@ void | error write_state_entry<T: floating>(
     string path,
     tensor<T> value
 )
-    tensor<T> raw := value
+    raw := value
     if raw.is_tracked()
         raw = raw.untrack()
-    nat[] shape := raw.shape()
+    shape := raw.shape()
     try write_checked_line(&output, &checksum, kind)
     try write_checked_line(&output, &checksum, dtype)
     try write_checked_line(&output, &checksum, path)
@@ -191,7 +191,7 @@ void | error write_state_entry<T: floating>(
         try write_checked_line(&output, &checksum, dimension.string())
         count = count * extent
 
-    tensor<T> flat := raw.contiguous().reshape([nat(count)])
+    flat := raw.contiguous().reshape([nat(count)])
     try write_checked_line(&output, &checksum, count.string())
     for 0 <= int index < count
         try write_checked_line(
@@ -254,7 +254,7 @@ void | error finish_state_write(
     StateChecksum checksum
 )
     try .output("ADLER65521-V1{NL}")
-    string digest := checksum.value()
+    digest := checksum.value()
     try .output("{digest}{NL}")
     return
 
@@ -262,10 +262,10 @@ void | error verify_state_checksum(
     file.read &input,
     StateChecksum checksum
 )
-    string algorithm := try read_required_line(&input, "checksum algorithm")
+    algorithm := try read_required_line(&input, "checksum algorithm")
     if algorithm != "ADLER65521-V1"
         return error("nn.load state file uses an unsupported checksum algorithm", code = "NN_CHECKPOINT_FILE")
-    string expected := try read_required_line(&input, "checksum")
+    expected := try read_required_line(&input, "checksum")
     if expected != checksum.value()
         return error("nn.load state checksum does not match payload", code = "NN_CHECKPOINT_FILE")
 
@@ -313,7 +313,7 @@ string schema_text(StateEntrySchema entry)
 string difference_group(string title, string[] lines)
     if len(lines) == 0
         return ""
-    string result := NL + "  " + title + " (" + len(lines).string() + "):"
+    result := NL + "  " + title + " (" + len(lines).string() + "):"
     for line := lines[nat index]
         if len(lines) > 20 and index >= 10 and index < len(lines) - 10
             if index == 10
@@ -331,9 +331,9 @@ nat | none schema_index(StateEntrySchema[] entries, string path)
 string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual)
     if len(expected) == 0 or len(expected) != len(actual)
         return ""
-    string[] first_model := expected[0].path.split(".")
+    first_model := expected[0].path.split(".")
     for first_file := actual[]
-        string[] file_parts := first_file.path.split(".")
+        file_parts := first_file.path.split(".")
         if len(file_parts) != len(first_model)
             continue
         nat changed := 0
@@ -344,8 +344,8 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
                 position = index
         if changed != 1
             continue
-        string old_name := file_parts[position].split("[")[0]
-        string new_name := first_model[position].split("[")[0]
+        old_name := file_parts[position].split("[")[0]
+        new_name := first_model[position].split("[")[0]
         if old_name == "" or new_name == ""
             continue
         old_is_index := false
@@ -366,10 +366,10 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
             continue
         matches := true
         for model_entry := expected[]
-            string[] model_parts := model_entry.path.split(".")
+            model_parts := model_entry.path.split(".")
             found := false
             for file_entry := actual[]
-                string[] parts := file_entry.path.split(".")
+                parts := file_entry.path.split(".")
                 if len(parts) != len(model_parts) or len(parts) <= position
                     continue
                 if parts[position].split("[")[0] != old_name or model_parts[position].split("[")[0] != new_name
@@ -404,7 +404,7 @@ void | error compare_state_schema(
         nat | none found := schema_index(actual, model_entry.path)
         match found
             nat file_index
-                StateEntrySchema file_entry := actual[file_index]
+                file_entry := actual[file_index]
                 if file_entry.kind != model_entry.kind or file_entry.dtype != model_entry.dtype
                     dtype = dtype.append(checkpoint_display_path(model_entry.path) + "  file " + file_entry.kind + "<" + file_entry.dtype + ">, model " + model_entry.kind + "<" + model_entry.dtype + ">")
                 if file_entry.shape != model_entry.shape
@@ -428,7 +428,7 @@ void | error compare_state_schema(
                 unexpected_entries = unexpected_entries.append(file_entry)
     if len(missing) == 0 and len(unexpected) == 0 and len(dtype) == 0 and len(shape) == 0 and file_root == model_root
         return
-    string message := operation + ": " + DQ + file_path + DQ + " does not match the model; nothing was loaded"
+    message := operation + ": " + DQ + file_path + DQ + " does not match the model; nothing was loaded"
     message = message + difference_group("missing from the file", missing)
     message = message + difference_group("not in the model", unexpected)
     message = message + difference_group("dtype differs", dtype)
@@ -442,61 +442,61 @@ real32 | error parse_state_real32(string text, string context);
 real64 | error parse_state_real64(string text, string context);
 
 StoredTensor<real32> | error read_stored_tensor32(file.read &input, StateChecksum &checksum)
-    string kind := try read_checked_line(&input, &checksum, "field kind")
-    string field_type := try read_checked_line(&input, &checksum, "field type")
-    string dtype := try read_checked_line(&input, &checksum, "field dtype")
-    string path := try read_checked_line(&input, &checksum, "field path")
+    kind := try read_checked_line(&input, &checksum, "field kind")
+    field_type := try read_checked_line(&input, &checksum, "field type")
+    dtype := try read_checked_line(&input, &checksum, "field dtype")
+    path := try read_checked_line(&input, &checksum, "field path")
     if kind != "Parameter" and kind != "State" and kind != "AdamFirst" and kind != "AdamSecond"
         return error("nn.load has an unknown state entry kind", code = "NN_CHECKPOINT_FILE")
     if dtype != "float32" or field_type != kind + "<float32>"
         return error("nn.load has an invalid legacy state entry type", code = "NN_CHECKPOINT_FILE")
-    int rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
+    rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
     int expected_count := 1
     for 0 <= int axis < rank
-        int dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
+        dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
             return error("nn.load tensor dimension exceeds the storage limit", code = "NN_CHECKPOINT_FILE")
         if dimension > 0 and expected_count > 9223372036854775807 / dimension
             return error("nn.load tensor element count overflows the storage limit", code = "NN_CHECKPOINT_FILE")
         expected_count = expected_count * dimension
         shape = shape.append(nat(dimension))
-    int count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor element count"), "tensor element count")
+    count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor element count"), "tensor element count")
     if count != expected_count
         return error("nn.load tensor element count does not match its shape", code = "NN_CHECKPOINT_FILE")
-    tensor<real32> flat := tensor.zeros<real32>([nat(count)])
+    flat := tensor.zeros<real32>([nat(count)])
     for 0 <= int index < count
-        string value_text := try read_checked_line(&input, &checksum, "tensor value")
+        value_text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real32(value_text, "tensor value at " + path + "[" + index.string() + "]")
     schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real32", path_initial = path, shape_initial = shape)
     return StoredTensor<real32>(schema_initial = schema, value_initial = flat.reshape(shape))
 
 StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksum &checksum)
-    string kind := try read_checked_line(&input, &checksum, "field kind")
-    string field_type := try read_checked_line(&input, &checksum, "field type")
-    string dtype := try read_checked_line(&input, &checksum, "field dtype")
-    string path := try read_checked_line(&input, &checksum, "field path")
+    kind := try read_checked_line(&input, &checksum, "field kind")
+    field_type := try read_checked_line(&input, &checksum, "field type")
+    dtype := try read_checked_line(&input, &checksum, "field dtype")
+    path := try read_checked_line(&input, &checksum, "field path")
     if kind != "Parameter" and kind != "State" and kind != "AdamFirst" and kind != "AdamSecond"
         return error("nn.load has an unknown state entry kind", code = "NN_CHECKPOINT_FILE")
     if dtype != "float" or field_type != kind + "<float>"
         return error("nn.load has an invalid legacy state entry type", code = "NN_CHECKPOINT_FILE")
-    int rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
+    rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
     int expected_count := 1
     for 0 <= int axis < rank
-        int dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
+        dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
             return error("nn.load tensor dimension exceeds the storage limit", code = "NN_CHECKPOINT_FILE")
         if dimension > 0 and expected_count > 9223372036854775807 / dimension
             return error("nn.load tensor element count overflows the storage limit", code = "NN_CHECKPOINT_FILE")
         expected_count = expected_count * dimension
         shape = shape.append(nat(dimension))
-    int count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor element count"), "tensor element count")
+    count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor element count"), "tensor element count")
     if count != expected_count
         return error("nn.load tensor element count does not match its shape", code = "NN_CHECKPOINT_FILE")
-    tensor<real64> flat := tensor.zeros<real64>([nat(count)])
+    flat := tensor.zeros<real64>([nat(count)])
     for 0 <= int index < count
-        string value_text := try read_checked_line(&input, &checksum, "tensor value")
+        value_text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real64(value_text, "tensor value at " + path + "[" + index.string() + "]")
     schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real64", path_initial = path, shape_initial = shape)
     return StoredTensor<real64>(schema_initial = schema, value_initial = flat.reshape(shape))
@@ -516,13 +516,13 @@ class StoredAdamStep(local string path_initial, local AdamStep step_initial)
     step = step_initial
 
 StoredAdamStep | error read_stored_adam_step(file.read &input, StateChecksum &checksum)
-    string kind := try read_checked_line(&input, &checksum, "Adam step kind")
+    kind := try read_checked_line(&input, &checksum, "Adam step kind")
     if kind != "AdamStep"
         return error("nn.Adam.load expected an AdamStep entry", code = "NN_CHECKPOINT_FILE")
-    string path := try read_checked_line(&input, &checksum, "Adam step path")
-    int count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Adam step count"), "Adam step count")
-    real64 first := try parse_state_real64(try read_checked_line(&input, &checksum, "Adam beta1 correction"), "Adam beta1 correction")
-    real64 second := try parse_state_real64(try read_checked_line(&input, &checksum, "Adam beta2 correction"), "Adam beta2 correction")
+    path := try read_checked_line(&input, &checksum, "Adam step path")
+    count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Adam step count"), "Adam step count")
+    first := try parse_state_real64(try read_checked_line(&input, &checksum, "Adam beta1 correction"), "Adam beta1 correction")
+    second := try parse_state_real64(try read_checked_line(&input, &checksum, "Adam beta2 correction"), "Adam beta2 correction")
     return StoredAdamStep(path_initial = path, step_initial = adam_step(nat(count), first, second))
 
 AdamStep | error select_adam_step(StoredAdamStep[] entries, string path)
@@ -535,7 +535,7 @@ StateEntrySchema adam_state_schema(StateEntrySchema entry, string component)
     return StateEntrySchema(kind_initial = entry.kind, dtype_initial = entry.dtype, path_initial = entry.path + " (Adam " + component + ")", shape_initial = entry.shape)
 
 string checkpoint_display_path(string path)
-    string[] parts := path.split(" (Adam ")
+    parts := path.split(" (Adam ")
     if len(parts) > 1
         return parts[0] + " (Adam state)"
     return path
@@ -569,27 +569,27 @@ class TensorPayload(local StateEntrySchema schema_initial, local int count_initi
     count = count_initial
 
 TensorPayload | error read_tensor_payload(file.read &input, StateChecksum &checksum, string expected_kind)
-    string kind := try read_checked_line(&input, &checksum, "field kind")
-    string dtype := try read_checked_line(&input, &checksum, "field dtype")
-    string path := try read_checked_line(&input, &checksum, "field path")
+    kind := try read_checked_line(&input, &checksum, "field kind")
+    dtype := try read_checked_line(&input, &checksum, "field dtype")
+    path := try read_checked_line(&input, &checksum, "field path")
     if expected_kind == ""
         if kind != "Parameter" and kind != "State"
             return error("nn.load has an unknown model entry kind", code = "NN_CHECKPOINT_FILE")
     else
         if kind != expected_kind
             return error("nn.Adam.load expected an " + expected_kind + " entry", code = "NN_CHECKPOINT_FILE")
-    int rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
+    rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
     int count := 1
     for 0 <= int axis < rank
-        int dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
+        dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
             return error("nn.load tensor dimension exceeds the storage limit", code = "NN_CHECKPOINT_FILE")
         if dimension > 0 and count > 9223372036854775807 / dimension
             return error("nn.load tensor element count overflows the storage limit", code = "NN_CHECKPOINT_FILE")
         count = count * dimension
         shape = shape.append(nat(dimension))
-    int stored_count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor element count"), "tensor element count")
+    stored_count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor element count"), "tensor element count")
     if stored_count != count
         return error("nn.load tensor element count does not match its shape", code = "NN_CHECKPOINT_FILE")
     return TensorPayload(schema_initial = StateEntrySchema(kind_initial = kind, dtype_initial = dtype, path_initial = path, shape_initial = shape), count_initial = count)
@@ -603,9 +603,9 @@ real16 | error parse_state_real16(string text, string context)
             return error("nn.load invalid " + context, code = "NN_CHECKPOINT_FILE", cause = problem)
 
 StoredTensor<real16> | error read_tensor_values16(file.read &input, StateChecksum &checksum, TensorPayload payload)
-    tensor<real16> flat := tensor.zeros<real16>([nat(payload.count)])
+    flat := tensor.zeros<real16>([nat(payload.count)])
     for 0 <= int index < payload.count
-        string text := try read_checked_line(&input, &checksum, "tensor value")
+        text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real16(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real16>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
@@ -618,23 +618,23 @@ real16b | error parse_state_real16b(string text, string context)
             return error("nn.load invalid " + context, code = "NN_CHECKPOINT_FILE", cause = problem)
 
 StoredTensor<real16b> | error read_tensor_values16b(file.read &input, StateChecksum &checksum, TensorPayload payload)
-    tensor<real16b> flat := tensor.zeros<real16b>([nat(payload.count)])
+    flat := tensor.zeros<real16b>([nat(payload.count)])
     for 0 <= int index < payload.count
-        string text := try read_checked_line(&input, &checksum, "tensor value")
+        text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real16b(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real16b>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 StoredTensor<real32> | error read_tensor_values32(file.read &input, StateChecksum &checksum, TensorPayload payload)
-    tensor<real32> flat := tensor.zeros<real32>([nat(payload.count)])
+    flat := tensor.zeros<real32>([nat(payload.count)])
     for 0 <= int index < payload.count
-        string text := try read_checked_line(&input, &checksum, "tensor value")
+        text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real32(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real32>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 StoredTensor<real64> | error read_tensor_values64(file.read &input, StateChecksum &checksum, TensorPayload payload)
-    tensor<real64> flat := tensor.zeros<real64>([nat(payload.count)])
+    flat := tensor.zeros<real64>([nat(payload.count)])
     for 0 <= int index < payload.count
-        string text := try read_checked_line(&input, &checksum, "tensor value")
+        text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real64(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real64>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
@@ -645,28 +645,28 @@ class StateTable()
     StoredTensor<real32>[] values32 := []
     StoredTensor<real64>[] values64 := []
 
-    void | error .read_entry(file.read &input, StateChecksum &checksum, string expected_kind := "")
-        TensorPayload payload := try read_tensor_payload(&input, &checksum, expected_kind)
+    void | error .read_entry(file.read &input, StateChecksum &checksum, expected_kind := "")
+        payload := try read_tensor_payload(&input, &checksum, expected_kind)
         schemas = schemas.append(payload.schema)
         if payload.schema.dtype == "real16"
-            StoredTensor<real16> entry := try read_tensor_values16(&input, &checksum, payload)
+            entry := try read_tensor_values16(&input, &checksum, payload)
             values16 = values16.append(entry)
         elif payload.schema.dtype == "real16b"
-            StoredTensor<real16b> entry := try read_tensor_values16b(&input, &checksum, payload)
+            entry := try read_tensor_values16b(&input, &checksum, payload)
             values16b = values16b.append(entry)
         elif payload.schema.dtype == "real32"
-            StoredTensor<real32> entry := try read_tensor_values32(&input, &checksum, payload)
+            entry := try read_tensor_values32(&input, &checksum, payload)
             values32 = values32.append(entry)
         elif payload.schema.dtype == "real64"
-            StoredTensor<real64> entry := try read_tensor_values64(&input, &checksum, payload)
+            entry := try read_tensor_values64(&input, &checksum, payload)
             values64 = values64.append(entry)
         else
             for 0 <= int index < payload.count
-                string ignored := try read_checked_line(&input, &checksum, "unknown dtype value")
+                ignored := try read_checked_line(&input, &checksum, "unknown dtype value")
         return
 
     void | error .read_legacy32(file.read &input, StateChecksum &checksum, string expected_kind)
-        StoredTensor<real32> entry := try read_stored_tensor32(&input, &checksum)
+        entry := try read_stored_tensor32(&input, &checksum)
         if entry.schema.kind != expected_kind
             return error("nn.load has an invalid legacy entry kind", code = "NN_CHECKPOINT_FILE")
         schemas = schemas.append(entry.schema)
@@ -674,7 +674,7 @@ class StateTable()
         return
 
     void | error .read_legacy64(file.read &input, StateChecksum &checksum, string expected_kind)
-        StoredTensor<real64> entry := try read_stored_tensor64(&input, &checksum)
+        entry := try read_stored_tensor64(&input, &checksum)
         if entry.schema.kind != expected_kind
             return error("nn.load has an invalid legacy entry kind", code = "NN_CHECKPOINT_FILE")
         schemas = schemas.append(entry.schema)
@@ -684,14 +684,14 @@ class StateTable()
 StateTable | error read_model_entries(file.read &input, StateChecksum &checksum, string version)
     table := StateTable()
     if version == "5"
-        int count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "model entry count"), "model entry count")
+        count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "model entry count"), "model entry count")
         for 0 <= int index < count
             try .table.read_entry(&input, &checksum)
     else
-        int count32 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Parameter<real32> count"), "Parameter<real32> count")
-        int count64 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Parameter<real64> count"), "Parameter<real64> count")
-        int state32 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "State<real32> count"), "State<real32> count")
-        int state64 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "State<real64> count"), "State<real64> count")
+        count32 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Parameter<real32> count"), "Parameter<real32> count")
+        count64 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Parameter<real64> count"), "Parameter<real64> count")
+        state32 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "State<real32> count"), "State<real32> count")
+        state64 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "State<real64> count"), "State<real64> count")
         for 0 <= int index < count32
             try .table.read_legacy32(&input, &checksum, "Parameter")
         for 0 <= int index < count64
