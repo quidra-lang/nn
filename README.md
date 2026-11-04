@@ -94,7 +94,7 @@ class Scale16()
     weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
 
     tensor<real16> .forward(tensor<real16> input)
-        tensor<real16> low_weight := real16(.weight.track())
+        low_weight := real16(.weight.track())
         return input * low_weight
 
 class Scale16b()
@@ -103,7 +103,7 @@ class Scale16b()
     weight = nn.Parameter<real32>(value = tensor.ones<real32>([1]))
 
     tensor<real16b> .forward(tensor<real16b> input)
-        tensor<real16b> low_weight := real16b(.weight.track())
+        low_weight := real16b(.weight.track())
         return input * low_weight
 ```
 
