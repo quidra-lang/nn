@@ -393,7 +393,7 @@ class FC(
 
         // Bias broadcasting is structural: reshape the rank-1 bias to
         // singleton leading axes instead of building an element index array.
-        int[] bias_broadcast_shape := array(nat(rank), fill = 1)
+        bias_broadcast_shape := array(nat(rank), fill = 1)
         bias_broadcast_shape[rank - 1] = features_out
         return output + parameter_bias.reshape(nat(bias_broadcast_shape))
 
@@ -641,7 +641,7 @@ class Conv2D(
         // Tracked tensors and unsupported native placements stay expressed as
         // generic Core operations so autograd and device semantics remain
         // visible instead of being hidden behind a NN-specific Core primitive.
-        int[] patch_indices := array(nat(patch_count), fill = 0)
+        patch_indices := array(nat(patch_count), fill = 0)
         for 0 <= int flat_index < patch_count
             patch_column := flat_index % patch_width
             patch_row := flat_index / patch_width
@@ -698,7 +698,7 @@ class Conv2D(
                 // Preserve grouped training semantics by using the existing
                 // autograd-aware gather path only while the input is tracked.
                 input_count := batches * weight_channels * padded_height * padded_width
-                int[] input_indices := array(nat(input_count), fill = 0)
+                input_indices := array(nat(input_count), fill = 0)
                 for 0 <= int flat_index < input_count
                     x := flat_index % padded_width
                     remaining := flat_index / padded_width
@@ -747,7 +747,7 @@ class Conv2D(
                 // differentiable view graph.
                 weight_count := outputs_per_group * patch_width
                 weight_offset := output_channel_start * patch_width
-                int[] weight_indices := array(nat(weight_count), fill = 0)
+                weight_indices := array(nat(weight_count), fill = 0)
                 for 0 <= int index < weight_count
                     weight_indices[index] = weight_offset + index
                 group_weight = parameter_weight.gather(
@@ -781,7 +781,7 @@ class Conv2D(
             ).transpose(1, 3).transpose(2, 3)
 
         output_count := patch_rows * outputs_per_group
-        int[] output_indices := array(nat(output_count), fill = 0)
+        output_indices := array(nat(output_count), fill = 0)
         for 0 <= int flat_index < output_count
             local_output_channel := flat_index % outputs_per_group
             patch_index := flat_index / outputs_per_group
@@ -936,7 +936,7 @@ class Conv2D(
         padded_input := value
         if border > 0
             input_count := batches * channels_in * height * width
-            int[] padded_indices := array(nat(input_count), fill = 0)
+            padded_indices := array(nat(input_count), fill = 0)
             for 0 <= int flat_index < input_count
                 x := flat_index % width
                 remaining := flat_index / width
@@ -1401,7 +1401,7 @@ tensor<real32> max_pool2d(
                 if valid_count <= 0
                     error("nn.max_pool2d produced an empty pooling window", code = "NN_SHAPE")
 
-                int[] input_indices := array(
+                input_indices := array(
                     nat(batches * valid_count), fill = 0
                 )
                 cursor := 0
@@ -1424,13 +1424,13 @@ tensor<real32> max_pool2d(
                 // max_last preserves shape by broadcasting each row maximum;
                 // gather one representative value per batch for the pool output.
                 maxima := math.max_last(window)
-                int[] maximum_indices := array(nat(batches), fill = 0)
+                maximum_indices := array(nat(batches), fill = 0)
                 for 0 <= int batch < batches
                     maximum_indices[batch] = batch * valid_count
                 pooled := maxima.gather(
                     maximum_indices, [batches]
                 )
-                int[] output_indices := array(nat(batches), fill = 0)
+                output_indices := array(nat(batches), fill = 0)
                 for 0 <= int batch < batches
                     output_indices[batch] = (
                         ((batch * channels + channel) * output_height + output_y)
@@ -1482,7 +1482,7 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
 
     // gather() works on logical tensor indices and preserves autograd, so it
     // makes a contiguous reduction view without cutting a tracked graph.
-    int[] flatten_indices := array(nat(total_count), fill = 0)
+    flatten_indices := array(nat(total_count), fill = 0)
     for 0 <= int index < total_count
         flatten_indices[index] = index
     flattened := value.gather(
@@ -1495,7 +1495,7 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
     spatial_count := real32(count)
     means := spatial_sums / spatial_count
     output_count := batches * channels
-    int[] indices := array(nat(output_count), fill = 0)
+    indices := array(nat(output_count), fill = 0)
     for 0 <= int index < output_count
         indices[index] = index * count
     return means.gather(indices, [batches, channels])
@@ -1540,7 +1540,7 @@ tensor<real32> local_response_normalization(
         if last_channel >= channels
             last_channel = channels - 1
 
-        int[] current_indices := array(nat(plane_count), fill = 0)
+        current_indices := array(nat(plane_count), fill = 0)
         for 0 <= int flat_index < plane_count
             x := flat_index % width
             remaining := flat_index / width
@@ -1555,7 +1555,7 @@ tensor<real32> local_response_normalization(
         square_sum := current.untrack() * 0
 
         for first_channel <= int neighbor < last_channel + 1
-            int[] neighbor_indices := array(nat(plane_count), fill = 0)
+            neighbor_indices := array(nat(plane_count), fill = 0)
             for 0 <= int flat_index < plane_count
                 x := flat_index % width
                 remaining := flat_index / width
@@ -1723,7 +1723,7 @@ class BatchNorm(
         next_running_variance := running_variance.raw() * 0
 
         for 0 <= int feature < features
-            int[] indices := array(nat(samples), fill = 0)
+            indices := array(nat(samples), fill = 0)
             for 0 <= int sample < samples
                 outer := sample / inner
                 offset := sample % inner
