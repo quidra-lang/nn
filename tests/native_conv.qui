@@ -8,7 +8,7 @@ class Model()
     nn.Conv2D convolution
 
 void report(string name, bool passed)
-    print.line("{name} {passed}")
+    println("{name} {passed}")
 
 tensor<real32> uniform(int[] shape, int seed)
     int count := 1

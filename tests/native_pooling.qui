@@ -26,7 +26,7 @@ tensor<real32> pool_reference(tensor<real32> value)
     return means.gather(indices, [batches, channels])
 
 void report(string name, bool passed)
-    print.line("{name} {passed}")
+    println("{name} {passed}")
 
 bool identical(tensor<real32> left, tensor<real32> right)
     tensor<real32> a := left.untrack().cpu()

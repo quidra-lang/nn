@@ -51,4 +51,4 @@ real64 leading_value(tensor<real32> value)
         count = count * int(extent)
     return real64(value.cpu().reshape([nat(count)])[0].item())
 
-print.line("computed {leading_value(run(args.device, args.scenario))}")
+println("computed {leading_value(run(args.device, args.scenario))}")

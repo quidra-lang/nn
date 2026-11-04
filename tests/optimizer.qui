@@ -56,7 +56,7 @@ Placement placement(int device, bool host64)
     return at
 
 void report(string name, bool passed)
-    print.line("{name} {passed}")
+    println("{name} {passed}")
 
 tensor<real32> place32(tensor<real32> value, Placement device)
     if device.narrow >= 0

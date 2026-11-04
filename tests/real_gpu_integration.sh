@@ -74,19 +74,19 @@ int | error .run()
     tensor<real32> gpu_samples := cpu_samples.gpu($GPU_INDEX)
     tensor<real32> cpu_linear_out := .cpu_linear.forward(cpu_samples)
     tensor<real32> gpu_linear_out := .gpu_linear.forward(gpu_samples).cpu()
-    print.line(near(cpu_linear_out[0, 0].item(), gpu_linear_out[0, 0].item()))
+    println(near(cpu_linear_out[0, 0].item(), gpu_linear_out[0, 0].item()))
 
     tensor<real32> cpu_linear_relu := nn.relu(.cpu_linear.forward(cpu_samples))
     tensor<real32> gpu_linear_relu := nn.relu(
         .gpu_linear.forward(gpu_samples)
     ).cpu()
-    print.line(near(cpu_linear_relu[0, 0].item(), gpu_linear_relu[0, 0].item()))
+    println(near(cpu_linear_relu[0, 0].item(), gpu_linear_relu[0, 0].item()))
 
     tensor<real32> cpu_linear_gelu := nn.gelu(.cpu_linear.forward(cpu_samples))
     tensor<real32> gpu_linear_gelu := nn.gelu(
         .gpu_linear.forward(gpu_samples)
     ).cpu()
-    print.line(near(cpu_linear_gelu[0, 0].item(), gpu_linear_gelu[0, 0].item()))
+    println(near(cpu_linear_gelu[0, 0].item(), gpu_linear_gelu[0, 0].item()))
 
     nn.Parameter<real32> cpu_conv_initial_weight := nn.Parameter<real32>(value = tensor.ones<real32>([1, 1, 1, 1]))
     nn.Parameter<real32> cpu_conv_initial_bias := nn.Parameter<real32>(value = tensor.zeros<real32>([1]))
@@ -102,14 +102,14 @@ int | error .run()
     tensor<real32> gpu_pixels := cpu_pixels.gpu($GPU_INDEX)
     tensor<real32> cpu_conv_out := .cpu_conv.forward(cpu_pixels)
     tensor<real32> gpu_conv_out := .gpu_conv.forward(gpu_pixels).cpu()
-    print.line(near(cpu_conv_out[0, 0, 1, 1].item(), gpu_conv_out[0, 0, 1, 1].item()))
+    println(near(cpu_conv_out[0, 0, 1, 1].item(), gpu_conv_out[0, 0, 1, 1].item()))
 
     tensor<real32> cpu_negative_pixels := tensor.ones<real32>([1, 1, 2, 2]) * real32(-1)
     tensor<real32> gpu_negative_pixels := cpu_negative_pixels.gpu($GPU_INDEX)
     tensor<real32> gpu_relu := nn.relu(
         .gpu_conv.forward(gpu_negative_pixels)
     ).cpu()
-    print.line(near(gpu_relu[0, 0, 1, 1].item(), real32(0)))
+    println(near(gpu_relu[0, 0, 1, 1].item(), real32(0)))
 
     tensor<real32> cpu_conv_gelu := nn.gelu(
         .cpu_conv.forward(cpu_negative_pixels)
@@ -117,12 +117,12 @@ int | error .run()
     tensor<real32> gpu_conv_gelu := nn.gelu(
         .gpu_conv.forward(gpu_negative_pixels)
     ).cpu()
-    print.line(near(cpu_conv_gelu[0, 0, 1, 1].item(), gpu_conv_gelu[0, 0, 1, 1].item()))
+    println(near(cpu_conv_gelu[0, 0, 1, 1].item(), gpu_conv_gelu[0, 0, 1, 1].item()))
 
     tensor<real32> gpu_reused_relu := nn.relu(
         tensor.ones<real32>([4], gpu = $GPU_INDEX)
     ).cpu()
-    print.line(near(gpu_reused_relu[0].item(), real32(1)))
+    println(near(gpu_reused_relu[0].item(), real32(1)))
 
     nn.Parameter<real32> cpu_conv3_initial_weight := nn.Parameter<real32>(value = tensor.ones<real32>([2, 2, 3, 3]))
     nn.Parameter<real32> cpu_conv3_initial_bias := nn.Parameter<real32>(value = tensor.zeros<real32>([2]))
@@ -144,7 +144,7 @@ int | error .run()
         near(cpu_conv3_out[0, 0, 0, 0].item(), gpu_conv3_out[0, 0, 0, 0].item()) and
         near(cpu_conv3_out[1, 1, 1, 1].item(), gpu_conv3_out[1, 1, 1, 1].item())
     )
-    print.line()
+    println()
     .nn.mode.deterministic()
     tensor<real32> deterministic_first := .gpu_conv3.forward(gpu_conv3_input).cpu()
     tensor<real32> deterministic_second := .gpu_conv3.forward(gpu_conv3_input).cpu()
@@ -154,7 +154,7 @@ int | error .run()
         deterministic_first[1, 1, 1, 1].item() ==
         deterministic_second[1, 1, 1, 1].item()
     )
-    print.line()
+    println()
     .nn.mode.fast()
 
     nn.Parameter<real32> cpu_norm_initial_scale := nn.Parameter<real32>(value = tensor.ones<real32>([2]))
@@ -179,18 +179,18 @@ int | error .run()
     tensor<real32> gpu_norm_input := cpu_norm_input.gpu($GPU_INDEX)
     tensor<real32> cpu_norm_out := .cpu_norm.infer(cpu_norm_input)
     tensor<real32> gpu_norm_out := .gpu_norm.infer(gpu_norm_input).cpu()
-    print.line(near(cpu_norm_out[0, 0].item(), gpu_norm_out[0, 0].item()))
+    println(near(cpu_norm_out[0, 0].item(), gpu_norm_out[0, 0].item()))
 
     nn.Dropout cpu_drop := nn.Dropout(rate = 0.5, seed = 17)
     nn.Dropout gpu_drop := nn.Dropout(rate = 0.5, seed = 17)
     tensor<real32> drop_input := tensor.ones<real32>([2, 2])
     tensor<real32> cpu_dropped := .cpu_drop.forward(drop_input.track()).untrack()
     tensor<real32> gpu_dropped := .gpu_drop.forward(drop_input.gpu($GPU_INDEX).track()).untrack().cpu()
-    print.line(near(cpu_dropped[0, 0].item(), gpu_dropped[0, 0].item()))
-    print.line(near(cpu_dropped[1, 1].item(), gpu_dropped[1, 1].item()))
+    println(near(cpu_dropped[0, 0].item(), gpu_dropped[0, 0].item()))
+    println(near(cpu_dropped[1, 1].item(), gpu_dropped[1, 1].item()))
     tensor<real32> cpu_dropped_next := .cpu_drop.forward(drop_input.track()).untrack()
     tensor<real32> gpu_dropped_next := .gpu_drop.forward(drop_input.gpu($GPU_INDEX).track()).untrack().cpu()
-    print.line(near(cpu_dropped_next[0, 1].item(), gpu_dropped_next[0, 1].item()))
+    println(near(cpu_dropped_next[0, 1].item(), gpu_dropped_next[0, 1].item()))
 
     tensor<real32> cpu_activation := tensor.zeros<real32>([1, 2])
     cpu_activation[0, 0] = real32(-1)
@@ -199,23 +199,23 @@ int | error .run()
 
     tensor<real32> cpu_relu := nn.relu(cpu_activation.track()).untrack()
     tensor<real32> gpu_activation_relu := nn.relu(gpu_activation.track()).untrack().cpu()
-    print.line(near(cpu_relu[0, 0].item(), gpu_activation_relu[0, 0].item()) and near(cpu_relu[0, 1].item(), gpu_activation_relu[0, 1].item()))
+    println(near(cpu_relu[0, 0].item(), gpu_activation_relu[0, 0].item()) and near(cpu_relu[0, 1].item(), gpu_activation_relu[0, 1].item()))
 
     tensor<real32> cpu_tanh := nn.tanh(cpu_activation.track()).untrack()
     tensor<real32> gpu_tanh := nn.tanh(gpu_activation.track()).untrack().cpu()
-    print.line(near(cpu_tanh[0, 0].item(), gpu_tanh[0, 0].item()) and near(cpu_tanh[0, 1].item(), gpu_tanh[0, 1].item()))
+    println(near(cpu_tanh[0, 0].item(), gpu_tanh[0, 0].item()) and near(cpu_tanh[0, 1].item(), gpu_tanh[0, 1].item()))
 
     tensor<real32> cpu_sigmoid := nn.sigmoid(cpu_activation.track()).untrack()
     tensor<real32> gpu_sigmoid := nn.sigmoid(gpu_activation.track()).untrack().cpu()
-    print.line(near(cpu_sigmoid[0, 0].item(), gpu_sigmoid[0, 0].item()) and near(cpu_sigmoid[0, 1].item(), gpu_sigmoid[0, 1].item()))
+    println(near(cpu_sigmoid[0, 0].item(), gpu_sigmoid[0, 0].item()) and near(cpu_sigmoid[0, 1].item(), gpu_sigmoid[0, 1].item()))
 
     tensor<real32> cpu_softmax := nn.softmax(cpu_activation.track()).untrack()
     tensor<real32> gpu_softmax := nn.softmax(gpu_activation.track()).untrack().cpu()
-    print.line(near(cpu_softmax[0, 0].item(), gpu_softmax[0, 0].item()) and near(cpu_softmax[0, 1].item(), gpu_softmax[0, 1].item()))
+    println(near(cpu_softmax[0, 0].item(), gpu_softmax[0, 0].item()) and near(cpu_softmax[0, 1].item(), gpu_softmax[0, 1].item()))
 
     tensor<real32> cpu_gelu := nn.gelu(cpu_activation.track()).untrack()
     tensor<real32> gpu_gelu := nn.gelu(gpu_activation.track()).untrack().cpu()
-    print.line(near(cpu_gelu[0, 0].item(), gpu_gelu[0, 0].item()) and near(cpu_gelu[0, 1].item(), gpu_gelu[0, 1].item()))
+    println(near(cpu_gelu[0, 0].item(), gpu_gelu[0, 0].item()) and near(cpu_gelu[0, 1].item(), gpu_gelu[0, 1].item()))
 
     tensor<real32> cpu_probability := tensor.zeros<real32>([1, 2])
     cpu_probability[0, 0] = real32(0.25)
@@ -227,19 +227,19 @@ int | error .run()
 
     real32 cpu_mse_loss := nn.mse(cpu_probability.track(), cpu_binary_target).item()
     real32 gpu_mse_loss := nn.mse(gpu_probability.track(), gpu_binary_target).item()
-    print.line(near(cpu_mse_loss, gpu_mse_loss))
+    println(near(cpu_mse_loss, gpu_mse_loss))
 
     real32 cpu_bce := nn.binary_cross_entropy(cpu_probability.track(), cpu_binary_target).item()
     real32 gpu_bce := nn.binary_cross_entropy(gpu_probability.track(), gpu_binary_target).item()
-    print.line(near(cpu_bce, gpu_bce))
+    println(near(cpu_bce, gpu_bce))
 
     real32 cpu_bce_logits := nn.binary_cross_entropy_with_logits(cpu_activation.track(), cpu_binary_target).item()
     real32 gpu_bce_logits := nn.binary_cross_entropy_with_logits(gpu_activation.track(), gpu_binary_target).item()
-    print.line(near(cpu_bce_logits, gpu_bce_logits))
+    println(near(cpu_bce_logits, gpu_bce_logits))
 
     real32 cpu_cross_entropy := nn.cross_entropy(cpu_activation.track(), cpu_binary_target).item()
     real32 gpu_cross_entropy := nn.cross_entropy(gpu_activation.track(), gpu_binary_target).item()
-    print.line(near(cpu_cross_entropy, gpu_cross_entropy))
+    println(near(cpu_cross_entropy, gpu_cross_entropy))
 
     FCModel cpu_model := FCModel()
     cpu_model.dense = cpu_linear
@@ -263,7 +263,7 @@ int | error .run()
         cpu_model.dense.weight.raw()[0, 0].item(),
         gpu_model.dense.weight.raw()[0, 0].item()
     ))
-    print.line()
+    println()
 
     ConvModel cpu_conv_model := ConvModel()
     cpu_conv_model.convolution = cpu_conv
@@ -287,7 +287,7 @@ int | error .run()
         cpu_conv_model.convolution.weight.raw()[0, 0, 0, 0].item(),
         gpu_conv_model.convolution.weight.raw()[0, 0, 0, 0].item()
     ))
-    print.line()
+    println()
 
     ConvModel cpu_conv3_model := ConvModel()
     cpu_conv3_model.convolution = cpu_conv3
@@ -313,12 +313,12 @@ int | error .run()
         cpu_conv3_model.convolution.weight.raw()[0, 0, 1, 1].item(),
         gpu_conv3_model.convolution.weight.raw()[0, 0, 1, 1].item()
     ))
-    print.line()
+    println()
     print(near(
         cpu_conv3_model.convolution.bias.raw()[1].item(),
         gpu_conv3_model.convolution.bias.raw()[1].item()
     ))
-    print.line()
+    println()
 
     NormModel cpu_norm_model := NormModel()
     cpu_norm_model.normalization = cpu_norm
@@ -338,10 +338,10 @@ int | error .run()
         cpu_norm_model.normalization.scale.raw()[0].item(),
         gpu_norm_model.normalization.scale.raw()[0].item()
     ))
-    print.line()
+    println()
     tensor<real32> cpu_norm_infer := .cpu_norm_model.normalization.infer(cpu_norm_input)
     tensor<real32> gpu_norm_infer := .gpu_norm_model.normalization.infer(gpu_norm_input).cpu()
-    print.line(near(cpu_norm_infer[0, 0].item(), gpu_norm_infer[0, 0].item()))
+    println(near(cpu_norm_infer[0, 0].item(), gpu_norm_infer[0, 0].item()))
 
     nn.Parameter<real32> cpu_adam_layer_initial_weight := nn.Parameter<real32>(value = tensor.ones<real32>([1, 1]))
     nn.Parameter<real32> cpu_adam_layer_initial_bias := nn.Parameter<real32>(value = tensor.zeros<real32>([1]))
@@ -377,12 +377,12 @@ int | error .run()
         cpu_adam_model.dense.weight.raw()[0, 0].item(),
         gpu_adam_model.dense.weight.raw()[0, 0].item()
     ))
-    print.line()
+    println()
     print(near(
         cpu_adam_model.dense.bias.raw()[0].item(),
         gpu_adam_model.dense.bias.raw()[0].item()
     ))
-    print.line()
+    println()
 
     tensor<real32> cpu_adam_loss2 := nn.mse(
         .cpu_adam_model.dense.forward(cpu_one.track()), cpu_zero
@@ -398,12 +398,12 @@ int | error .run()
         cpu_adam_model.dense.weight.raw()[0, 0].item(),
         gpu_adam_model.dense.weight.raw()[0, 0].item()
     ))
-    print.line()
+    println()
     print(near(
         cpu_adam_model.dense.bias.raw()[0].item(),
         gpu_adam_model.dense.bias.raw()[0].item()
     ))
-    print.line()
+    println()
     return 0
 
 int | error result := .run()
@@ -411,7 +411,7 @@ match result
     int
         int ignored := result
     error problem
-        print.line(problem)
+        println(problem)
 QUI
 
 output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/dnn-real-gpu.qui")"
@@ -596,7 +596,7 @@ nn.Conv2D convolution := nn.Conv2D(
 )
 tensor<real32> input := tensor.ones<real32>([1, 1, 3, 3], gpu = $GPU_INDEX).track()
 math.mean(nn.gelu(.convolution.forward(input))).backward(&convolution, &input, track = true)
-print.line("unexpected success")
+println("unexpected success")
 QUI
     set +e
     QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/metal-higher-order.qui" \
@@ -645,16 +645,16 @@ tensor<real32> input := tensor.ones<real32>(
 ).track()
 tensor<real32> output := .convolution.forward(input)
 math.mean(output).backward(&convolution, &input, track = true)
-print.line(input.grad.is_tracked())
-print.line(convolution.weight.gradient().is_tracked())
-print.line(convolution.bias.gradient().is_tracked())
+println(input.grad.is_tracked())
+println(convolution.weight.gradient().is_tracked())
+println(convolution.bias.gradient().is_tracked())
 
 // Exercise each package-owned second-order cuDNN callback, not merely the
 // tracked first-order attachment.
 math.mean(input.grad).backward(&input)
 math.mean(convolution.weight.gradient()).backward(&input)
 math.mean(convolution.bias.gradient()).backward(&input)
-print.line(input.grad.untrack().shape()[2] == 3)
+println(input.grad.untrack().shape()[2] == 3)
 QUI
 
     higher_order_output="$(

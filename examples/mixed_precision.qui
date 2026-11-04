@@ -48,7 +48,7 @@ void train16(int64 device, string checkpoint)
         loss.backward(&model)
         // Cast backward widens contributions; this Parameter accumulates in real32.
         .optimizer.update()
-    print.line(model.weight.raw().cpu()[0].item())
+    println(model.weight.raw().cpu()[0].item())
     if checkpoint != ""
         nn.checkpoint(&model, optimizer, checkpoint)
 
@@ -65,7 +65,7 @@ void train16b(int64 device, string checkpoint)
         tensor<real16b> loss := math.sum(residual * residual)
         loss.backward(&model)
         .optimizer.update()
-    print.line(model.weight.raw().cpu()[0].item())
+    println(model.weight.raw().cpu()[0].item())
     if checkpoint != ""
         nn.checkpoint(&model, optimizer, checkpoint)
 

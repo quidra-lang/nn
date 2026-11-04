@@ -58,14 +58,14 @@ nn.save(model, path = "$TMP/model-base.qnn")
 .model.scale.replace(tensor.zeros<real64>([1]))
 .model.total.replace(tensor.zeros<real64>([1]))
 nn.load(&model, path = "$TMP/model-base.qnn")
-print.line(model.layers[0].weight.raw()[0].item() == real32(2))
-print.line(model.layers[0].running.raw()[0].item() == real32(3))
-print.line(model.layers[1].weight.raw()[0].item() == real32(4))
-print.line(model.layers[1].running.raw()[0].item() == real32(5))
-print.line(model.scale.raw()[0].item() == 6.0)
-print.line(model.total.raw()[0].item() == 7.0)
-print.line(&first_identity == &model.layers[0].weight)
-print.line(&state_identity == &model.layers[0].running)
+println(model.layers[0].weight.raw()[0].item() == real32(2))
+println(model.layers[0].running.raw()[0].item() == real32(3))
+println(model.layers[1].weight.raw()[0].item() == real32(4))
+println(model.layers[1].running.raw()[0].item() == real32(5))
+println(model.scale.raw()[0].item() == 6.0)
+println(model.total.raw()[0].item() == 7.0)
+println(&first_identity == &model.layers[0].weight)
+println(&state_identity == &model.layers[0].running)
 
 optimizer := nn.Adam(&model, rate = 0.01)
 tensor<real32> first_weight := .model.layers[0].weight.track()
@@ -187,9 +187,9 @@ nn.save(model, path = "$before")
 void | error loaded := nn.load(&model, path = "$bad")
 match loaded
     void
-        print.line(false)
+        println(false)
     error problem
-        print.line(problem.code)
+        println(problem.code)
 nn.save(model, path = "$after")
 QUI
 }
@@ -280,9 +280,9 @@ nn.checkpoint(&model, optimizer, path = "$before")
 void | error loaded := nn.resume(&model, &optimizer, path = "$bad")
 match loaded
     void
-        print.line(false)
+        println(false)
     error problem
-        print.line(problem.code)
+        println(problem.code)
 nn.checkpoint(&model, optimizer, path = "$after")
 QUI
 }

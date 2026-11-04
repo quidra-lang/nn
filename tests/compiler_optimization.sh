@@ -26,8 +26,8 @@ int | error run()
     .layer.bias.replace(bias)
     tensor<real32> input := tensor.ones<real32>([1, 1, 1, 1])
     tensor<real32> output := nn.relu(.layer.forward(input))
-    print.line(output.shape()[1] == 1)
-    print.line(output[0, 0, 0, 0].item() == real32(0))
+    println(output.shape()[1] == 1)
+    println(output[0, 0, 0, 0].item() == real32(0))
     return 0
 
 int | error result := run()
@@ -35,7 +35,7 @@ match result
     int
         int ignored := result
     error problem
-        print.line(problem)
+        println(problem)
 QUI
 
 expected="$(printf 'true\ntrue')"
@@ -251,15 +251,15 @@ import nn
 
 int unique_probe()
     tensor<real32> output := nn.relu(tensor.ones<real32>([4]))
-    print.line(output[0].item() == real32(1))
+    println(output[0].item() == real32(1))
     return 0
 
 int alias_probe()
     tensor<real32> values := tensor.ones<real32>([2])
     values[0] = real32(-1)
     tensor<real32> output := nn.relu(values)
-    print.line(output[0].item() == real32(0))
-    print.line(values[0].item() == real32(-1))
+    println(output[0].item() == real32(0))
+    println(values[0].item() == real32(-1))
     return 0
 
 int tracked_probe()
@@ -316,19 +316,19 @@ int run()
         optimized_output.untrack()[0].item()
         == reference_output.untrack()[0].item()
     )
-    print.line()
+    println()
 
     math.mean(optimized_output).backward(&optimized, track = true)
     math.mean(reference_output).backward(&reference, track = true)
     tensor<real32> optimized_first := optimized.grad
     tensor<real32> reference_first := reference.grad
-    print.line(optimized_first.is_tracked())
-    print.line(reference_first.is_tracked())
+    println(optimized_first.is_tracked())
+    println(reference_first.is_tracked())
     print(
         optimized_first.untrack()[0].item()
         == reference_first.untrack()[0].item()
     )
-    print.line()
+    println()
 
     .optimized.clear_grad()
     .reference.clear_grad()
@@ -338,7 +338,7 @@ int run()
         optimized.grad.untrack()[0].item()
         == reference.grad.untrack()[0].item()
     )
-    print.line()
+    println()
     return 0
 
 int ignored := run()

@@ -47,7 +47,7 @@ bool has_no_paths(string[] paths)
     return paths == expected
 
 void report(string label, bool passed)
-    print.line("{label} {passed}")
+    println("{label} {passed}")
 
 void checks16(int64 device, string scratch)
     Scale16 model := Scale16(device)

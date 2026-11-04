@@ -21,8 +21,8 @@ int | error compile_device_surface()
     tensor<real32> transferred := tensor.ones<real32>([1, 2]).gpu(0)
     tensor<real32> roundtrip := transferred.cpu()
     tensor<real32> output := .layer.forward(direct)
-    print.line(roundtrip.shape()[1])
-    print.line(output.shape()[1])
+    println(roundtrip.shape()[1])
+    println(output.shape()[1])
     return 0
 QUI
 
@@ -30,7 +30,7 @@ QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" check "$TMP/device-check.qui" >/de
 
 cat > "$TMP/no-fallback-create.qui" <<'QUI'
 tensor<real32> value := tensor.zeros<real32>([1], gpu = 2147483647)
-print.line(value.shape()[0])
+println(value.shape()[0])
 QUI
 
 set +e
@@ -50,7 +50,7 @@ fi
 cat > "$TMP/no-fallback-transfer.qui" <<'QUI'
 tensor<real32> cpu := tensor.ones<real32>([1])
 tensor<real32> value := cpu.gpu(2147483647)
-print.line(value.shape()[0])
+println(value.shape()[0])
 QUI
 
 set +e
@@ -100,7 +100,7 @@ int | error run()
     nn.FC layer := try nn.FC(features_in = 2, features_out = 1)
     tensor<real32> samples_gpu := tensor.ones<real32>([1, 2], gpu = 0)
     tensor<real32> output := .layer.forward(samples_gpu)
-    print.line(output.shape()[1])
+    println(output.shape()[1])
     return 0
 
 int | error result := run()
@@ -108,7 +108,7 @@ match result
     int
         int ignored := result
     error problem
-        print.line(problem)
+        println(problem)
 QUI
 expect_device_failure "$TMP/parameter-device-mismatch.qui" "tensor operands are on different devices"
 
@@ -123,19 +123,19 @@ nn.FC layer := nn.FC(
 )
 tensor<real32> samples := tensor.ones<real32>([1, 2], gpu = 0)
 tensor<real32> output := .layer.forward(samples)
-print.line(output.shape()[0])
-print.line(output.shape()[1])
-print.line(output[0, 0].item())
+println(output.shape()[0])
+println(output.shape()[1])
+println(output[0, 0].item())
 
 tensor<real32> values := tensor.zeros<real32>([1, 2], gpu = 0)
 values[0, 0] = real32(-1)
 values[0, 1] = real32(1)
 tensor<real32> activated := nn.relu(values)
 tensor<real32> probabilities := nn.softmax(values)
-print.line(activated[0, 0].item())
-print.line(activated[0, 1].item())
+println(activated[0, 0].item())
+println(activated[0, 1].item())
 real32 probability_total := probabilities[0, 0].item() + probabilities[0, 1].item()
-print.line(probability_total > real32(0.9999) and probability_total < real32(1.0001))
+println(probability_total > real32(0.9999) and probability_total < real32(1.0001))
 
 nn.Parameter<real32> normalization_initial_scale := nn.Parameter<real32>( value = tensor.ones<real32>([2], gpu = 0) )
 nn.Parameter<real32> normalization_initial_bias := nn.Parameter<real32>( value = tensor.zeros<real32>([2], gpu = 0) )
@@ -149,8 +149,8 @@ nn.BatchNorm normalization := nn.BatchNorm(
 tensor<real32> normalized := .normalization.infer(
     tensor.ones<real32>([1, 2], gpu = 0)
 )
-print.line(normalized.shape()[1])
-print.line(normalized[0, 0].item() > real32(0.9))
+println(normalized.shape()[1])
+println(normalized[0, 0].item() > real32(0.9))
 QUI
 
 compute_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/same-device-compute.qui")"
@@ -174,9 +174,9 @@ nn.Conv2D convolution := nn.Conv2D(
 )
 tensor<real32> pixels := tensor.ones<real32>([1, 1, 2, 2], gpu = 0)
 tensor<real32> filtered := .convolution.forward(pixels)
-print.line(filtered.shape()[2])
-print.line(filtered.shape()[3])
-print.line(filtered[0, 0, 1, 1].item())
+println(filtered.shape()[2])
+println(filtered.shape()[3])
+println(filtered[0, 0, 1, 1].item())
 QUI
 conv_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/convolution-gpu.qui")"
 conv_expected="$(printf '2\n2\n2.0')"
@@ -207,16 +207,16 @@ int | error run()
     tensor<real32> tracked := samples.track()
     tensor<real32> prediction := .model.dense.forward(tracked)
     tensor<real32> loss := nn.mse(prediction, target)
-    print.line(prediction.untrack()[0, 0].item())
-    print.line(loss.item())
+    println(prediction.untrack()[0, 0].item())
+    println(loss.item())
 
     real32 before := model.dense.weight.raw()[0, 0].item()
     optimizer := try nn.SGD(&model, rate = 0.1)
     loss.backward(&model)
     .optimizer.update()
     real32 after := model.dense.weight.raw()[0, 0].item()
-    print.line(after < before)
-    print.line(after > real32(0.59) and after < real32(0.61))
+    println(after < before)
+    println(after > real32(0.59) and after < real32(0.61))
     return 0
 
 int | error result := run()
@@ -224,7 +224,7 @@ match result
     int
         int ignored := result
     error problem
-        print.line(problem)
+        println(problem)
 QUI
 
 tracked_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/tracked-gpu.qui")"
@@ -270,7 +270,7 @@ int | error run()
     sgd := nn.SGD(&conv_model, rate = 0.1)
     conv_loss.backward(&conv_model)
     .sgd.update()
-    print.line(conv_model.convolution.weight.raw()[0, 0, 0, 0].item() < conv_before)
+    println(conv_model.convolution.weight.raw()[0, 0, 0, 0].item() < conv_before)
 
     nn.Parameter<real32> normalization_initial_scale := nn.Parameter<real32>( value = tensor.ones<real32>([2], gpu = 0) )
     nn.Parameter<real32> normalization_initial_bias := nn.Parameter<real32>( value = tensor.zeros<real32>([2], gpu = 0) )
@@ -285,16 +285,16 @@ int | error run()
     tensor<real32> normalized := .normalization.forward(norm_values.track())
     tensor<real32> norm_loss := math.mean((normalized * normalized))
     norm_loss.backward(&normalization)
-    print.line(normalized.shape()[1])
+    println(normalized.shape()[1])
     tensor<real32> inferred := .normalization.infer(norm_values)
-    print.line(inferred.shape()[1] == 2)
+    println(inferred.shape()[1] == 2)
 
     nn.Dropout dropout := try nn.Dropout(rate = 0.5, seed = 17)
     tensor<real32> dropped := .dropout.forward(norm_values.track())
     tensor<real32> dropout_loss := math.mean((dropped * dropped))
     dropout_loss.backward(&norm_values)
-    print.line(dropped.shape()[0])
-    print.line(dropout.infer(norm_values)[0, 0].item() == real32(1))
+    println(dropped.shape()[0])
+    println(dropout.infer(norm_values)[0, 0].item() == real32(1))
 
     ParameterModel cpu_dropout_model := ParameterModel()
     cpu_dropout_model.value = nn.Parameter<real32>( value = tensor.ones<real32>([2, 2]) )
@@ -323,7 +323,7 @@ int | error run()
         and cpu_dropout_model.value.raw()[1, 0].item() == gpu_dropout_weight[1, 0].item()
         and cpu_dropout_model.value.raw()[1, 1].item() == gpu_dropout_weight[1, 1].item()
     )
-    print.line()
+    println()
 
     ParameterModel accumulation_model := ParameterModel()
     accumulation_model.value = nn.Parameter<real32>( value = tensor.ones<real32>([1], gpu = 0) )
@@ -337,7 +337,7 @@ int | error run()
         accumulation_after > real32(0.7999)
         and accumulation_after < real32(0.8001)
     )
-    print.line()
+    println()
 
     nn.Parameter<real32> dense_initial_weight := nn.Parameter<real32>( value = tensor.ones<real32>([1, 1], gpu = 0) )
     nn.Parameter<real32> dense_initial_bias := nn.Parameter<real32>( value = tensor.zeros<real32>([1], gpu = 0) )
@@ -357,15 +357,15 @@ int | error run()
     tensor<real32> loss := nn.mse(prediction, target)
     loss.backward(&model)
     .adam.update()
-    print.line(model.dense.weight.raw()[0, 0].item() != before)
+    println(model.dense.weight.raw()[0, 0].item() != before)
     real32 first_after := model.dense.weight.raw()[0, 0].item()
-    print.line(first_after < before)
+    println(first_after < before)
     tensor<real32> second_prediction := .model.dense.forward(sample.track())
     tensor<real32> second_loss := nn.mse(second_prediction, target)
     second_loss.backward(&model)
     .adam.update()
-    print.line(model.dense.weight.raw()[0, 0].item() != first_after)
-    print.line(model.dense.weight.raw()[0, 0].item() < first_after)
+    println(model.dense.weight.raw()[0, 0].item() != first_after)
+    println(model.dense.weight.raw()[0, 0].item() < first_after)
 
     ParameterModel zero_adam_model := ParameterModel()
     zero_adam_model.value = nn.Parameter<real32>(
@@ -377,7 +377,7 @@ int | error run()
     zero_loss.backward(&zero_adam_model)
     real32 zero_before := zero_adam_model.value.raw()[0].item()
     .zero_adam.update()
-    print.line(zero_adam_model.value.raw()[0].item() == zero_before)
+    println(zero_adam_model.value.raw()[0].item() == zero_before)
 
     Parameter64Model zero_adam_model64 := Parameter64Model()
     zero_adam_model64.value = nn.Parameter<real64>(
@@ -389,7 +389,7 @@ int | error run()
     zero_loss64.backward(&zero_adam_model64)
     real64 zero_before64 := zero_adam_model64.value.raw()[0].item()
     .zero_adam64.update()
-    print.line(zero_adam_model64.value.raw()[0].item() == zero_before64)
+    println(zero_adam_model64.value.raw()[0].item() == zero_before64)
     return 0
 
 int | error result := run()
@@ -397,7 +397,7 @@ match result
     int
         int ignored := result
     error problem
-        print.line(problem)
+        println(problem)
 QUI
 
 training_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/training-gpu.qui")"
@@ -445,16 +445,16 @@ int | error run()
     try nn.all_reduce_sum(&values, [0, 1])
     tensor<real32> reduced0 := values[0].cpu()
     tensor<real32> reduced1 := values[1].cpu()
-    print.line(reduced0[0].item() == real32(3))
-    print.line(reduced1[1].item() == real32(3))
+    println(reduced0[0].item() == real32(3))
+    println(reduced1[1].item() == real32(3))
 
     tensor<real32>[] cpu_values := [
         tensor.ones<real32>([1]),
         tensor.ones<real32>([1]) * real32(4)
     ]
     try nn.all_reduce_sum(&cpu_values, [-1, -1])
-    print.line(cpu_values[0][0].item() == real32(5))
-    print.line(cpu_values[1][0].item() == real32(5))
+    println(cpu_values[0][0].item() == real32(5))
+    println(cpu_values[1][0].item() == real32(5))
 
     tensor<real32>[] tracked := [
         tensor.ones<real32>([1]).track(),
@@ -467,7 +467,7 @@ int | error run()
             tracked_rejected = false
         error problem
             tracked_rejected = problem.code == "NN_TRACKED"
-    print.line(tracked_rejected)
+    println(tracked_rejected)
 
     tensor<real32>[] mismatched := [
         tensor.ones<real32>([1]),
@@ -480,7 +480,7 @@ int | error run()
             shape_rejected = false
         error problem
             shape_rejected = problem.code == "NN_SHAPE"
-    print.line(shape_rejected)
+    println(shape_rejected)
 
     tensor<real32>[] misplaced := [
         tensor.ones<real32>([1]),
@@ -493,7 +493,7 @@ int | error run()
             device_rejected = false
         error problem
             device_rejected = problem.code == "NN_DEVICE"
-    print.line(device_rejected)
+    println(device_rejected)
     return 0
 
 int | error result := run()
@@ -501,7 +501,7 @@ match result
     int
         int ignored := result
     error problem
-        print.line(problem)
+        println(problem)
 QUI
 
 all_reduce_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/all-reduce.qui")"

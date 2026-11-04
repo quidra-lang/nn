@@ -33,8 +33,8 @@ int | error run()
     optimizer := try nn.SGD(&model, rate = 0.1)
     loss.backward(&model)
     .optimizer.update()
-    print.line(prediction.shape()[0] == 1)
-    print.line(prediction.shape()[1] == 1)
+    println(prediction.shape()[0] == 1)
+    println(prediction.shape()[1] == 1)
 
     nn.Conv2D conv := try nn.Conv2D(1, 1, 1)
     .conv.weight.replace(tensor.ones<real32>([1, 1, 1, 1]))
@@ -42,7 +42,7 @@ int | error run()
     tensor<real32> image := tensor.ones<real32>([1, 1, 2, 2])
     tensor<real32> activated := nn.relu(.conv.forward(image))
     nat[] activated_shape := activated.shape()
-    print.line(
+    println(
         len(activated_shape) == 4
         and activated_shape[0] == 1
         and activated_shape[1] == 1
@@ -53,7 +53,7 @@ int | error run()
     nn.BatchNorm norm := try nn.BatchNorm(1)
     tensor<real32> normalized := .norm.infer(activated)
     nat[] normalized_shape := normalized.shape()
-    print.line(
+    println(
         len(normalized_shape) == 4
         and normalized_shape[0] == 1
         and normalized_shape[1] == 1
@@ -63,7 +63,7 @@ int | error run()
 
     nn.Dropout dropout := try nn.Dropout(0.5, seed = 1)
     tensor<real32> inference := dropout.infer(activated)
-    print.line(inference[0, 0, 0, 0].item() == activated[0, 0, 0, 0].item())
+    println(inference[0, 0, 0, 0].item() == activated[0, 0, 0, 0].item())
     return 0
 
 int | error result := run()
@@ -71,7 +71,7 @@ match result
     int
         int ignored := result
     error problem
-        print.line(problem)
+        println(problem)
 QUI
 
 if actual="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/use-nn.qui")"; then

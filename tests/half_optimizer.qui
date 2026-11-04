@@ -8,7 +8,7 @@ cli args
     bool metal = flag()
 
 void report(string name, bool result)
-    print.line("{name} {result}")
+    println("{name} {result}")
 
 tensor<T> placed<T: floating>(tensor<T> value, int device)
     if device >= 0

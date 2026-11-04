@@ -29,7 +29,7 @@ match result
     error problem
         bool code := problem.code == "NN_UPDATE_FAILED"
         bool text := problem.message == "nn.Adam.update failed during computation at first; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer"
-        print.line("computation error contract {code} {text}")
+        println("computation error contract {code} {text}")
 // Continuing on the failed optimizer is deliberately not a supported action.
 Model restored := Model()
 restored_optimizer := nn.Adam(&restored, rate = 0.125)

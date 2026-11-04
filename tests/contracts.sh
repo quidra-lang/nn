@@ -31,7 +31,7 @@ match bad_fc
         fc_rejected = false
     error
         fc_rejected = true
-print.line(fc_rejected)
+println(fc_rejected)
 
 bool conv_rejected := false
 nn.Conv2D | error bad_conv := nn.Conv2D(
@@ -45,7 +45,7 @@ match bad_conv
         conv_rejected = false
     error
         conv_rejected = true
-print.line(conv_rejected)
+println(conv_rejected)
 
 bool norm_rejected := false
 nn.BatchNorm | error bad_norm := nn.BatchNorm(features = 2, momentum = 1.5)
@@ -54,7 +54,7 @@ match bad_norm
         norm_rejected = false
     error
         norm_rejected = true
-print.line(norm_rejected)
+println(norm_rejected)
 
 bool dropout_rejected := false
 nn.Dropout | error bad_dropout := nn.Dropout(rate = 1.0)
@@ -63,7 +63,7 @@ match bad_dropout
         dropout_rejected = false
     error
         dropout_rejected = true
-print.line(dropout_rejected)
+println(dropout_rejected)
 
 bool sgd_rejected := false
 nn.SGD<Pair> | error bad_sgd := nn.SGD(&pair, rate = 0.0)
@@ -72,7 +72,7 @@ match bad_sgd
         sgd_rejected = false
     error
         sgd_rejected = true
-print.line(sgd_rejected)
+println(sgd_rejected)
 
 bool adam_rejected := false
 nn.Adam<Pair> | error bad_adam := nn.Adam(&pair, beta1 = 1.0)
@@ -81,7 +81,7 @@ match bad_adam
         adam_rejected = false
     error
         adam_rejected = true
-print.line(adam_rejected)
+println(adam_rejected)
 
 real64 invalid_rate := -0.5
 
@@ -92,7 +92,7 @@ match invalid_dropout
         dropout_rate_rejected = false
     error
         dropout_rate_rejected = true
-print.line(dropout_rate_rejected)
+println(dropout_rate_rejected)
 
 bool adam_decay_rejected := false
 nn.Adam<Pair> | error invalid_adam := nn.Adam(&pair, beta1 = invalid_rate)
@@ -101,7 +101,7 @@ match invalid_adam
         adam_decay_rejected = false
     error
         adam_decay_rejected = true
-print.line(adam_decay_rejected)
+println(adam_decay_rejected)
 
 bool initializer_bound_rejected := false
 tensor<real32> | error bad_bound := nn.uniform_weights(
@@ -112,7 +112,7 @@ match bad_bound
         initializer_bound_rejected = false
     error
         initializer_bound_rejected = true
-print.line(initializer_bound_rejected)
+println(initializer_bound_rejected)
 
 nn.FC dense := nn.normal_fc(
     features_in = 2,
@@ -121,8 +121,8 @@ nn.FC dense := nn.normal_fc(
     bias_value = 1.0,
     seed = 5
 )
-print.line(dense.weight.raw()[0, 0].item() == real32(0))
-print.line(dense.bias.raw()[0].item() == real32(1))
+println(dense.weight.raw()[0, 0].item() == real32(0))
+println(dense.bias.raw()[0].item() == real32(1))
 
 nn.Conv2D convolution := nn.normal_conv2d(
     channels_in = 1,
@@ -132,8 +132,8 @@ nn.Conv2D convolution := nn.normal_conv2d(
     bias_value = 1.0,
     seed = 5
 )
-print.line(convolution.weight.raw()[0, 0, 0, 0].item() == real32(0))
-print.line(convolution.bias.raw()[0].item() == real32(1))
+println(convolution.weight.raw()[0, 0, 0, 0].item() == real32(0))
+println(convolution.bias.raw()[0].item() == real32(1))
 
 // Optimizers are bound at construction: a bound Parameter whose shape or
 // device changed makes update() fail, before anything is updated, until the
@@ -147,21 +147,21 @@ match .bound_sgd.update()
         sgd_reshape_rejected = false
     error
         sgd_reshape_rejected = true
-print.line(sgd_reshape_rejected)
+println(sgd_reshape_rejected)
 bool adam_reshape_rejected := false
 match .bound_adam.update()
     void
         adam_reshape_rejected = false
     error
         adam_reshape_rejected = true
-print.line(adam_reshape_rejected and pair.weight.raw().shape()[0] == 3)
+println(adam_reshape_rejected and pair.weight.raw().shape()[0] == 3)
 rebound_sgd := nn.SGD(&pair, rate = 0.5)
 rebound_adam := nn.Adam(&pair, 0.1)
 tensor<real32> rebound_weight := .pair.weight.track()
 math.sum(rebound_weight * rebound_weight).backward(&pair)
 // update() consumes the gradients it used.
 .rebound_adam.update()
-print.line(pair.weight.raw()[0, 0].item() < real32(1) and not pair.weight.has_grad())
+println(pair.weight.raw()[0, 0].item() < real32(1) and not pair.weight.has_grad())
 QUI
 
 actual="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/contracts.qui")"
@@ -258,7 +258,7 @@ match invalid_rate
         print(false)
     error problem
         print(problem.code == "NN_ARGUMENT")
-print.line()
+println()
 QUI
 codes_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/error-codes.qui")"
 if [[ "$codes_output" != "true" ]]; then
@@ -338,19 +338,19 @@ import nn
 nn.Parameter<real32> weight_fc := nn.Parameter<real32>(value = tensor.ones<real32>([1, 2]) * real32(3.0))
 nn.Parameter<real32> bias_fc := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(4.0))
 nn.FC dense := nn.FC(2, 1, initial_weight = weight_fc, initial_bias = bias_fc)
-print.line(dense.weight.raw()[0, 0].item() == real32(3.0) and dense.bias.raw()[0].item() == real32(4.0))
+println(dense.weight.raw()[0, 0].item() == real32(3.0) and dense.bias.raw()[0].item() == real32(4.0))
 
 nn.Parameter<real32> weight_conv := nn.Parameter<real32>(value = tensor.ones<real32>([1, 1, 1, 1]) * real32(2.0))
 nn.Parameter<real32> bias_conv := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(3.0))
 nn.Conv2D convolution := nn.Conv2D(1, 1, 1, stride = 2, padding = 1, initial_weight = weight_conv, initial_bias = bias_conv)
-print.line(convolution.weight.raw()[0, 0, 0, 0].item() == real32(2.0) and convolution.bias.raw()[0].item() == real32(3.0) and convolution.step == 2 and convolution.border == 1 and convolution.group_count == 1)
+println(convolution.weight.raw()[0, 0, 0, 0].item() == real32(2.0) and convolution.bias.raw()[0].item() == real32(3.0) and convolution.step == 2 and convolution.border == 1 and convolution.group_count == 1)
 
 nn.Parameter<real32> scale_norm := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(5.0))
 nn.Parameter<real32> bias_norm := nn.Parameter<real32>(value = tensor.ones<real32>([1]) * real32(6.0))
 nn.State<real32> mean_norm := nn.State<real32>(value = tensor.ones<real32>([1]) * real32(7.0))
 nn.State<real32> variance_norm := nn.State<real32>(value = tensor.ones<real32>([1]) * real32(8.0))
 nn.BatchNorm normalization := nn.BatchNorm(1, initial_scale = scale_norm, initial_bias = bias_norm, initial_mean = mean_norm, initial_variance = variance_norm, initial_momentum = real32(0.25), initial_epsilon = real32(0.125))
-print.line(normalization.scale.raw()[0].item() == real32(5.0) and normalization.bias.raw()[0].item() == real32(6.0) and normalization.running_mean.raw()[0].item() == real32(7.0) and normalization.running_variance.raw()[0].item() == real32(8.0) and normalization.running_momentum == real32(0.25) and normalization.variance_epsilon == real32(0.125))
+println(normalization.scale.raw()[0].item() == real32(5.0) and normalization.bias.raw()[0].item() == real32(6.0) and normalization.running_mean.raw()[0].item() == real32(7.0) and normalization.running_variance.raw()[0].item() == real32(8.0) and normalization.running_momentum == real32(0.25) and normalization.variance_epsilon == real32(0.125))
 
 bool rejected_fc := false
 match nn.FC(2, 1, initial_weight = weight_fc)
@@ -358,21 +358,21 @@ match nn.FC(2, 1, initial_weight = weight_fc)
         rejected_fc = false
     error problem
         rejected_fc = problem.code == "NN_ARGUMENT"
-print.line(rejected_fc)
+println(rejected_fc)
 bool rejected_conv := false
 match nn.Conv2D(1, 1, 1, initial_bias = bias_conv)
     nn.Conv2D
         rejected_conv = false
     error problem
         rejected_conv = problem.code == "NN_ARGUMENT"
-print.line(rejected_conv)
+println(rejected_conv)
 bool rejected_norm := false
 match nn.BatchNorm(1, initial_scale = scale_norm)
     nn.BatchNorm
         rejected_norm = false
     error problem
         rejected_norm = problem.code == "NN_ARGUMENT"
-print.line(rejected_norm)
+println(rejected_norm)
 
 bool rejects_settings(real32 configured_momentum, real32 configured_epsilon)
     nn.Parameter<real32> prepared_scale := nn.Parameter<real32>(value = tensor.ones<real32>([1]))
@@ -384,9 +384,9 @@ bool rejects_settings(real32 configured_momentum, real32 configured_epsilon)
             return false
         error problem
             return problem.code == "NN_ARGUMENT"
-print.line(rejects_settings(real32(1.0), real32(0.125)))
-print.line(rejects_settings(real32(-0.25), real32(0.125)))
-print.line(rejects_settings(real32(0.25), real32(0.0)))
+println(rejects_settings(real32(1.0), real32(0.125)))
+println(rejects_settings(real32(-0.25), real32(0.125)))
+println(rejects_settings(real32(0.25), real32(0.0)))
 QUI
 prepared_output="$(QUIDRA_PACKAGE_PATH="$PACKAGE_ROOT" "$QUIDRA" "$TMP/prepared-layer-generation.qui")"
 if [[ "$prepared_output" != $'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue' ]]; then

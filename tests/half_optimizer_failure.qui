@@ -23,7 +23,7 @@ if args.moment
     tensor<real32> checked_second := second.cpu()
     tensor<real32> checked_first := first.cpu()
     tensor<real16b> checked_output := output.cpu()
-    print.line(status == int32(0) and checked_second[0].item() == real32(inf) and
+    println(status == int32(0) and checked_second[0].item() == real32(inf) and
           checked_first[0].item() > real32(0) and checked_output[0].item() == real16b(0))
 else
     tensor<real16> parameter := placed(tensor.ones<real16>([1]) * real16(65504.0), args.device)
@@ -35,4 +35,4 @@ else
     else
         status = probe.sgd_update<real16>(parameter, gradient, &output, 2.0)
     tensor<real16> checked := output.cpu()
-    print.line("unexpected success {status} {checked[0].item()}")
+    println("unexpected success {status} {checked[0].item()}")
