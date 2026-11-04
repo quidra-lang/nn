@@ -92,18 +92,18 @@ void | error all_reduce_sum<T: floating>(
     // already on the requested device. Other placements keep the host path.
     if all_gpu_destinations
         for 0 <= nat index < len(values)
-            if int(values[index].device()) != devices[index]
+            if values[index].device() != devices[index]
                 all_gpu_destinations = false
 
     if all_gpu_destinations
         status := native.nccl_collective<T>(&values)
-        if status == int32(0)
+        if status == 0
             return
-        if status == int32(2)
+        if status == 2
             return error("nn.all_reduce_sum failed to start NCCL collective", code = "NN_COLLECTIVE")
-        if status == int32(4)
+        if status == 4
             return error("nn.all_reduce_sum failed to queue output validation", code = "NN_COLLECTIVE")
-        if status != int32(1)
+        if status != 1
             return error("nn.all_reduce_sum NCCL collective failed", code = "NN_COLLECTIVE")
 
     total := values[0].cpu()
@@ -419,7 +419,7 @@ class FC(
             native_input := value
             native_weight := weight.raw()
             native_bias := bias.raw()
-            if native.is_cpu_f32(native_input) == int32(1) and native.is_cpu_f32(native_weight) == int32(1) and native.is_cpu_f32(native_bias) == int32(1)
+            if native.is_cpu_f32(native_input) == 1 and native.is_cpu_f32(native_weight) == 1 and native.is_cpu_f32(native_bias) == 1
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
                 if not native_weight.is_contiguous()
@@ -435,7 +435,7 @@ class FC(
                     native_bias,
                     &native_output
                 )
-                if native_status == int32(0)
+                if native_status == 0
                     return native_output
 
         output := .forward(value)
@@ -463,7 +463,7 @@ class FC(
             native_input := value
             native_weight := weight.raw()
             native_bias := bias.raw()
-            if native.is_cpu_f32(native_input) == int32(1) and native.is_cpu_f32(native_weight) == int32(1) and native.is_cpu_f32(native_bias) == int32(1)
+            if native.is_cpu_f32(native_input) == 1 and native.is_cpu_f32(native_weight) == 1 and native.is_cpu_f32(native_bias) == 1
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
                 if not native_weight.is_contiguous()
@@ -479,7 +479,7 @@ class FC(
                     native_bias,
                     &native_output
                 )
-                if native_status == int32(0)
+                if native_status == 0
                     return native_output
 
         output := .forward(value)
@@ -498,9 +498,9 @@ class FC(
 
     private tensor<real32> .forward_relu_cuda(tensor<real32> value)
         output := .forward(value)
-        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
+        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= 0
             status := native.cuda_activation_inplace_f32(&output, 1)
-            if status == int32(0)
+            if status == 0
                 return output
         return internal.relu_fused(output)
 
@@ -512,9 +512,9 @@ class FC(
 
     private tensor<real32> .forward_gelu_cuda(tensor<real32> value)
         output := .forward(value)
-        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
+        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= 0
             status := native.cuda_activation_inplace_f32(&output, 2)
-            if status == int32(0)
+            if status == 0
                 return output
         return internal.gelu_fused(output)
 
@@ -616,7 +616,7 @@ class Conv2D(
         // borrowed tensor before allocating an output so a GPU fallback never
         // creates an unrelated host patch buffer.
         if not group_input.is_tracked()
-            if native.is_cpu_f32(group_input) == int32(1)
+            if native.is_cpu_f32(group_input) == 1
                 native_input := group_input
                 if not native_input.is_contiguous()
                     native_input = native_input.contiguous()
@@ -635,7 +635,7 @@ class Conv2D(
                     int64(output_height),
                     int64(output_width)
                 )
-                if native_status == int32(0)
+                if native_status == 0
                     return native_patches
 
         // Tracked tensors and unsupported native placements stay expressed as
@@ -855,7 +855,7 @@ class Conv2D(
         // custom-autograd attachment point; cuDNN forward/backward, descriptors,
         // algorithm choice, groups, padding, and bias stay entirely in NN.
         cuda_device := native.cuda_device_f32(value)
-        if cuda_device >= int32(0)
+        if cuda_device >= 0
             device_index := int(cuda_device)
             cuda_input := value
             cuda_weight := parameter_weight
@@ -884,7 +884,7 @@ class Conv2D(
                 int64(border),
                 int64(group_count)
             )
-            if cuda_status == int32(0)
+            if cuda_status == 0
                 return cuda_output
 
         // CPU and Metal share one package-native dispatcher: NN's direct
@@ -894,7 +894,7 @@ class Conv2D(
         // native bridge rejects it and we fall through to the portable graph.
         // Untracked inference may explicitly densify inputs.
         native_device := native.fused_device_f32(value)
-        if native_device >= int32(-1)
+        if native_device >= -1
             native_input := value
             native_weight := parameter_weight
             native_bias := parameter_bias
@@ -910,7 +910,7 @@ class Conv2D(
             // lends CPU kernels only initialized storage, so the CPU output
             // stays zeroed.
             tensor<real32> native_output
-            if native_device == int32(-1)
+            if native_device == -1
                 native_output = tensor.zeros<real32>(
                     [nat(batches), nat(channels_out), nat(output_height), nat(output_width)]
                 )
@@ -928,7 +928,7 @@ class Conv2D(
                 int64(border),
                 int64(group_count)
             )
-            if native_status == int32(0)
+            if native_status == 0
                 return native_output
 
         // Padding is common to every output channel. Build it once instead of
@@ -1001,7 +1001,7 @@ class Conv2D(
         int activation,
         tensor<real32> &result
     )
-        if native.metal_device_f32(value) < int32(0)
+        if native.metal_device_f32(value) < 0
             return false
         input_shape := int(value.shape())
         weight_shape := int(weight.raw().shape())
@@ -1049,7 +1049,7 @@ class Conv2D(
             int64(group_count),
             int64(activation)
         )
-        if status != int32(0)
+        if status != 0
             return false
         result = activated
         return true
@@ -1109,7 +1109,7 @@ class Conv2D(
             // GPU inference therefore falls through to forward(value) below,
             // then applies NN's exact activation semantics through Math.
 
-            if native.is_cpu_f32(value) == int32(1) and native.is_cpu_f32(parameter_weight) == int32(1) and native.is_cpu_f32(parameter_bias) == int32(1)
+            if native.is_cpu_f32(value) == 1 and native.is_cpu_f32(parameter_weight) == 1 and native.is_cpu_f32(parameter_bias) == 1
                 native_input := value
                 native_weight := parameter_weight
                 native_bias := parameter_bias
@@ -1131,7 +1131,7 @@ class Conv2D(
                     int64(border),
                     int64(group_count)
                 )
-                if native_status == int32(0)
+                if native_status == 0
                     return native_output
 
         fused := value
@@ -1189,7 +1189,7 @@ class Conv2D(
             output_height := (padded_height - kernel_height) / step + 1
             output_width := (padded_width - kernel_width) / step + 1
 
-            if native.is_cpu_f32(value) == int32(1) and native.is_cpu_f32(parameter_weight) == int32(1) and native.is_cpu_f32(parameter_bias) == int32(1)
+            if native.is_cpu_f32(value) == 1 and native.is_cpu_f32(parameter_weight) == 1 and native.is_cpu_f32(parameter_bias) == 1
                 native_input := value
                 native_weight := parameter_weight
                 native_bias := parameter_bias
@@ -1211,7 +1211,7 @@ class Conv2D(
                     int64(border),
                     int64(group_count)
                 )
-                if native_status == int32(0)
+                if native_status == 0
                     return native_output
 
         fused := value
@@ -1249,9 +1249,9 @@ class Conv2D(
 
     private tensor<real32> .forward_relu_cuda(tensor<real32> value)
         output := .forward(value)
-        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
+        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= 0
             status := native.cuda_activation_inplace_f32(&output, 1)
-            if status == int32(0)
+            if status == 0
                 return output
         return internal.relu_fused(output)
 
@@ -1263,9 +1263,9 @@ class Conv2D(
 
     private tensor<real32> .forward_gelu_cuda(tensor<real32> value)
         output := .forward(value)
-        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= int32(0)
+        if not output.is_tracked() and output.is_contiguous() and native.cuda_device_f32(output) >= 0
             status := native.cuda_activation_inplace_f32(&output, 2)
-            if status == int32(0)
+            if status == 0
                 return output
         return internal.gelu_fused(output)
 
@@ -1382,7 +1382,7 @@ tensor<real32> max_pool2d(
     output_width := (padded_width - kernel) / stride + 1
     output_shape := [batches, channels, output_height, output_width]
     output := (
-        value.untrack().gather([0], [1]) * real32(0)
+        value.untrack().gather([0], [1]) * 0
     ).scatter([0], output_shape)
 
     for 0 <= int channel < channels
@@ -1463,7 +1463,7 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
     // autograd node (any order) instead of the gather/sum_last graph below.
     // Only untracked views are densified; tracked views keep the graph.
     device := native.fused_device_f32(value)
-    if device >= int32(-1)
+    if device >= -1
         input := value
         dense := input.is_contiguous()
         if not dense and not input.is_tracked()
@@ -1473,11 +1473,11 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
             // The device output is write-only (the kernel stores every row);
             // the CPU output stays zeroed.
             tensor<real32> pooled
-            if device == int32(-1)
+            if device == -1
                 pooled = tensor.zeros<real32>([nat(batches), nat(channels)])
             else
                 pooled = tensor<real32>([nat(batches), nat(channels)], gpu = nat(device))
-            if native.global_average_pool2d_f32(input, &pooled) == int32(0)
+            if native.global_average_pool2d_f32(input, &pooled) == 0
                 return pooled
 
     // gather() works on logical tensor indices and preserves autograd, so it
@@ -1527,7 +1527,7 @@ tensor<real32> local_response_normalization(
         error("nn.local_response_normalization requires positive input dimensions", code = "NN_SHAPE")
 
     output := (
-        value.untrack().gather([0], [1]) * real32(0)
+        value.untrack().gather([0], [1]) * 0
     ).scatter([0], shape)
     plane_count := batches * height * width
     radius := size / 2
@@ -1552,7 +1552,7 @@ tensor<real32> local_response_normalization(
         current := value.gather(
             current_indices, [batches, height, width]
         )
-        square_sum := current.untrack() * real32(0)
+        square_sum := current.untrack() * 0
 
         for first_channel <= int neighbor < last_channel + 1
             int[] neighbor_indices := array(nat(plane_count), fill = 0)
@@ -1617,9 +1617,9 @@ class BatchNorm(
                                         real32 provided_momentum
                                             match initial_epsilon
                                                 real32 provided_epsilon
-                                                    if not math.is_finite(provided_momentum) or provided_momentum < real32(0.0) or provided_momentum >= real32(1.0)
+                                                    if not math.is_finite(provided_momentum) or provided_momentum < 0.0 or provided_momentum >= 1.0
                                                         return error("nn.BatchNorm initial momentum must be finite and in [0, 1)", code = "NN_ARGUMENT")
-                                                    if not math.is_finite(provided_epsilon) or provided_epsilon <= real32(0.0)
+                                                    if not math.is_finite(provided_epsilon) or provided_epsilon <= 0.0
                                                         return error("nn.BatchNorm initial epsilon must be finite and positive", code = "NN_ARGUMENT")
                                                     scale = provided_scale
                                                     bias = provided_bias
@@ -1718,9 +1718,9 @@ class BatchNorm(
             parameter_scale = scale.raw()
             parameter_bias = bias.raw()
 
-        output := value * real32(0)
-        next_running_mean := running_mean.raw() * real32(0)
-        next_running_variance := running_variance.raw() * real32(0)
+        output := value * 0
+        next_running_mean := running_mean.raw() * 0
+        next_running_variance := running_variance.raw() * 0
 
         for 0 <= int feature < features
             int[] indices := array(nat(samples), fill = 0)
@@ -1767,7 +1767,7 @@ class BatchNorm(
 
             shifted_variance := variance + variance_epsilon
             denominator := math.exp(
-                math.log(shifted_variance) * real32(0.5)
+                math.log(shifted_variance) * 0.5
             )
             feature_scale := parameter_scale.gather(
                 [feature], [1]
@@ -1846,7 +1846,7 @@ class Dropout(local real64 rate, local int seed := 0, local inverted := true) | 
                 error("nn.Dropout tensor is too large", code = "NN_SIZE")
             count = count * shape[axis]
 
-        mask := (value.untrack() * real32(0)).reshape([nat(count)])
+        mask := (value.untrack() * 0).reshape([nat(count)])
         real64 scale := 1.0
         if inverted_scaling
             scale = 1.0 / (1.0 - drop_rate)
@@ -1897,12 +1897,12 @@ tensor<real32> binary_cross_entropy(
     tensor<real32> target
 )
     lifted := (
-        prediction + real32(0.000001)
-        + math.abs(prediction - real32(0.000001))
+        prediction + 0.000001
+        + math.abs(prediction - 0.000001)
     ) / 2.0
     limited := (
-        lifted + real32(0.999999)
-        - math.abs(lifted - real32(0.999999))
+        lifted + 0.999999
+        - math.abs(lifted - 0.999999)
     ) / 2.0
     first := target * math.log(limited)
     second := (1.0 - target) * math.log(1.0 - limited)
@@ -2111,15 +2111,15 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
     private void | error .compute16(nat index, tensor<real16> value, tensor<real16> gradient)
         status := int32(-1)
         dense := gradient
-        if native.is_cpu_floating<real16>(value) == int32(1)
+        if native.is_cpu_floating<real16>(value) == 1
             status = native.sgd_update<real16>(value, dense, &next16[index], learning_rate)
-        elif value.device() >= int(0) and value.is_contiguous()
+        elif value.device() >= 0 and value.is_contiguous()
             if not dense.is_contiguous()
                 dense = dense.contiguous()
             status = native.sgd_half_metal_update<real16>(value, dense, &next16[index], learning_rate)
-        if status == int32(0)
+        if status == 0
             return
-        if status >= int32(6)
+        if status >= 6
             return error("nn.SGD.update failed during computation at " + paths16[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         next16[index] = real16(real32(value) - real32(dense) * try real32(learning_rate))
         return
@@ -2127,15 +2127,15 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
     private void | error .compute16b(nat index, tensor<real16b> value, tensor<real16b> gradient)
         status := int32(-1)
         dense := gradient
-        if native.is_cpu_floating<real16b>(value) == int32(1)
+        if native.is_cpu_floating<real16b>(value) == 1
             status = native.sgd_update<real16b>(value, dense, &next16b[index], learning_rate)
-        elif value.device() >= int(0) and value.is_contiguous()
+        elif value.device() >= 0 and value.is_contiguous()
             if not dense.is_contiguous()
                 dense = dense.contiguous()
             status = native.sgd_half_metal_update<real16b>(value, dense, &next16b[index], learning_rate)
-        if status == int32(0)
+        if status == 0
             return
-        if status >= int32(6)
+        if status >= 6
             return error("nn.SGD.update failed during computation at " + paths16b[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         next16b[index] = real16b(real32(value) - real32(dense) * try real32(learning_rate))
         return
@@ -2143,15 +2143,15 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
     private void | error .compute32(nat index, tensor<real32> value, tensor<real32> gradient)
         status := int32(-1)
         dense := gradient
-        if native.is_cpu_floating<real32>(value) == int32(1)
+        if native.is_cpu_floating<real32>(value) == 1
             status = native.sgd_update<real32>(value, dense, &next32[index], learning_rate)
-        elif value.is_contiguous() and native.metal_device_f32(value) >= int32(0)
+        elif value.is_contiguous() and native.metal_device_f32(value) >= 0
             if not dense.is_contiguous()
                 dense = dense.contiguous()
             status = native.sgd_metal_update(value, dense, &next32[index], learning_rate)
-        if status == int32(0)
+        if status == 0
             return
-        if status >= int32(6)
+        if status >= 6
             return error("nn.SGD.update failed during computation at " + paths32[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         next32[index] = value - dense * try real32(learning_rate)
         return
@@ -2159,11 +2159,11 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
     private void | error .compute64(nat index, tensor<real64> value, tensor<real64> gradient)
         status := int32(-1)
         dense := gradient
-        if native.is_cpu_floating<real64>(value) == int32(1)
+        if native.is_cpu_floating<real64>(value) == 1
             status = native.sgd_update<real64>(value, dense, &next64[index], learning_rate)
-        if status == int32(0)
+        if status == 0
             return
-        if status >= int32(6)
+        if status >= 6
             return error("nn.SGD.update failed during computation at " + paths64[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         next64[index] = value - dense * learning_rate
         return
@@ -2174,7 +2174,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute16(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.SGD.update failed during computation at " + paths16[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 old := parameter.raw()
                 next := next16[index]
@@ -2184,7 +2184,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute16b(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.SGD.update failed during computation at " + paths16b[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 old := parameter.raw()
                 next := next16b[index]
@@ -2194,7 +2194,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute32(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.SGD.update failed during computation at " + paths32[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 old := parameter.raw()
                 next := next32[index]
@@ -2204,7 +2204,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute64(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.SGD.update failed during computation at " + paths64[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 old := parameter.raw()
                 next := next64[index]
@@ -2303,8 +2303,8 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             steps16 = steps16.append(0)
             first_corrections16 = first_corrections16.append(0.0)
             second_corrections16 = second_corrections16.append(0.0)
-            first16 = first16.append(real32(raw) * real32(0.0))
-            second16 = second16.append(real32(raw) * real32(0.0))
+            first16 = first16.append(real32(raw) * 0.0)
+            second16 = second16.append(real32(raw) * 0.0)
             if device >= 0
                 next16 = next16.append(tensor<real16>(shape, gpu = nat(device)))
             else
@@ -2327,8 +2327,8 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             steps16b = steps16b.append(0)
             first_corrections16b = first_corrections16b.append(0.0)
             second_corrections16b = second_corrections16b.append(0.0)
-            first16b = first16b.append(real32(raw) * real32(0.0))
-            second16b = second16b.append(real32(raw) * real32(0.0))
+            first16b = first16b.append(real32(raw) * 0.0)
+            second16b = second16b.append(real32(raw) * 0.0)
             if device >= 0
                 next16b = next16b.append(tensor<real16b>(shape, gpu = nat(device)))
             else
@@ -2351,8 +2351,8 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             steps32 = steps32.append(0)
             first_corrections32 = first_corrections32.append(0.0)
             second_corrections32 = second_corrections32.append(0.0)
-            first32 = first32.append(raw * real32(0.0))
-            second32 = second32.append(raw * real32(0.0))
+            first32 = first32.append(raw * 0.0)
+            second32 = second32.append(raw * 0.0)
             if device >= 0
                 next32 = next32.append(tensor<real32>(shape, gpu = nat(device)))
             else
@@ -2800,9 +2800,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         if not dense_source.is_contiguous()
             dense_source = dense_source.contiguous()
         status := native.adam_half_update<real16>(raw, dense_source, &first16[index], &second16[index], &next16[index], first_decay, second_decay, 1.0 - first_decay, 1.0 - second_decay, coefficient_epsilons[coefficient], coefficient_scales[coefficient])
-        if status == int32(0)
+        if status == 0
             return
-        if status >= int32(6)
+        if status >= 6
             return error("nn.Adam.update failed during computation at " + paths16[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         value := real32(raw)
         dense := real32(gradient)
@@ -2834,9 +2834,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         if not dense_source.is_contiguous()
             dense_source = dense_source.contiguous()
         status := native.adam_half_update<real16b>(raw, dense_source, &first16b[index], &second16b[index], &next16b[index], first_decay, second_decay, 1.0 - first_decay, 1.0 - second_decay, coefficient_epsilons[coefficient], coefficient_scales[coefficient])
-        if status == int32(0)
+        if status == 0
             return
-        if status >= int32(6)
+        if status >= 6
             return error("nn.Adam.update failed during computation at " + paths16b[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         value := real32(raw)
         dense := real32(gradient)
@@ -2867,7 +2867,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         one_minus_beta2 := 1.0 - second_decay
         dense := gradient
         native_status := int32(-1)
-        if native.is_cpu_floating<real32>(value) == int32(1)
+        if native.is_cpu_floating<real32>(value) == 1
             native_status = native.adam_update<real32>(
                 value,
                 dense,
@@ -2881,7 +2881,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 adjusted_epsilon,
                 step_scale
             )
-        elif value.is_contiguous() and native.metal_device_f32(value) >= int32(0)
+        elif value.is_contiguous() and native.metal_device_f32(value) >= 0
             // A gradient can arrive as a strided view (Math's matmul
             // backward gives an FC weight one). The fused kernel reads dense
             // tensors, so copy it on the device; the values do not change.
@@ -2900,9 +2900,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 adjusted_epsilon,
                 step_scale
             )
-        if native_status == int32(0)
+        if native_status == 0
             return
-        if native_status >= int32(6)
+        if native_status >= 6
             return error("nn.Adam.update failed during computation at " + paths32[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         first := first32[index]
         second := second32[index]
@@ -2948,7 +2948,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         one_minus_beta1 := 1.0 - first_decay
         one_minus_beta2 := 1.0 - second_decay
         native_status := int32(-1)
-        if native.is_cpu_floating<real64>(value) == int32(1)
+        if native.is_cpu_floating<real64>(value) == 1
             native_status = native.adam_update<real64>(
                 value,
                 gradient,
@@ -2962,9 +2962,9 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
                 adjusted_epsilon,
                 step_scale
             )
-        if native_status == int32(0)
+        if native_status == 0
             return
-        if native_status >= int32(6)
+        if native_status >= 6
             return error("nn.Adam.update failed during computation at " + paths64[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
         first := first64[index]
         second := second64[index]
@@ -3001,28 +3001,28 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute16(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.Adam.update failed during computation at " + paths16[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 .commit16(index, &parameter)
                 .parameter.clear_grad()
         for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute16b(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.Adam.update failed during computation at " + paths16b[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 .commit16b(index, &parameter)
                 .parameter.clear_grad()
         for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute32(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.Adam.update failed during computation at " + paths32[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 .commit32(index, &parameter)
                 .parameter.clear_grad()
         for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
             if parameter.has_grad()
                 try .compute64(index, parameter.raw(), parameter.gradient().untrack())
-                if native.optimizer_update_completed() != int32(0)
+                if native.optimizer_update_completed() != 0
                     return error("nn.Adam.update failed during computation at " + paths64[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 .commit64(index, &parameter)
                 .parameter.clear_grad()

@@ -13,8 +13,8 @@ tensor<real32> relu_expression(tensor<real32> value)
 tensor<real32> gelu_expression(tensor<real32> value)
     cubic := value * value * value
     inner := (
-        value + cubic * real32(0.044715)
-    ) * real32(0.7978845608028654)
+        value + cubic * 0.044715
+    ) * 0.7978845608028654
     lifted := (
         inner - 20.0 + math.abs(inner + 20.0)
     ) / 2.0
@@ -32,7 +32,7 @@ tensor<real32> gelu_expression(tensor<real32> value)
 // the compositional expression.
 tensor<real32> fused_activation(tensor<real32> value, int activation)
     device := native.fused_device_f32(value)
-    if device >= int32(-1)
+    if device >= -1
         input := value
         dense := input.is_contiguous()
         if not dense and not input.is_tracked()
@@ -42,11 +42,11 @@ tensor<real32> fused_activation(tensor<real32> value, int activation)
             // The device output is write-only (the kernel stores every
             // element); the CPU output stays zeroed.
             tensor<real32> output
-            if device == int32(-1)
+            if device == -1
                 output = tensor.zeros<real32>(input.shape())
             else
                 output = tensor<real32>(input.shape(), gpu = nat(device))
-            if native.activation_f32(input, &output, int64(activation)) == int32(0)
+            if native.activation_f32(input, &output, int64(activation)) == 0
                 return output
     if activation == 1
         return relu_expression(value)
@@ -65,14 +65,14 @@ tensor<real32> gelu_fused(tensor<real32> value)
 tensor<real32> relu_reuse(tensor<real32> value)
     if value.is_tracked() or not value.is_contiguous()
         return relu_fused(value)
-    if native.is_cpu_f32(value) == int32(1)
+    if native.is_cpu_f32(value) == 1
         status := native.relu_reuse_f32(&value)
-        if status != int32(0)
+        if status != 0
             error("nn compiler memory-reuse target failed", code = "NN_INTERNAL")
         return value
-    if native.cuda_device_f32(value) >= int32(0)
+    if native.cuda_device_f32(value) >= 0
         status := native.cuda_activation_inplace_f32(&value, 1)
-        if status == int32(0)
+        if status == 0
             return value
     return relu_fused(value)
 
@@ -81,11 +81,11 @@ tensor<real32> relu_reuse(tensor<real32> value)
 // Core only proves the generic replacement constraints.
 tensor<real32> relu_training(tensor<real32> value)
     input := value
-    if not input.is_tracked() or not input.is_contiguous() or native.is_cpu_f32(input) != int32(1)
+    if not input.is_tracked() or not input.is_contiguous() or native.is_cpu_f32(input) != 1
         return relu_fused(input)
     output := tensor.zeros<real32>(input.shape())
     status := native.relu_training_f32(input, &output)
-    if status != int32(0)
+    if status != 0
         error("nn compiler training ReLU target failed", code = "NN_INTERNAL")
     return output
 
@@ -115,7 +115,7 @@ class StateChecksum()
     void .update(string text)
         bytes := nat8[](text.utf8())
         for byte := bytes[]
-            first = (first + int(byte)) % 65521
+            first = (first + byte) % 65521
             second = (second + first) % 65521
         first = (first + 10) % 65521
         second = (second + first) % 65521
