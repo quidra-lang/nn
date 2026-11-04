@@ -1945,13 +1945,13 @@ reflect.Each<Parameter<T>> parameters<T: floating, M>(M &model)
     return reflect.each<Parameter<T>>(&model)
 
 void clear_grad<M>(M &model)
-    for &parameter := &parameters(&model)[]
+    for &parameter := &parameters<real16, M>(&model)[]
         .parameter.clear_grad()
-    for &parameter := &parameters(&model)[]
+    for &parameter := &parameters<real16b, M>(&model)[]
         .parameter.clear_grad()
-    for &parameter := &parameters(&model)[]
+    for &parameter := &parameters<real32, M>(&model)[]
         .parameter.clear_grad()
-    for &parameter := &parameters(&model)[]
+    for &parameter := &parameters<real64, M>(&model)[]
         .parameter.clear_grad()
 
 class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
