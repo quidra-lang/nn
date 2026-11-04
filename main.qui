@@ -1784,13 +1784,13 @@ class BatchNorm(
         return (output, next_running_mean, next_running_variance)
 
     tensor<real32> .forward(tensor<real32> value)
-        (tensor<real32> output, tensor<real32> next_running_mean, tensor<real32> next_running_variance) := .normalize_value(value, true)
+        (output, next_running_mean, next_running_variance) := .normalize_value(value, true)
         .running_mean.replace(next_running_mean)
         .running_variance.replace(next_running_variance)
         return output
 
     tensor<real32> .infer(tensor<real32> value)
-        (tensor<real32> output, _, _) := .normalize_value(value, false)
+        (output, _, _) := .normalize_value(value, false)
         return output
 
     // Compiler-private inference fusion targets. Core sees only the generic
@@ -1803,7 +1803,7 @@ class BatchNorm(
         tensor<real32> value
     )
         convolved := .convolution.forward(value)
-        (tensor<real32> output, _, _) := .normalize_value(convolved, false)
+        (output, _, _) := .normalize_value(convolved, false)
         return output
 
     private tensor<real32> .infer_conv_relu(
@@ -1811,7 +1811,7 @@ class BatchNorm(
         tensor<real32> value
     )
         convolved := .convolution.forward(value)
-        (tensor<real32> output, _, _) := .normalize_value(convolved, false)
+        (output, _, _) := .normalize_value(convolved, false)
         return relu(output)
 
     private tensor<real32> .infer_conv_gelu(
@@ -1819,7 +1819,7 @@ class BatchNorm(
         tensor<real32> value
     )
         convolved := .convolution.forward(value)
-        (tensor<real32> output, _, _) := .normalize_value(convolved, false)
+        (output, _, _) := .normalize_value(convolved, false)
         return gelu(output)
 
 class Dropout(local real64 rate, local seed := 0, local inverted := true) | error
