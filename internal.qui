@@ -91,7 +91,7 @@ tensor<real32> relu_training(tensor<real32> value)
 
 tensor<real32> mean_all(tensor<real32> value)
     shape := int(value.shape())
-    int count := 1
+    count := 1
     for dimension := shape[]
         if dimension < 0
             error("nn internal mean received an invalid tensor shape", code = "NN_INTERNAL")
@@ -154,7 +154,7 @@ string | error read_checked_line(
 
 int | error parse_nonnegative_state_int(string text, string context)
     int | error parsed := int.parse(text)
-    int value := 0
+    value := 0
     match parsed
         int number
             value = number
@@ -181,7 +181,7 @@ void | error write_state_entry<T: floating>(
     try write_checked_line(&output, &checksum, path)
     try write_checked_line(&output, &checksum, len(shape).string())
 
-    int count := 1
+    count := 1
     for dimension := shape[]
         if dimension > 9223372036854775807
             return error("nn.save tensor dimension exceeds the storage limit", code = "NN_SIZE")
@@ -452,7 +452,7 @@ StoredTensor<real32> | error read_stored_tensor32(file.read &input, StateChecksu
         return error("nn.load has an invalid legacy state entry type", code = "NN_CHECKPOINT_FILE")
     rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
-    int expected_count := 1
+    expected_count := 1
     for 0 <= int axis < rank
         dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
@@ -482,7 +482,7 @@ StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksu
         return error("nn.load has an invalid legacy state entry type", code = "NN_CHECKPOINT_FILE")
     rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
-    int expected_count := 1
+    expected_count := 1
     for 0 <= int axis < rank
         dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
@@ -580,7 +580,7 @@ TensorPayload | error read_tensor_payload(file.read &input, StateChecksum &check
             return error("nn.Adam.load expected an " + expected_kind + " entry", code = "NN_CHECKPOINT_FILE")
     rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
-    int count := 1
+    count := 1
     for 0 <= int axis < rank
         dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807

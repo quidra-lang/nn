@@ -327,7 +327,7 @@ tensor<real32> | error normal_weights(
 class FC(
     local int features_in,
     local int features_out,
-    local int seed := 1,
+    local seed := 1,
     local Parameter<real32> | none initial_weight := none,
     local Parameter<real32> | none initial_bias := none
 ) | error
@@ -522,10 +522,10 @@ class Conv2D(
     local int channels_in,
     local int channels_out,
     local int kernel,
-    local int stride := 1,
-    local int padding := 0,
-    local int seed := 1,
-    local int groups := 1,
+    local stride := 1,
+    local padding := 0,
+    local seed := 1,
+    local groups := 1,
     local Parameter<real32> | none initial_weight := none,
     local Parameter<real32> | none initial_bias := none
 ) | error
@@ -534,7 +534,7 @@ class Conv2D(
     Parameter<real32> bias
     int step
     int border
-    int group_count := 1
+    group_count := 1
     if channels_in <= 0 or channels_out <= 0
         return error("nn.Conv2D requires positive input and output channel counts", code = "NN_SHAPE")
     if kernel <= 0
@@ -1274,7 +1274,7 @@ FC | error normal_fc(
     int features_out,
     real64 standard_deviation,
     real64 bias_value := 0.0,
-    int seed := 1
+    seed := 1
 )
     if features_in <= 0 or features_out <= 0
         return error("nn.normal_fc requires positive input and output feature counts", code = "NN_SHAPE")
@@ -1307,10 +1307,10 @@ Conv2D | error normal_conv2d(
     int kernel,
     real64 standard_deviation,
     real64 bias_value := 0.0,
-    int stride := 1,
-    int padding := 0,
-    int seed := 1,
-    int groups := 1
+    stride := 1,
+    padding := 0,
+    seed := 1,
+    groups := 1
 )
     if channels_in <= 0 or channels_out <= 0
         return error("nn.normal_conv2d requires positive input and output channel counts", code = "NN_SHAPE")
@@ -1361,7 +1361,7 @@ tensor<real32> max_pool2d(
     tensor<real32> value,
     int kernel,
     int stride,
-    int padding := 0
+    padding := 0
 )
     shape := int(value.shape())
     if len(shape) != 4
@@ -1390,7 +1390,7 @@ tensor<real32> max_pool2d(
             for 0 <= int output_x < output_width
                 start_y := output_y * stride - padding
                 start_x := output_x * stride - padding
-                int valid_count := 0
+                valid_count := 0
                 for 0 <= int kernel_y < kernel
                     source_y := start_y + kernel_y
                     if source_y >= 0 and source_y < height
@@ -1404,7 +1404,7 @@ tensor<real32> max_pool2d(
                 int[] input_indices := array(
                     nat(batches * valid_count), fill = 0
                 )
-                int cursor := 0
+                cursor := 0
                 for 0 <= int batch < batches
                     for 0 <= int kernel_y < kernel
                         source_y := start_y + kernel_y
@@ -1502,7 +1502,7 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
 
 tensor<real32> local_response_normalization(
     tensor<real32> value,
-    int size := 5,
+    size := 5,
     real64 alpha := 0.0001,
     real64 beta := 0.75,
     real64 k := 2.0
@@ -1694,7 +1694,7 @@ class BatchNorm(
         if mean_shape[0] != features or variance_shape[0] != features
             error("nn.BatchNorm running state dimensions do not match input features", code = "NN_SHAPE")
 
-        int inner := 1
+        inner := 1
         for 2 <= int axis < rank
             if shape[axis] < 0
                 error("nn.BatchNorm received an invalid tensor shape", code = "NN_INTERNAL")
@@ -1822,7 +1822,7 @@ class BatchNorm(
         (tensor<real32> output, _, _) := .normalize_value(convolved, false)
         return gelu(output)
 
-class Dropout(local real64 rate, local int seed := 0, local inverted := true) | error
+class Dropout(local real64 rate, local seed := 0, local inverted := true) | error
 
     real64 drop_rate
     random.Generator rng
@@ -1838,7 +1838,7 @@ class Dropout(local real64 rate, local int seed := 0, local inverted := true) | 
             return value
 
         shape := int(value.shape())
-        int count := 1
+        count := 1
         for 0 <= nat axis < len(shape)
             if shape[axis] < 0
                 error("nn.Dropout received an invalid tensor shape", code = "NN_INTERNAL")
@@ -2538,8 +2538,8 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         nat loaded_iteration := 0
         real64 loaded_first_correction := 0.0
         real64 loaded_second_correction := 0.0
-        int slot_count := 0
-        int legacy_count32 := 0
+        slot_count := 0
+        legacy_count32 := 0
         if version == "5"
             slot_count = try internal.parse_nonnegative_state_int(try internal.read_checked_line(&input, &checksum, "Adam slot count"), "Adam slot count")
         else
