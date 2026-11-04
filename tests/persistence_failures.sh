@@ -269,7 +269,7 @@ Model make_model()
 
 Model model := make_model()
 optimizer := nn.Adam(&model, rate = 0.01)
-for 0 <= nat round < 2
+for: 0 <= nat round < 2
     tensor<real32> first_weight := .model.layers[0].weight.track()
     tensor<real32> second_weight := .model.layers[1].weight.track()
     math.sum(first_weight * second_weight).backward(&model)

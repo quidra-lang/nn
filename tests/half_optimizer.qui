@@ -20,7 +20,7 @@ bool same_bits<T: floating>(tensor<T> left, tensor<T> right)
     tensor<real32> b := real32(right.cpu())
     if a.shape() != b.shape()
         return false
-    for 0 <= nat i < a.shape()[0]
+    for: 0 <= nat i < a.shape()[0]
         if probe.real32_bits(a[i].item()) != probe.real32_bits(b[i].item())
             return false
     return true
@@ -35,7 +35,7 @@ void check<T: floating>(string label, tensor<T> seed, tensor<T> gradient, int de
     tensor<real32> reference_second := tensor.zeros<real32>(seed.shape())
     tensor<T> next := placed(tensor.zeros<T>(seed.shape()), device)
     bool equal := true
-    for 0 <= int step < 8
+    for: 0 <= int step < 8
         tensor<real32> dense := real32(gradient)
         reference_first = reference_first * real32(0.5) + dense * real32(0.5)
         reference_second = reference_second * real32(0.5) + (dense * dense) * real32(0.5)
@@ -73,7 +73,7 @@ real32[] gradients := [real32(0.0), real32(-0.0), real32(0.25), real32(-0.25),
     real32(0.000000059604644775390625), real32(-0.000000059604644775390625)]
 tensor<real32> weight := tensor.zeros<real32>([6])
 tensor<real32> gradient := tensor.zeros<real32>([6])
-for 0 <= nat i < 6
+for: 0 <= nat i < 6
     weight[i] = weights[i]
     gradient[i] = gradients[i]
 if args.metal

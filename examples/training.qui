@@ -22,7 +22,7 @@ void train()
     println(first.item())
 
     latest := first.item()
-    for 0 <= nat iteration < 100
+    for: 0 <= nat iteration < 100
         activated := nn.relu(
             .model.hidden.forward(samples.track())
         )

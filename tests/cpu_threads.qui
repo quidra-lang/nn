@@ -99,7 +99,7 @@ void | error run(string path)
     Weights weights := Weights()
     weights.value = nn.Parameter<real32>(value = uniform([200, 200], 74))
     optimizer := try nn.Adam(&weights, rate = 0.01)
-    for 0 <= nat step < 3
+    for: 0 <= nat step < 3
         tensor<real32> w := .weights.value.track()
         math.sum(w * w * uniform([200, 200], 75 + int(step))).backward(&weights)
         .optimizer.update()

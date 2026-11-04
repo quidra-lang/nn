@@ -14,7 +14,7 @@ nat64 random_state := 1
 nat64 multiplier := 1664525
 nat64 increment := 1013904223
 nat64 modulus := 4294967296
-for 0 <= nat i < args.count
+for: 0 <= nat i < args.count
     if args.operation <= 2
         nat64 offset := nat64(i)
         left[i] = nat32(args.begin + offset)
@@ -33,7 +33,7 @@ tensor<nat32> actual := gpu_output.cpu()
 bool identical := cpu_status == 0 and gpu_status == 0
 nat32 sign_mask := 2147483648
 nat32 infinity_bits := 2139095040
-for 0 <= nat i < args.count
+for: 0 <= nat i < args.count
     nat32 x := cpu[i].item()
     nat32 y := actual[i].item()
     // Exceptional NaN encodings are compared by class, not payload.

@@ -193,7 +193,7 @@ void | error write_state_entry<T: floating>(
 
     flat := raw.contiguous().reshape([nat(count)])
     try write_checked_line(&output, &checksum, count.string())
-    for 0 <= int index < count
+    for: 0 <= int index < count
         try write_checked_line(
             &output,
             &checksum,
@@ -299,7 +299,7 @@ class StoredTensor<T: floating>(local StateEntrySchema schema_initial, local ten
 
 string shape_text(nat[] shape)
     result := "["
-    for dimension := shape[nat index]
+    for: dimension := shape[index]
         if index != 0
             result = result + ", "
         result = result + dimension.string()
@@ -314,7 +314,7 @@ string difference_group(string title, string[] lines)
     if len(lines) == 0
         return ""
     result := NL + "  " + title + " (" + len(lines).string() + "):"
-    for line := lines[nat index]
+    for: line := lines[index]
         if len(lines) > 20 and index >= 10 and index < len(lines) - 10
             if index == 10
                 result = result + NL + "    … " + (len(lines) - 20).string() + " more …"
@@ -323,7 +323,7 @@ string difference_group(string title, string[] lines)
     return result
 
 nat | none schema_index(StateEntrySchema[] entries, string path)
-    for entry := entries[nat index]
+    for: entry := entries[index]
         if entry.path == path
             return index
     return none
@@ -338,7 +338,7 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
             continue
         nat changed := 0
         nat position := 0
-        for 0 <= nat index < len(first_model)
+        for: 0 <= nat index < len(first_model)
             if first_model[index] != file_parts[index]
                 changed += 1
                 position = index
@@ -397,8 +397,8 @@ void | error compare_state_schema(
     string[] shape := []
     StateEntrySchema[] missing_entries := []
     StateEntrySchema[] unexpected_entries := []
-    for model_entry := expected[nat index]
-        for 0 <= nat previous < index
+    for: model_entry := expected[index]
+        for: 0 <= nat previous < index
             if expected[previous].path == model_entry.path
                 return error(operation + ": model has duplicate checkpoint path '" + model_entry.path + "'; nothing was loaded", code = "NN_CHECKPOINT")
         nat | none found := schema_index(actual, model_entry.path)
@@ -412,9 +412,9 @@ void | error compare_state_schema(
             none
                 missing = missing.append(schema_text(model_entry))
                 missing_entries = missing_entries.append(model_entry)
-    for file_entry := actual[nat index]
+    for: file_entry := actual[index]
         duplicate := false
-        for 0 <= nat previous < index
+        for: 0 <= nat previous < index
             if actual[previous].path == file_entry.path
                 duplicate = true
         nat | none found := schema_index(expected, file_entry.path)
@@ -453,7 +453,7 @@ StoredTensor<real32> | error read_stored_tensor32(file.read &input, StateChecksu
     rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
     expected_count := 1
-    for 0 <= int axis < rank
+    for: 0 <= int axis < rank
         dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
             return error("nn.load tensor dimension exceeds the storage limit", code = "NN_CHECKPOINT_FILE")
@@ -465,7 +465,7 @@ StoredTensor<real32> | error read_stored_tensor32(file.read &input, StateChecksu
     if count != expected_count
         return error("nn.load tensor element count does not match its shape", code = "NN_CHECKPOINT_FILE")
     flat := tensor.zeros<real32>([nat(count)])
-    for 0 <= int index < count
+    for: 0 <= int index < count
         value_text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real32(value_text, "tensor value at " + path + "[" + index.string() + "]")
     schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real32", path_initial = path, shape_initial = shape)
@@ -483,7 +483,7 @@ StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksu
     rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
     expected_count := 1
-    for 0 <= int axis < rank
+    for: 0 <= int axis < rank
         dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
             return error("nn.load tensor dimension exceeds the storage limit", code = "NN_CHECKPOINT_FILE")
@@ -495,7 +495,7 @@ StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksu
     if count != expected_count
         return error("nn.load tensor element count does not match its shape", code = "NN_CHECKPOINT_FILE")
     flat := tensor.zeros<real64>([nat(count)])
-    for 0 <= int index < count
+    for: 0 <= int index < count
         value_text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real64(value_text, "tensor value at " + path + "[" + index.string() + "]")
     schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real64", path_initial = path, shape_initial = shape)
@@ -581,7 +581,7 @@ TensorPayload | error read_tensor_payload(file.read &input, StateChecksum &check
     rank := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor rank"), "tensor rank")
     nat[] shape := []
     count := 1
-    for 0 <= int axis < rank
+    for: 0 <= int axis < rank
         dimension := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "tensor dimension"), "tensor dimension")
         if dimension > 9223372036854775807
             return error("nn.load tensor dimension exceeds the storage limit", code = "NN_CHECKPOINT_FILE")
@@ -604,7 +604,7 @@ real16 | error parse_state_real16(string text, string context)
 
 StoredTensor<real16> | error read_tensor_values16(file.read &input, StateChecksum &checksum, TensorPayload payload)
     flat := tensor.zeros<real16>([nat(payload.count)])
-    for 0 <= int index < payload.count
+    for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real16(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real16>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
@@ -619,21 +619,21 @@ real16b | error parse_state_real16b(string text, string context)
 
 StoredTensor<real16b> | error read_tensor_values16b(file.read &input, StateChecksum &checksum, TensorPayload payload)
     flat := tensor.zeros<real16b>([nat(payload.count)])
-    for 0 <= int index < payload.count
+    for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real16b(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real16b>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 StoredTensor<real32> | error read_tensor_values32(file.read &input, StateChecksum &checksum, TensorPayload payload)
     flat := tensor.zeros<real32>([nat(payload.count)])
-    for 0 <= int index < payload.count
+    for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real32(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real32>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 StoredTensor<real64> | error read_tensor_values64(file.read &input, StateChecksum &checksum, TensorPayload payload)
     flat := tensor.zeros<real64>([nat(payload.count)])
-    for 0 <= int index < payload.count
+    for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
         flat[index] = try parse_state_real64(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
     return StoredTensor<real64>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
@@ -661,7 +661,7 @@ class StateTable()
             entry := try read_tensor_values64(&input, &checksum, payload)
             values64 = values64.append(entry)
         else
-            for 0 <= int index < payload.count
+            for: 0 <= int index < payload.count
                 ignored := try read_checked_line(&input, &checksum, "unknown dtype value")
         return
 
@@ -685,26 +685,26 @@ StateTable | error read_model_entries(file.read &input, StateChecksum &checksum,
     table := StateTable()
     if version == "5"
         count := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "model entry count"), "model entry count")
-        for 0 <= int index < count
+        for: 0 <= int index < count
             try .table.read_entry(&input, &checksum)
     else
         count32 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Parameter<real32> count"), "Parameter<real32> count")
         count64 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "Parameter<real64> count"), "Parameter<real64> count")
         state32 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "State<real32> count"), "State<real32> count")
         state64 := try parse_nonnegative_state_int(try read_checked_line(&input, &checksum, "State<real64> count"), "State<real64> count")
-        for 0 <= int index < count32
+        for: 0 <= int index < count32
             try .table.read_legacy32(&input, &checksum, "Parameter")
-        for 0 <= int index < count64
+        for: 0 <= int index < count64
             try .table.read_legacy64(&input, &checksum, "Parameter")
-        for 0 <= int index < state32
+        for: 0 <= int index < state32
             try .table.read_legacy32(&input, &checksum, "State")
-        for 0 <= int index < state64
+        for: 0 <= int index < state64
             try .table.read_legacy64(&input, &checksum, "State")
     return table
 
 void | error validate_model_schema(StateEntrySchema[] entries, string operation)
-    for entry := entries[nat index]
-        for 0 <= nat previous < index
+    for: entry := entries[index]
+        for: 0 <= nat previous < index
             if entries[previous].path == entry.path
                 return error(operation + ": model has duplicate checkpoint path '" + entry.path + "'; nothing was loaded", code = "NN_CHECKPOINT")
     return

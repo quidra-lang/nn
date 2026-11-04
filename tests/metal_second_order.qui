@@ -97,7 +97,7 @@ bool second_order_case(int which, int device)
 
 real64 power2(int exponent)
     real64 result := 1.0
-    for 0 <= int step < math.abs(exponent)
+    for: 0 <= int step < math.abs(exponent)
         if exponent > 0
             result = result * 2.0
         else
@@ -115,26 +115,26 @@ tensor<real32> dense_gelu_values()
         values = values.append(-value)
     real64 boundary_start := real64(real32(7.32))
     real64 boundary_ulp := power2(-21)
-    for 0 <= nat index < 104858
+    for: 0 <= nat index < 104858
         real32 value := real32(boundary_start + real_index(index) * boundary_ulp)
         values = values.append(value)
         values = values.append(-value)
-    for 0 <= nat index < 9503
+    for: 0 <= nat index < 9503
         real32 value := real32(5.0 + real_index(index) / 4096.0)
         values = values.append(value)
         values = values.append(-value)
-    for 0 <= nat index < 6145
+    for: 0 <= nat index < 6145
         real32 value := real32(-12.0 + real_index(index) / 256.0)
         values = values.append(value)
-    for -149 <= int exponent < 43
+    for: -149 <= int exponent < 43
         real64 scale := power2(exponent)
-        for 0 <= nat step < 32
+        for: 0 <= nat step < 32
             real32 value := real32(scale * (1.0 + real_index(step) / 32.0))
             if real64(value) <= 6981463048192.0
                 values = values.append(value)
                 values = values.append(-value)
     tensor<real32> result := tensor.zeros<real32>([len(values)])
-    for 0 <= nat index < len(values)
+    for: 0 <= nat index < len(values)
         result[index] = values[index]
     return result
 

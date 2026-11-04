@@ -28,7 +28,7 @@ class Leaf<T: floating> instance_self(local int64 device)
             return "absent"
         tensor<T> flat := weight.gradient().cpu().reshape([8])
         string result := ""
-        for 0 <= nat index < 8
+        for: 0 <= nat index < 8
             result = result + flat[index].item().string() + ";"
         return result
 

@@ -195,7 +195,7 @@ void replica_step(Replica &replica, tensor<real32>[] gradients, real64 rate, int
     real32 one_minus_beta2_32 := real32(1.0 - second_decay)
     real32 adjusted_epsilon32 := real32(adjusted_epsilon)
     real32 step_scale32 := real32(step_scale)
-    for 0 <= nat index < len(replica.parameters)
+    for: 0 <= nat index < len(replica.parameters)
         tensor<real32> gradient := place(gradients[index], device)
         if index == 3
             gradient = gradient.transpose(0, 1)
@@ -232,7 +232,7 @@ tensor<real32> | error read_block(string[] lines, int start)
     int count := try int.parse(lines[start + 4 + rank])
     tensor<real32> samples := tensor.zeros<real32>([nat(count)])
     int first_value := start + 5 + rank
-    for 0 <= int index < count
+    for: 0 <= int index < count
         samples[index] = real32(try real64.parse(lines[first_value + index]))
     return samples
 
@@ -252,7 +252,7 @@ AdamState | error read_state(string path)
     state.steps = []
     state.first_corrections = []
     state.second_corrections = []
-    for 0 <= int index < int(len(lines)) - 1
+    for: 0 <= int index < int(len(lines)) - 1
         string kind := lines[index]
         string dtype := lines[index + 1]
         if kind == "Parameter" and dtype == "real32"
@@ -292,7 +292,7 @@ bool identical(tensor<real32> left, tensor<real32> right)
     tensor<real32> b := host_vector(right)
     if element_count(a) != element_count(b)
         return false
-    for 0 <= int index < element_count(a)
+    for: 0 <= int index < element_count(a)
         if a[index].item() != b[index].item()
             return false
     return true
@@ -326,7 +326,7 @@ bool within(tensor<real32> value, tensor<real32> reference, real64 atol, real64 
 
 void add(Tally &tally, tensor<real32>[] parameters, tensor<real32>[] first, tensor<real32>[] second, AdamState reference)
     bool bitwise_step := true
-    for 0 <= nat index < len(parameters)
+    for: 0 <= nat index < len(parameters)
         tally.parameter_abs = math.max(tally.parameter_abs, max_abs(parameters[index], reference.parameters[index]))
         tally.first_abs = math.max(tally.first_abs, max_abs(first[index], reference.first[index]))
         tally.second_abs = math.max(tally.second_abs, max_abs(second[index], reference.second[index]))
@@ -354,7 +354,7 @@ void | error state_checks(int device, int steps, string scratch)
     bool deterministic := true
     bool zero_gradient_fixed := true
     tensor<real32> c_initial := metal.c.raw().cpu()
-    for 0 <= int step < steps
+    for: 0 <= int step < steps
         tensor<real32>[] gradients := step_gradients(step)
         train_step(&host, &host_optimizer, gradients, -1)
         train_step(&metal, &metal_optimizer, gradients, device)
@@ -370,7 +370,7 @@ void | error state_checks(int device, int steps, string scratch)
         // and corrections are the replica's global ones.
         bool counters := len(metal_state.steps) == 4 and len(host_state.steps) == 4
         if counters
-            for 0 <= nat index < 4
+            for: 0 <= nat index < 4
                 counters = (
                     counters
                     and metal_state.steps[index] == step + 1
@@ -384,7 +384,7 @@ void | error state_checks(int device, int steps, string scratch)
 
         add(&versus_elementwise, replica.parameters, replica.first, replica.second, metal_state)
         add(&versus_cpu, host_state.parameters, host_state.first, host_state.second, metal_state)
-        for 0 <= nat index < 4
+        for: 0 <= nat index < 4
             deterministic = deterministic and identical(metal_state.parameters[index], again_state.parameters[index])
             deterministic = deterministic and identical(metal_state.first[index], again_state.first[index])
             deterministic = deterministic and identical(metal_state.second[index], again_state.second[index])
@@ -413,7 +413,7 @@ real64 train_small(int seed)
     model.a = nn.Parameter<real32>(value = uniform([64], 1.0, seed).gpu(nat(device)))
     model.b = nn.Parameter<real32>(value = uniform([16], 1.0, seed + 1).gpu(nat(device)))
     optimizer := nn.Adam(&model, rate = 0.01)
-    for 0 <= nat step < 60
+    for: 0 <= nat step < 60
         tensor<real32> a := .model.a.track()
         tensor<real32> b := .model.b.track()
         tensor<real32> loss := math.sum(a * a) + math.sum(b * b * b * b)
@@ -436,7 +436,7 @@ real64 train4()
 void concurrency_check()
     real64[] serial := [train1(), train2(), train3(), train4()]
     bool same := true
-    for 0 <= nat round < 3
+    for: 0 <= nat round < 3
         real64 first
         real64 second
         real64 third
@@ -447,7 +447,7 @@ void concurrency_check()
             third = train3()
             fourth = train4()
         real64[] concurrent := [first, second, third, fourth]
-        for 0 <= nat index < 4
+        for: 0 <= nat index < 4
             same = same and concurrent[index] == serial[index]
     report("metal adam concurrent optimizers", same)
 
@@ -463,7 +463,7 @@ tensor<real32> train_tied(int device)
     model.first = shared
     model.second = shared
     optimizer := nn.Adam(&model, rate = 0.1)
-    for 0 <= nat step < 5
+    for: 0 <= nat step < 5
         tensor<real32> value := .model.first.track()
         tensor<real32> loss := math.sum(value * value)
         loss.backward(&model)

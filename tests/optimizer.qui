@@ -137,7 +137,7 @@ bool identical32(tensor<real32> left, tensor<real32> right)
         count = count * int(extent)
     tensor<real32> u := x.reshape([nat(count)])
     tensor<real32> v := y.reshape([nat(count)])
-    for 0 <= int index < count
+    for: 0 <= int index < count
         if u[index].item() != v[index].item()
             return false
     return true
@@ -152,7 +152,7 @@ bool identical64(tensor<real64> left, tensor<real64> right)
         count = count * int(extent)
     tensor<real64> u := x.reshape([nat(count)])
     tensor<real64> v := y.reshape([nat(count)])
-    for 0 <= int index < count
+    for: 0 <= int index < count
         if u[index].item() != v[index].item()
             return false
     return true
@@ -207,7 +207,7 @@ Steps | error steps_of(string[] lines)
     steps.counts = []
     steps.first = []
     steps.second = []
-    for 0 <= int index < int(len(lines)) - 4
+    for: 0 <= int index < int(len(lines)) - 4
         if lines[index] == "AdamStep"
             steps.counts = steps.counts.append(try int.parse(lines[index + 2]))
             steps.first = steps.first.append(try real64.parse(lines[index + 3]))
@@ -229,7 +229,7 @@ string[] adam_block(string[] lines, int which)
 // The bias correction after `count` steps by Adam's recurrence.
 real64 correction(real64 decay, int count)
     real64 value := 0.0
-    for 0 <= int step < count
+    for: 0 <= int step < count
         value = value + (1.0 - value) * (1.0 - decay)
     return value
 
@@ -237,7 +237,7 @@ bool counted(Steps steps, int[] counts)
     if len(steps.counts) != len(counts)
         return false
     bool same := true
-    for 0 <= nat index < len(counts)
+    for: 0 <= nat index < len(counts)
         same = same and steps.counts[index] == counts[index]
         same = same and steps.first[index] == correction(0.9, counts[index])
         same = same and steps.second[index] == correction(0.999, counts[index])
@@ -246,7 +246,7 @@ bool counted(Steps steps, int[] counts)
 bool same_lines(string[] left, string[] right)
     if len(left) != len(right)
         return false
-    for 0 <= nat index < len(left)
+    for: 0 <= nat index < len(left)
         if left[index] != right[index]
             return false
     return true
@@ -551,7 +551,7 @@ void | error step_checks(Placement device, string scratch)
 
     Model every := make_model(device)
     every_adam := try nn.Adam(&every, rate = 0.01)
-    for 0 <= nat step < 5
+    for: 0 <= nat step < 5
         backward(&every, 140 + int(step) * 10, device)
         try .every_adam.update()
     uniform = uniform and counted(try steps_of(try checkpoint_lines(&every, every_adam, "{scratch}/optimizer-steps.qnn")), [5, 5, 5])

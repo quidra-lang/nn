@@ -16,12 +16,12 @@ tensor<real32> pool_reference(tensor<real32> value)
     int count := shape[2] * shape[3]
     int total_count := batches * channels * count
     int[] flatten_indices := array(nat(total_count), fill = 0)
-    for 0 <= int index < total_count
+    for: 0 <= int index < total_count
         flatten_indices[index] = index
     tensor<real32> flattened := value.gather(flatten_indices, [batches, channels, count])
     tensor<real32> means := math.sum_last(flattened) / real_count(count)
     int[] indices := array(nat(batches * channels), fill = 0)
-    for 0 <= int index < batches * channels
+    for: 0 <= int index < batches * channels
         indices[index] = index * count
     return means.gather(indices, [batches, channels])
 

@@ -33,7 +33,7 @@ tensor<real32> logits_values()
 // One-hot rows scaled by a per-row weight, as in class-weighted training.
 tensor<real32> target_values()
     tensor<real32> target := tensor.zeros<real32>([nat(loss_rows()), nat(loss_classes())])
-    for 0 <= int row < loss_rows()
+    for: 0 <= int row < loss_rows()
         target[row, row % loss_classes()] = real32(1 + row % 2)
     return target
 
@@ -43,9 +43,9 @@ void | error loss_checks(int device)
     tensor<real32> probabilities := nn.softmax(place(logits, device)).cpu()
     bool normalized := true
     bool positive := true
-    for 0 <= int row < loss_rows()
+    for: 0 <= int row < loss_rows()
         real64 total := 0.0
-        for 0 <= int column < loss_classes()
+        for: 0 <= int column < loss_classes()
             real64 value := real64(probabilities[row, column].item())
             total = total + value
             positive = positive and value > 0.0
@@ -54,15 +54,15 @@ void | error loss_checks(int device)
 
     // loss = mean over rows of -sum(t * log softmax(z)), evaluated in float64.
     real64 expected := 0.0
-    for 0 <= int row < loss_rows()
+    for: 0 <= int row < loss_rows()
         real64 largest := real64(logits[row, 0].item())
-        for 1 <= int column < loss_classes()
+        for: 1 <= int column < loss_classes()
             largest = math.max(largest, real64(logits[row, column].item()))
         real64 denominator := 0.0
-        for 0 <= int column < loss_classes()
+        for: 0 <= int column < loss_classes()
             denominator = denominator + math.exp(real64(logits[row, column].item()) - largest)
         real64 log_denominator := try math.log(denominator)
-        for 0 <= int column < loss_classes()
+        for: 0 <= int column < loss_classes()
             real64 log_probability := real64(logits[row, column].item()) - largest - log_denominator
             expected = expected - real64(target[row, column].item()) * log_probability
     expected = expected / real_count(loss_rows())
@@ -76,11 +76,11 @@ void | error loss_checks(int device)
     loss.backward(&tracked)
     tensor<real32> gradient := tracked.grad.untrack().cpu()
     bool gradient_ok := true
-    for 0 <= int row < loss_rows()
+    for: 0 <= int row < loss_rows()
         real64 weight_sum := 0.0
-        for 0 <= int column < loss_classes()
+        for: 0 <= int column < loss_classes()
             weight_sum = weight_sum + real64(target[row, column].item())
-        for 0 <= int column < loss_classes()
+        for: 0 <= int column < loss_classes()
             real64 closed := (real64(probabilities[row, column].item()) * weight_sum - real64(target[row, column].item())) / real_count(loss_rows())
             gradient_ok = gradient_ok and math.abs(real64(gradient[row, column].item()) - closed) <= 0.000001
     report("cross entropy gradient", gradient_ok)

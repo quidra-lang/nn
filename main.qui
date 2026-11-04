@@ -75,7 +75,7 @@ void | error all_reduce_sum<T: floating>(
         return
 
     shape := values[0].shape()
-    for 0 <= nat index < len(values)
+    for: 0 <= nat index < len(values)
         if values[index].is_tracked()
             return error("nn.all_reduce_sum requires untracked tensors; reduce gradients after backward or call untrack() explicitly", code = "NN_TRACKED")
         if values[index].shape() != shape
@@ -91,7 +91,7 @@ void | error all_reduce_sum<T: floating>(
     // A collective can use its existing placement only when every tensor is
     // already on the requested device. Other placements keep the host path.
     if all_gpu_destinations
-        for 0 <= nat index < len(values)
+        for: 0 <= nat index < len(values)
             if values[index].device() != devices[index]
                 all_gpu_destinations = false
 
@@ -107,7 +107,7 @@ void | error all_reduce_sum<T: floating>(
             return error("nn.all_reduce_sum NCCL collective failed", code = "NN_COLLECTIVE")
 
     total := values[0].cpu()
-    for 1 <= nat index < len(values)
+    for: 1 <= nat index < len(values)
         total = total + values[index].cpu()
 
     // Build every destination first so an invalid GPU destination cannot leave
@@ -119,7 +119,7 @@ void | error all_reduce_sum<T: floating>(
         else
             reduced = reduced.append(total.gpu(nat(device)))
 
-    for 0 <= nat index < len(values)
+    for: 0 <= nat index < len(values)
         values[index] = reduced[index]
     return
 
@@ -140,55 +140,55 @@ private State<T>[] state_values<T: floating, M>(M model)
 private internal.StateEntrySchema[] model_schema<M>(M &model)
     internal.StateEntrySchema[] entries := []
     parameter_paths16 := reflect.each_paths<Parameter<real16>>(model)
-    for Parameter<real16> &value := &reflect.each<Parameter<real16>>(&model)[nat index]
+    for: Parameter<real16> &value := &reflect.each<Parameter<real16>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real16", path_initial = parameter_paths16[index], shape_initial = value.raw().shape()))
     parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model)
-    for Parameter<real16b> &value := &reflect.each<Parameter<real16b>>(&model)[nat index]
+    for: Parameter<real16b> &value := &reflect.each<Parameter<real16b>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real16b", path_initial = parameter_paths16b[index], shape_initial = value.raw().shape()))
     parameter_paths32 := reflect.each_paths<Parameter<real32>>(model)
-    for Parameter<real32> &value := &reflect.each<Parameter<real32>>(&model)[nat index]
+    for: Parameter<real32> &value := &reflect.each<Parameter<real32>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real32", path_initial = parameter_paths32[index], shape_initial = value.raw().shape()))
     parameter_paths64 := reflect.each_paths<Parameter<real64>>(model)
-    for Parameter<real64> &value := &reflect.each<Parameter<real64>>(&model)[nat index]
+    for: Parameter<real64> &value := &reflect.each<Parameter<real64>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "Parameter", dtype_initial = "real64", path_initial = parameter_paths64[index], shape_initial = value.raw().shape()))
     state_paths16 := reflect.each_paths<State<real16>>(model)
-    for State<real16> &value := &reflect.each<State<real16>>(&model)[nat index]
+    for: State<real16> &value := &reflect.each<State<real16>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real16", path_initial = state_paths16[index], shape_initial = value.raw().shape()))
     state_paths16b := reflect.each_paths<State<real16b>>(model)
-    for State<real16b> &value := &reflect.each<State<real16b>>(&model)[nat index]
+    for: State<real16b> &value := &reflect.each<State<real16b>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real16b", path_initial = state_paths16b[index], shape_initial = value.raw().shape()))
     state_paths32 := reflect.each_paths<State<real32>>(model)
-    for State<real32> &value := &reflect.each<State<real32>>(&model)[nat index]
+    for: State<real32> &value := &reflect.each<State<real32>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real32", path_initial = state_paths32[index], shape_initial = value.raw().shape()))
     state_paths64 := reflect.each_paths<State<real64>>(model)
-    for State<real64> &value := &reflect.each<State<real64>>(&model)[nat index]
+    for: State<real64> &value := &reflect.each<State<real64>>(&model)[index]
         entries = entries.append(internal.StateEntrySchema(kind_initial = "State", dtype_initial = "real64", path_initial = state_paths64[index], shape_initial = value.raw().shape()))
     return entries
 
 private void | error write_model_entries<M>(file.write &output, internal.StateChecksum &checksum, M &model)
     parameter_paths16 := reflect.each_paths<Parameter<real16>>(model)
-    for Parameter<real16> &value := &reflect.each<Parameter<real16>>(&model)[nat index]
+    for: Parameter<real16> &value := &reflect.each<Parameter<real16>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real16", parameter_paths16[index], value.raw())
     parameter_paths16b := reflect.each_paths<Parameter<real16b>>(model)
-    for Parameter<real16b> &value := &reflect.each<Parameter<real16b>>(&model)[nat index]
+    for: Parameter<real16b> &value := &reflect.each<Parameter<real16b>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real16b", parameter_paths16b[index], value.raw())
     parameter_paths32 := reflect.each_paths<Parameter<real32>>(model)
-    for Parameter<real32> &value := &reflect.each<Parameter<real32>>(&model)[nat index]
+    for: Parameter<real32> &value := &reflect.each<Parameter<real32>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real32", parameter_paths32[index], value.raw())
     parameter_paths64 := reflect.each_paths<Parameter<real64>>(model)
-    for Parameter<real64> &value := &reflect.each<Parameter<real64>>(&model)[nat index]
+    for: Parameter<real64> &value := &reflect.each<Parameter<real64>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "Parameter", "real64", parameter_paths64[index], value.raw())
     state_paths16 := reflect.each_paths<State<real16>>(model)
-    for State<real16> &value := &reflect.each<State<real16>>(&model)[nat index]
+    for: State<real16> &value := &reflect.each<State<real16>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "State", "real16", state_paths16[index], value.raw())
     state_paths16b := reflect.each_paths<State<real16b>>(model)
-    for State<real16b> &value := &reflect.each<State<real16b>>(&model)[nat index]
+    for: State<real16b> &value := &reflect.each<State<real16b>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "State", "real16b", state_paths16b[index], value.raw())
     state_paths32 := reflect.each_paths<State<real32>>(model)
-    for State<real32> &value := &reflect.each<State<real32>>(&model)[nat index]
+    for: State<real32> &value := &reflect.each<State<real32>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "State", "real32", state_paths32[index], value.raw())
     state_paths64 := reflect.each_paths<State<real64>>(model)
-    for State<real64> &value := &reflect.each<State<real64>>(&model)[nat index]
+    for: State<real64> &value := &reflect.each<State<real64>>(&model)[index]
         try internal.write_state_entry(&output, &checksum, "State", "real64", state_paths64[index], value.raw())
     return
 
@@ -257,21 +257,21 @@ void | error load<M>(M &model, string path)
         value := try internal.select_stored_tensor<real64>(stored.values64, entry_path)
         loaded_state64 = loaded_state64.append(value)
     // All fallible reads, comparisons and preparation precede this commit.
-    for Parameter<real16> &entry := &reflect.each<Parameter<real16>>(&model)[nat index]
+    for: Parameter<real16> &entry := &reflect.each<Parameter<real16>>(&model)[index]
         .entry.replace(loaded_parameter16[index])
-    for Parameter<real16b> &entry := &reflect.each<Parameter<real16b>>(&model)[nat index]
+    for: Parameter<real16b> &entry := &reflect.each<Parameter<real16b>>(&model)[index]
         .entry.replace(loaded_parameter16b[index])
-    for Parameter<real32> &entry := &reflect.each<Parameter<real32>>(&model)[nat index]
+    for: Parameter<real32> &entry := &reflect.each<Parameter<real32>>(&model)[index]
         .entry.replace(loaded_parameter32[index])
-    for Parameter<real64> &entry := &reflect.each<Parameter<real64>>(&model)[nat index]
+    for: Parameter<real64> &entry := &reflect.each<Parameter<real64>>(&model)[index]
         .entry.replace(loaded_parameter64[index])
-    for State<real16> &entry := &reflect.each<State<real16>>(&model)[nat index]
+    for: State<real16> &entry := &reflect.each<State<real16>>(&model)[index]
         .entry.replace(loaded_state16[index])
-    for State<real16b> &entry := &reflect.each<State<real16b>>(&model)[nat index]
+    for: State<real16b> &entry := &reflect.each<State<real16b>>(&model)[index]
         .entry.replace(loaded_state16b[index])
-    for State<real32> &entry := &reflect.each<State<real32>>(&model)[nat index]
+    for: State<real32> &entry := &reflect.each<State<real32>>(&model)[index]
         .entry.replace(loaded_state32[index])
-    for State<real64> &entry := &reflect.each<State<real64>>(&model)[nat index]
+    for: State<real64> &entry := &reflect.each<State<real64>>(&model)[index]
         .entry.replace(loaded_state64[index])
     return
 
@@ -282,7 +282,7 @@ tensor<real32> | error uniform_weights(int count, real64 bound, int seed)
         return error("nn.uniform_weights bound must be finite and nonnegative", code = "NN_ARGUMENT")
     values := tensor.zeros<real32>([nat(count)])
     generator := random.generator(seed = seed)
-    for 0 <= int index < count
+    for: 0 <= int index < count
         unit := .generator.real64()
         values[index] = real32((unit * 2.0 - 1.0) * bound)
     return values
@@ -301,7 +301,7 @@ tensor<real32> | error normal_weights(
         return values
 
     generator := random.generator(seed = seed)
-    for 0 <= int index < count
+    for: 0 <= int index < count
         // 1-u avoids the common zero endpoint; the guard also keeps
         // Box-Muller defined for any future generator endpoint policy.
         real64 radius_uniform := 1.0 - .generator.real64()
@@ -642,7 +642,7 @@ class Conv2D(
         // generic Core operations so autograd and device semantics remain
         // visible instead of being hidden behind a NN-specific Core primitive.
         patch_indices := array(nat(patch_count), fill = 0)
-        for 0 <= int flat_index < patch_count
+        for: 0 <= int flat_index < patch_count
             patch_column := flat_index % patch_width
             patch_row := flat_index / patch_width
 
@@ -699,7 +699,7 @@ class Conv2D(
                 // autograd-aware gather path only while the input is tracked.
                 input_count := batches * weight_channels * padded_height * padded_width
                 input_indices := array(nat(input_count), fill = 0)
-                for 0 <= int flat_index < input_count
+                for: 0 <= int flat_index < input_count
                     x := flat_index % padded_width
                     remaining := flat_index / padded_width
                     y := remaining % padded_height
@@ -748,7 +748,7 @@ class Conv2D(
                 weight_count := outputs_per_group * patch_width
                 weight_offset := output_channel_start * patch_width
                 weight_indices := array(nat(weight_count), fill = 0)
-                for 0 <= int index < weight_count
+                for: 0 <= int index < weight_count
                     weight_indices[index] = weight_offset + index
                 group_weight = parameter_weight.gather(
                     weight_indices, [outputs_per_group, patch_width]
@@ -782,7 +782,7 @@ class Conv2D(
 
         output_count := patch_rows * outputs_per_group
         output_indices := array(nat(output_count), fill = 0)
-        for 0 <= int flat_index < output_count
+        for: 0 <= int flat_index < output_count
             local_output_channel := flat_index % outputs_per_group
             patch_index := flat_index / outputs_per_group
             output_x := patch_index % output_width
@@ -937,7 +937,7 @@ class Conv2D(
         if border > 0
             input_count := batches * channels_in * height * width
             padded_indices := array(nat(input_count), fill = 0)
-            for 0 <= int flat_index < input_count
+            for: 0 <= int flat_index < input_count
                 x := flat_index % width
                 remaining := flat_index / width
                 y := remaining % height
@@ -968,7 +968,7 @@ class Conv2D(
             output_height,
             output_width
         )
-        for 1 <= int group_index < group_count
+        for: 1 <= int group_index < group_count
             output = output + convolve_group(
                 padded_input,
                 parameter_weight,
@@ -1385,16 +1385,16 @@ tensor<real32> max_pool2d(
         value.untrack().gather([0], [1]) * 0
     ).scatter([0], output_shape)
 
-    for 0 <= int channel < channels
-        for 0 <= int output_y < output_height
-            for 0 <= int output_x < output_width
+    for: 0 <= int channel < channels
+        for: 0 <= int output_y < output_height
+            for: 0 <= int output_x < output_width
                 start_y := output_y * stride - padding
                 start_x := output_x * stride - padding
                 valid_count := 0
-                for 0 <= int kernel_y < kernel
+                for: 0 <= int kernel_y < kernel
                     source_y := start_y + kernel_y
                     if source_y >= 0 and source_y < height
-                        for 0 <= int kernel_x < kernel
+                        for: 0 <= int kernel_x < kernel
                             source_x := start_x + kernel_x
                             if source_x >= 0 and source_x < width
                                 valid_count = valid_count + 1
@@ -1405,11 +1405,11 @@ tensor<real32> max_pool2d(
                     nat(batches * valid_count), fill = 0
                 )
                 cursor := 0
-                for 0 <= int batch < batches
-                    for 0 <= int kernel_y < kernel
+                for: 0 <= int batch < batches
+                    for: 0 <= int kernel_y < kernel
                         source_y := start_y + kernel_y
                         if source_y >= 0 and source_y < height
-                            for 0 <= int kernel_x < kernel
+                            for: 0 <= int kernel_x < kernel
                                 source_x := start_x + kernel_x
                                 if source_x >= 0 and source_x < width
                                     input_indices[cursor] = (
@@ -1425,13 +1425,13 @@ tensor<real32> max_pool2d(
                 // gather one representative value per batch for the pool output.
                 maxima := math.max_last(window)
                 maximum_indices := array(nat(batches), fill = 0)
-                for 0 <= int batch < batches
+                for: 0 <= int batch < batches
                     maximum_indices[batch] = batch * valid_count
                 pooled := maxima.gather(
                     maximum_indices, [batches]
                 )
                 output_indices := array(nat(batches), fill = 0)
-                for 0 <= int batch < batches
+                for: 0 <= int batch < batches
                     output_indices[batch] = (
                         ((batch * channels + channel) * output_height + output_y)
                         * output_width + output_x
@@ -1483,7 +1483,7 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
     // gather() works on logical tensor indices and preserves autograd, so it
     // makes a contiguous reduction view without cutting a tracked graph.
     flatten_indices := array(nat(total_count), fill = 0)
-    for 0 <= int index < total_count
+    for: 0 <= int index < total_count
         flatten_indices[index] = index
     flattened := value.gather(
         flatten_indices, [batches, channels, count]
@@ -1496,7 +1496,7 @@ tensor<real32> global_average_pool2d(tensor<real32> value)
     means := spatial_sums / spatial_count
     output_count := batches * channels
     indices := array(nat(output_count), fill = 0)
-    for 0 <= int index < output_count
+    for: 0 <= int index < output_count
         indices[index] = index * count
     return means.gather(indices, [batches, channels])
 
@@ -1532,7 +1532,7 @@ tensor<real32> local_response_normalization(
     plane_count := batches * height * width
     radius := size / 2
 
-    for 0 <= int channel < channels
+    for: 0 <= int channel < channels
         first_channel := channel - radius
         if first_channel < 0
             first_channel = 0
@@ -1541,7 +1541,7 @@ tensor<real32> local_response_normalization(
             last_channel = channels - 1
 
         current_indices := array(nat(plane_count), fill = 0)
-        for 0 <= int flat_index < plane_count
+        for: 0 <= int flat_index < plane_count
             x := flat_index % width
             remaining := flat_index / width
             y := remaining % height
@@ -1554,9 +1554,9 @@ tensor<real32> local_response_normalization(
         )
         square_sum := current.untrack() * 0
 
-        for first_channel <= int neighbor < last_channel + 1
+        for: first_channel <= int neighbor < last_channel + 1
             neighbor_indices := array(nat(plane_count), fill = 0)
-            for 0 <= int flat_index < plane_count
+            for: 0 <= int flat_index < plane_count
                 x := flat_index % width
                 remaining := flat_index / width
                 y := remaining % height
@@ -1695,7 +1695,7 @@ class BatchNorm(
             error("nn.BatchNorm running state dimensions do not match input features", code = "NN_SHAPE")
 
         inner := 1
-        for 2 <= int axis < rank
+        for: 2 <= int axis < rank
             if shape[axis] < 0
                 error("nn.BatchNorm received an invalid tensor shape", code = "NN_INTERNAL")
             if shape[axis] != 0 and inner > 9223372036854775807 / shape[axis]
@@ -1722,9 +1722,9 @@ class BatchNorm(
         next_running_mean := running_mean.raw() * 0
         next_running_variance := running_variance.raw() * 0
 
-        for 0 <= int feature < features
+        for: 0 <= int feature < features
             indices := array(nat(samples), fill = 0)
-            for 0 <= int sample < samples
+            for: 0 <= int sample < samples
                 outer := sample / inner
                 offset := sample % inner
                 indices[sample] = ((outer * features + feature) * inner) + offset
@@ -1839,7 +1839,7 @@ class Dropout(local real64 rate, local seed := 0, local inverted := true) | erro
 
         shape := int(value.shape())
         count := 1
-        for 0 <= nat axis < len(shape)
+        for: 0 <= nat axis < len(shape)
             if shape[axis] < 0
                 error("nn.Dropout received an invalid tensor shape", code = "NN_INTERNAL")
             if shape[axis] != 0 and count > 9223372036854775807 / shape[axis]
@@ -1850,7 +1850,7 @@ class Dropout(local real64 rate, local seed := 0, local inverted := true) | erro
         real64 scale := 1.0
         if inverted_scaling
             scale = 1.0 / (1.0 - drop_rate)
-        for 0 <= int index < count
+        for: 0 <= int index < count
             if (.rng.real64()) < drop_rate
                 mask[index] = real32(0)
             else
@@ -1985,7 +1985,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         devices16 = []
         next16 = []
         paths16 = reflect.each_paths<Parameter<real16>>(model)
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -1999,7 +1999,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         devices16b = []
         next16b = []
         paths16b = reflect.each_paths<Parameter<real16b>>(model)
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -2013,7 +2013,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         devices32 = []
         next32 = []
         paths32 = reflect.each_paths<Parameter<real32>>(model)
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -2027,7 +2027,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         devices64 = []
         next64 = []
         paths64 = reflect.each_paths<Parameter<real64>>(model)
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -2044,7 +2044,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
 
     private void | error check_binding(string operation)
         nat count16 := 0
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             if index >= len(shapes16)
                 return error("nn.SGD.{operation}: Parameter<real16> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2054,7 +2054,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         if count16 != len(shapes16)
             return error("nn.SGD.{operation}: Parameter<real16> count changed at index {count16}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count16b := 0
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             if index >= len(shapes16b)
                 return error("nn.SGD.{operation}: Parameter<real16b> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2064,7 +2064,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         if count16b != len(shapes16b)
             return error("nn.SGD.{operation}: Parameter<real16b> count changed at index {count16b}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count32 := 0
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             if index >= len(shapes32)
                 return error("nn.SGD.{operation}: Parameter<real32> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2074,7 +2074,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         if count32 != len(shapes32)
             return error("nn.SGD.{operation}: Parameter<real32> count changed at index {count32}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count64 := 0
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             if index >= len(shapes64)
                 return error("nn.SGD.{operation}: Parameter<real64> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2086,22 +2086,22 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
         return
 
     private void | error check_gradients(string operation)
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes16[index] or not same_device(gradient.device(), devices16[index])
                     return error("nn.SGD.{operation}: gradient of Parameter<real16> at index {index}, " + paths16[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes16b[index] or not same_device(gradient.device(), devices16b[index])
                     return error("nn.SGD.{operation}: gradient of Parameter<real16b> at index {index}, " + paths16b[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes32[index] or not same_device(gradient.device(), devices32[index])
                     return error("nn.SGD.{operation}: gradient of Parameter<real32> at index {index}, " + paths32[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes64[index] or not same_device(gradient.device(), devices64[index])
@@ -2171,7 +2171,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
     void | error .update()
         try check_binding("update")
         try check_gradients("update")
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             if parameter.has_grad()
                 try .compute16(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0
@@ -2181,7 +2181,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 next16[index] = old
                 .parameter.replace(next)
                 .parameter.clear_grad()
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             if parameter.has_grad()
                 try .compute16b(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0
@@ -2191,7 +2191,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 next16b[index] = old
                 .parameter.replace(next)
                 .parameter.clear_grad()
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             if parameter.has_grad()
                 try .compute32(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0
@@ -2201,7 +2201,7 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
                 next32[index] = old
                 .parameter.replace(next)
                 .parameter.clear_grad()
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             if parameter.has_grad()
                 try .compute64(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0
@@ -2294,7 +2294,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         first16 = []
         second16 = []
         paths16 = reflect.each_paths<Parameter<real16>>(model)
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -2318,7 +2318,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         first16b = []
         second16b = []
         paths16b = reflect.each_paths<Parameter<real16b>>(model)
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -2342,7 +2342,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         first32 = []
         second32 = []
         paths32 = reflect.each_paths<Parameter<real32>>(model)
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -2366,7 +2366,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         first64 = []
         second64 = []
         paths64 = reflect.each_paths<Parameter<real64>>(model)
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             raw := parameter.raw()
             shape := raw.shape()
             device := int64(raw.device())
@@ -2388,7 +2388,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
 
     private void | error check_binding(string operation)
         nat count16 := 0
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             if index >= len(shapes16)
                 return error("nn.Adam.{operation}: Parameter<real16> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2398,7 +2398,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         if count16 != len(shapes16)
             return error("nn.Adam.{operation}: Parameter<real16> count changed at index {count16}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count16b := 0
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             if index >= len(shapes16b)
                 return error("nn.Adam.{operation}: Parameter<real16b> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2408,7 +2408,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         if count16b != len(shapes16b)
             return error("nn.Adam.{operation}: Parameter<real16b> count changed at index {count16b}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count32 := 0
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             if index >= len(shapes32)
                 return error("nn.Adam.{operation}: Parameter<real32> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2418,7 +2418,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         if count32 != len(shapes32)
             return error("nn.Adam.{operation}: Parameter<real32> count changed at index {count32}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count64 := 0
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             if index >= len(shapes64)
                 return error("nn.Adam.{operation}: Parameter<real64> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
@@ -2430,22 +2430,22 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         return
 
     private void | error check_gradients(string operation)
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes16[index] or not same_device(gradient.device(), devices16[index])
                     return error("nn.Adam.{operation}: gradient of Parameter<real16> at index {index}, " + paths16[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes16b[index] or not same_device(gradient.device(), devices16b[index])
                     return error("nn.Adam.{operation}: gradient of Parameter<real16b> at index {index}, " + paths16b[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes32[index] or not same_device(gradient.device(), devices32[index])
                     return error("nn.Adam.{operation}: gradient of Parameter<real32> at index {index}, " + paths32[index] + ", has a different shape or device; nothing changed", code = "NN_GRADIENT")
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             if parameter.has_grad()
                 gradient := parameter.gradient()
                 if gradient.shape() != shapes64[index] or not same_device(gradient.device(), devices64[index])
@@ -2475,19 +2475,19 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         try internal.write_checked_line(&output, &checksum, second_decay.string())
         try internal.write_checked_line(&output, &checksum, stability.string())
         try internal.write_checked_line(&output, &checksum, (len(paths16) + len(paths16b) + len(paths32) + len(paths64)).string())
-        for entry_path := paths16[nat index]
+        for: entry_path := paths16[index]
             try internal.write_adam_step(&output, &checksum, entry_path, steps16[index], first_corrections16[index], second_corrections16[index])
             try internal.write_state_entry(&output, &checksum, "AdamFirst", "real32", entry_path, first16[index])
             try internal.write_state_entry(&output, &checksum, "AdamSecond", "real32", entry_path, second16[index])
-        for entry_path := paths16b[nat index]
+        for: entry_path := paths16b[index]
             try internal.write_adam_step(&output, &checksum, entry_path, steps16b[index], first_corrections16b[index], second_corrections16b[index])
             try internal.write_state_entry(&output, &checksum, "AdamFirst", "real32", entry_path, first16b[index])
             try internal.write_state_entry(&output, &checksum, "AdamSecond", "real32", entry_path, second16b[index])
-        for entry_path := paths32[nat index]
+        for: entry_path := paths32[index]
             try internal.write_adam_step(&output, &checksum, entry_path, steps32[index], first_corrections32[index], second_corrections32[index])
             try internal.write_state_entry(&output, &checksum, "AdamFirst", "real32", entry_path, first32[index])
             try internal.write_state_entry(&output, &checksum, "AdamSecond", "real32", entry_path, second32[index])
-        for entry_path := paths64[nat index]
+        for: entry_path := paths64[index]
             try internal.write_adam_step(&output, &checksum, entry_path, steps64[index], first_corrections64[index], second_corrections64[index])
             try internal.write_state_entry(&output, &checksum, "AdamFirst", "real64", entry_path, first64[index])
             try internal.write_state_entry(&output, &checksum, "AdamSecond", "real64", entry_path, second64[index])
@@ -2498,19 +2498,19 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         try check_model("load", &model_argument)
         expected := model_schema(&model_argument)
         try internal.validate_model_schema(expected, "nn.Adam.load")
-        for entry_path := paths16[nat index]
+        for: entry_path := paths16[index]
             expected = expected.append(internal.adam_step_schema(internal.StoredAdamStep(path_initial = entry_path, step_initial = internal.adam_step(0, 0.0, 0.0))))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamFirst", dtype_initial = "real32", path_initial = entry_path, shape_initial = shapes16[index]), "first"))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamSecond", dtype_initial = "real32", path_initial = entry_path, shape_initial = shapes16[index]), "second"))
-        for entry_path := paths16b[nat index]
+        for: entry_path := paths16b[index]
             expected = expected.append(internal.adam_step_schema(internal.StoredAdamStep(path_initial = entry_path, step_initial = internal.adam_step(0, 0.0, 0.0))))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamFirst", dtype_initial = "real32", path_initial = entry_path, shape_initial = shapes16b[index]), "first"))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamSecond", dtype_initial = "real32", path_initial = entry_path, shape_initial = shapes16b[index]), "second"))
-        for entry_path := paths32[nat index]
+        for: entry_path := paths32[index]
             expected = expected.append(internal.adam_step_schema(internal.StoredAdamStep(path_initial = entry_path, step_initial = internal.adam_step(0, 0.0, 0.0))))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamFirst", dtype_initial = "real32", path_initial = entry_path, shape_initial = shapes32[index]), "first"))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamSecond", dtype_initial = "real32", path_initial = entry_path, shape_initial = shapes32[index]), "second"))
-        for entry_path := paths64[nat index]
+        for: entry_path := paths64[index]
             expected = expected.append(internal.adam_step_schema(internal.StoredAdamStep(path_initial = entry_path, step_initial = internal.adam_step(0, 0.0, 0.0))))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamFirst", dtype_initial = "real64", path_initial = entry_path, shape_initial = shapes64[index]), "first"))
             expected = expected.append(internal.adam_state_schema(internal.StateEntrySchema(kind_initial = "AdamSecond", dtype_initial = "real64", path_initial = entry_path, shape_initial = shapes64[index]), "second"))
@@ -2555,7 +2555,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         internal.StoredAdamStep[] stored_steps := []
         stored_first := internal.StateTable()
         stored_second := internal.StateTable()
-        for 0 <= int index < slot_count
+        for: 0 <= int index < slot_count
             internal.StoredAdamStep step
             if version == "5"
                 step = try internal.read_stored_adam_step(&input, &checksum)
@@ -2594,7 +2594,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             // Reconstruct only after the schema and hyperparameters are valid.
             loaded_first_correction = 1.0 - math.pow(loaded_first_decay, real64(loaded_iteration))
             loaded_second_correction = 1.0 - math.pow(loaded_second_decay, real64(loaded_iteration))
-            for 0 <= nat index < len(stored_steps)
+            for: 0 <= nat index < len(stored_steps)
                 stored_steps[index].step = internal.adam_step(loaded_iteration, loaded_first_correction, loaded_second_correction)
         for step := stored_steps[]
             try internal.check_adam_step(step.step.count, step.step.first_correction, step.step.second_correction)
@@ -2643,7 +2643,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         real64[] loaded_second_corrections16 := []
         tensor<real32>[] loaded_first16 := []
         tensor<real32>[] loaded_second16 := []
-        for entry_path := parameter_paths16[nat index]
+        for: entry_path := parameter_paths16[index]
             step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps16 = loaded_steps16.append(step.count)
             loaded_first_corrections16 = loaded_first_corrections16.append(step.first_correction)
@@ -2664,7 +2664,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         real64[] loaded_second_corrections16b := []
         tensor<real32>[] loaded_first16b := []
         tensor<real32>[] loaded_second16b := []
-        for entry_path := parameter_paths16b[nat index]
+        for: entry_path := parameter_paths16b[index]
             step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps16b = loaded_steps16b.append(step.count)
             loaded_first_corrections16b = loaded_first_corrections16b.append(step.first_correction)
@@ -2685,7 +2685,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         real64[] loaded_second_corrections32 := []
         tensor<real32>[] loaded_first32 := []
         tensor<real32>[] loaded_second32 := []
-        for entry_path := parameter_paths32[nat index]
+        for: entry_path := parameter_paths32[index]
             step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps32 = loaded_steps32.append(step.count)
             loaded_first_corrections32 = loaded_first_corrections32.append(step.first_correction)
@@ -2706,7 +2706,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         real64[] loaded_second_corrections64 := []
         tensor<real64>[] loaded_first64 := []
         tensor<real64>[] loaded_second64 := []
-        for entry_path := parameter_paths64[nat index]
+        for: entry_path := parameter_paths64[index]
             step := try internal.select_adam_step(stored_steps, entry_path)
             loaded_steps64 = loaded_steps64.append(step.count)
             loaded_first_corrections64 = loaded_first_corrections64.append(step.first_correction)
@@ -2723,21 +2723,21 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             loaded_first64 = loaded_first64.append(first)
             loaded_second64 = loaded_second64.append(second)
         // The validated temporaries are complete before any model or optimizer write.
-        for Parameter<real16> &entry := &reflect.each<Parameter<real16>>(&model_argument)[nat index]
+        for: Parameter<real16> &entry := &reflect.each<Parameter<real16>>(&model_argument)[index]
             .entry.replace(loaded_parameter16[index])
-        for Parameter<real16b> &entry := &reflect.each<Parameter<real16b>>(&model_argument)[nat index]
+        for: Parameter<real16b> &entry := &reflect.each<Parameter<real16b>>(&model_argument)[index]
             .entry.replace(loaded_parameter16b[index])
-        for Parameter<real32> &entry := &reflect.each<Parameter<real32>>(&model_argument)[nat index]
+        for: Parameter<real32> &entry := &reflect.each<Parameter<real32>>(&model_argument)[index]
             .entry.replace(loaded_parameter32[index])
-        for Parameter<real64> &entry := &reflect.each<Parameter<real64>>(&model_argument)[nat index]
+        for: Parameter<real64> &entry := &reflect.each<Parameter<real64>>(&model_argument)[index]
             .entry.replace(loaded_parameter64[index])
-        for State<real16> &entry := &reflect.each<State<real16>>(&model_argument)[nat index]
+        for: State<real16> &entry := &reflect.each<State<real16>>(&model_argument)[index]
             .entry.replace(loaded_state16[index])
-        for State<real16b> &entry := &reflect.each<State<real16b>>(&model_argument)[nat index]
+        for: State<real16b> &entry := &reflect.each<State<real16b>>(&model_argument)[index]
             .entry.replace(loaded_state16b[index])
-        for State<real32> &entry := &reflect.each<State<real32>>(&model_argument)[nat index]
+        for: State<real32> &entry := &reflect.each<State<real32>>(&model_argument)[index]
             .entry.replace(loaded_state32[index])
-        for State<real64> &entry := &reflect.each<State<real64>>(&model_argument)[nat index]
+        for: State<real64> &entry := &reflect.each<State<real64>>(&model_argument)[index]
             .entry.replace(loaded_state64[index])
         steps16 = loaded_steps16
         first_corrections16 = loaded_first_corrections16
@@ -2768,7 +2768,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
     // Equal step counts share coefficients only when their stored correction
     // state is equal as well. Loaded checkpoints may carry different state.
     private nat .coefficients(nat count, real64 first, real64 second)
-        for 0 <= nat index < coefficient_used
+        for: 0 <= nat index < coefficient_used
             if coefficient_steps[index] == count and coefficient_first[index] == first and coefficient_second[index] == second
                 return index
         index := coefficient_used
@@ -2998,28 +2998,28 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         try check_binding("update")
         try check_gradients("update")
         coefficient_used = 0
-        for Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[nat index]
+        for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
             if parameter.has_grad()
                 try .compute16(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0
                     return error("nn.Adam.update failed during computation at " + paths16[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 .commit16(index, &parameter)
                 .parameter.clear_grad()
-        for Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[nat index]
+        for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
             if parameter.has_grad()
                 try .compute16b(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0
                     return error("nn.Adam.update failed during computation at " + paths16b[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 .commit16b(index, &parameter)
                 .parameter.clear_grad()
-        for Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[nat index]
+        for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
             if parameter.has_grad()
                 try .compute32(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0
                     return error("nn.Adam.update failed during computation at " + paths32[index] + "; model and optimizer state are unspecified; reload a checkpoint and create a new optimizer", code = "NN_UPDATE_FAILED")
                 .commit32(index, &parameter)
                 .parameter.clear_grad()
-        for Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[nat index]
+        for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
             if parameter.has_grad()
                 try .compute64(index, parameter.raw(), parameter.gradient().untrack())
                 if native.optimizer_update_completed() != 0

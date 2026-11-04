@@ -41,7 +41,7 @@ void train16(int64 device, string checkpoint)
     if device >= 0
         samples = samples.gpu(nat(device))
         targets = targets.gpu(nat(device))
-    for 0 <= nat iteration < 8
+    for: 0 <= nat iteration < 8
         // Each forward casts the current original, including the last update.
         tensor<real16> residual := .model.forward(samples) - targets
         tensor<real16> loss := math.sum(residual * residual)
@@ -60,7 +60,7 @@ void train16b(int64 device, string checkpoint)
     if device >= 0
         samples = samples.gpu(nat(device))
         targets = targets.gpu(nat(device))
-    for 0 <= nat iteration < 8
+    for: 0 <= nat iteration < 8
         tensor<real16b> residual := .model.forward(samples) - targets
         tensor<real16b> loss := math.sum(residual * residual)
         loss.backward(&model)

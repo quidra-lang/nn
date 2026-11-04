@@ -297,7 +297,7 @@ int | error run()
     activation_input[0, 5] = real32(7)
     bool activation_values_match := true
     bool activation_gradients_match := true
-    for 0 <= nat activation < 2
+    for: 0 <= nat activation < 2
         tensor<real32> cpu_activation_input := activation_input.track()
         tensor<real32> gpu_activation_input := activation_input.gpu(0).track()
         tensor<real32> cpu_activation_output
@@ -314,7 +314,7 @@ int | error run()
         tensor<real32> gpu_activation_values := gpu_activation_output.untrack().cpu()
         tensor<real32> cpu_activation_gradient := cpu_activation_input.grad.untrack()
         tensor<real32> gpu_activation_gradient := gpu_activation_input.grad.untrack().cpu()
-        for 0 <= nat column < 6
+        for: 0 <= nat column < 6
             activation_values_match = activation_values_match and near(cpu_activation_values[0, column].item(), gpu_activation_values[0, column].item())
             activation_gradients_match = activation_gradients_match and near(cpu_activation_gradient[0, column].item(), gpu_activation_gradient[0, column].item())
     println(activation_values_match)

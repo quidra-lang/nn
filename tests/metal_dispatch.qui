@@ -46,7 +46,7 @@ Kinds kinds()
 // Dispatch counts of every kind, 1..14.
 int[] counts()
     int[] values := []
-    for 1 <= nat kind < 15
+    for: 1 <= nat kind < 15
         values = values.append(int(metal_dispatches(int32(kind))))
     return values
 
@@ -56,9 +56,9 @@ int delta(int[] before, int[] after, int kind)
 
 // True when exactly the listed kinds ran, each `expected[i]` times.
 bool exactly(int[] before, int[] after, int[] listed, int[] expected)
-    for 1 <= nat kind < 15
+    for: 1 <= nat kind < 15
         int wanted := 0
-        for 0 <= nat index < len(listed)
+        for: 0 <= nat index < len(listed)
             if listed[index] == int(kind)
                 wanted = expected[index]
         if delta(before, after, int(kind)) != wanted
@@ -209,7 +209,7 @@ void | error adam_checks(int device)
     fc_optimizer := try nn.Adam(&linear, rate = 0.01)
     tensor<real32> samples := uniform([4, 6], 18, device)
     tensor<real32> targets := tensor.zeros<real32>([4, 2])
-    for 0 <= nat row < 4
+    for: 0 <= nat row < 4
         targets[row, row % 2] = real32(1)
     tensor<real32> fc_loss := nn.cross_entropy(.linear.dense.forward(samples.track()), targets.gpu(nat(device)))
     fc_loss.backward(&linear)

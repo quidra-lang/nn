@@ -51,7 +51,7 @@ tensor<real32> activation_inputs(int random_count, bool non_finite)
     tensor<real32> random_values := nn.uniform_weights(random_count, 9.0, 3)
     int count := int(len(special)) + random_count
     tensor<real32> values := tensor.zeros<real32>([nat(count)])
-    for 0 <= int index < count
+    for: 0 <= int index < count
         if index < int(len(special))
             values[index] = special[index]
         else
@@ -64,7 +64,7 @@ bool identical(tensor<real32> left, tensor<real32> right)
     tensor<real32> b := right.untrack().cpu()
     if a.shape() != b.shape()
         return false
-    for 0 <= nat index < a.shape()[0]
+    for: 0 <= nat index < a.shape()[0]
         real32 x := a[index].item()
         real32 y := b[index].item()
         if not (x != x and y != y) and x != y
@@ -74,7 +74,7 @@ bool identical(tensor<real32> left, tensor<real32> right)
 bool close64(tensor<real32> actual, tensor<real64> expected, real64 tolerance)
     tensor<real32> a := actual.untrack().cpu()
     tensor<real64> b := expected.untrack()
-    for 0 <= nat index < a.shape()[0]
+    for: 0 <= nat index < a.shape()[0]
         real64 x := real64(a[index].item())
         real64 y := b[index].item()
         if math.abs(x - y) > tolerance * (1.0 + math.abs(y))
@@ -86,7 +86,7 @@ real64 max_error64(tensor<real32> actual, tensor<real64> expected)
     tensor<real32> a := actual.untrack().cpu()
     tensor<real64> b := expected.untrack()
     real64 worst := 0.0
-    for 0 <= nat index < a.shape()[0]
+    for: 0 <= nat index < a.shape()[0]
         real64 x := real64(a[index].item())
         real64 y := b[index].item()
         worst = math.max(worst, math.abs(x - y) / (1.0 + math.abs(y)))
@@ -96,7 +96,7 @@ tensor<real64> widen(tensor<real32> value)
     tensor<real32> source := value.untrack().cpu()
     int count := int(source.shape()[0])
     tensor<real64> result := tensor.zeros<real64>([nat(count)])
-    for 0 <= int index < count
+    for: 0 <= int index < count
         result[index] = real64(source[index].item())
     return result
 
@@ -209,7 +209,7 @@ void activation_checks()
 
 real64 power2(int exponent)
     real64 result := 1.0
-    for 0 <= int step < math.abs(exponent)
+    for: 0 <= int step < math.abs(exponent)
         if exponent > 0
             result = result * 2.0
         else
@@ -238,19 +238,19 @@ real32[] dense_gelu_values()
         values = values.append(-value)
     real64 boundary_start := real64(real32(7.32))
     real64 boundary_ulp := power2(-21)
-    for 0 <= nat index < 104858
+    for: 0 <= nat index < 104858
         real32 value := real32(boundary_start + real_index(index) * boundary_ulp)
         values = values.append(value)
         values = values.append(-value)
-    for 0 <= nat index < 9503
+    for: 0 <= nat index < 9503
         real32 value := real32(5.0 + real_index(index) / 4096.0)
         values = values.append(value)
         values = values.append(-value)
-    for 0 <= nat index < 6145
+    for: 0 <= nat index < 6145
         values = values.append(real32(-12.0 + real_index(index) / 256.0))
-    for -149 <= int exponent < 43
+    for: -149 <= int exponent < 43
         real64 scale := power2(exponent)
-        for 0 <= nat step < 32
+        for: 0 <= nat step < 32
             real32 value := real32(scale * (1.0 + real_index(step) / 32.0))
             if real64(value) <= 6981463048192.0
                 values = values.append(value)
@@ -314,7 +314,7 @@ void dense_gelu_checks()
     real32[] values := dense_gelu_values()
     int count := int(len(values))
     tensor<real32> base := tensor.zeros<real32>([nat(count)])
-    for 0 <= int index < count
+    for: 0 <= int index < count
         base[index] = values[index]
     tensor<real32> ones := tensor.ones<real32>([nat(count)])
     SecondOrder fused := second_order(base, ones, ones, 2, true)
@@ -330,7 +330,7 @@ void dense_gelu_checks()
     bool finite := true
     bool overflow_range := true
     int overflow_count := 0
-    for 0 <= int index < count
+    for: 0 <= int index < count
         real32 x := values[index]
         real64 first := real64(fused_first[index].item())
         real64 second := real64(fused_second[index].item())

@@ -41,12 +41,12 @@ void | error bench(string name, int batches, int channels_in, int channels_out, 
     real32 ignored := .layer.convolution.forward(input).cpu()[0, 0, 0, 0].item()
 
     time.Instant start := time.now()
-    for 0 <= int rep < reps
+    for: 0 <= int rep < reps
         tensor<real32> output := .layer.convolution.forward(input)
     real64 conv_forward := milliseconds(start, reps)
 
     start = time.now()
-    for 0 <= int rep < reps
+    for: 0 <= int rep < reps
         tensor<real32> tracked := input.track()
         tensor<real32> loss := math.mean(nn.global_average_pool2d(.layer.convolution.forward(tracked)))
         nn.clear_grad(&layer)
@@ -55,12 +55,12 @@ void | error bench(string name, int batches, int channels_in, int channels_out, 
 
     tensor<real32> activations := .layer.convolution.forward(input)
     start = time.now()
-    for 0 <= int rep < reps
+    for: 0 <= int rep < reps
         tensor<real32> output := nn.gelu(activations)
     real64 gelu_forward := milliseconds(start, reps)
 
     start = time.now()
-    for 0 <= int rep < reps
+    for: 0 <= int rep < reps
         tensor<real32> tracked := activations.track()
         math.mean(nn.global_average_pool2d(nn.gelu(tracked))).backward(&tracked)
     real64 gelu_both := milliseconds(start, reps)
@@ -76,13 +76,13 @@ real64 loss_time(int rows, int device, int reps)
     tensor<real32> samples := nn.uniform_weights(rows * 2, 2.0, 7)
     tensor<real32> logits := place(samples.reshape([nat(rows), 2]), device)
     tensor<real32> target_values := tensor.zeros<real32>([nat(rows), 2])
-    for 0 <= int row < rows
+    for: 0 <= int row < rows
         target_values[row, row % 2] = real32(1)
     tensor<real32> targets := place(target_values, device)
     tensor<real32> warm := logits.track()
     nn.cross_entropy(warm, targets).backward(&warm)
     time.Instant start := time.now()
-    for 0 <= int rep < reps
+    for: 0 <= int rep < reps
         tensor<real32> tracked := logits.track()
         nn.cross_entropy(tracked, targets).backward(&tracked)
     return milliseconds(start, reps)
