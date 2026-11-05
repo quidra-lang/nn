@@ -65,7 +65,7 @@ void | error bench(string name, int batches, int channels_in, int channels_out, 
         math.mean(nn.global_average_pool2d(nn.gelu(tracked))).backward(&tracked)
     real64 gelu_both := milliseconds(start, reps)
 
-    println("{name} {batches}x{channels_in}x{height}x{width} conv{channels_in}->{channels_out}/s{stride}  conv2d forward {conv_forward:frac=2} ms  conv2d forward+backward {conv_both:frac=2} ms  gelu forward {gelu_forward:frac=2} ms  gelu forward+backward {gelu_both:frac=2} ms")
+    println("{name} {batches}x{channels_in}x{height}x{width} conv{channels_in}->{channels_out}/s{stride}  conv2d forward {conv_forward:.2} ms  conv2d forward+backward {conv_both:.2} ms  gelu forward {gelu_forward:.2} ms  gelu forward+backward {gelu_both:.2} ms")
     return
 
 // nn.cross_entropy forward+backward on few and many rows. A last-axis
@@ -93,7 +93,7 @@ void loss_bench(int device, int reps)
     real64 few_time := loss_time(few, device, reps)
     real64 many_time := loss_time(many, device, reps)
     real64 per_row := (many_time - few_time) * 1000.0 / real_count(many - few)
-    println("loss cross_entropy forward+backward {few} rows {few_time:frac=2} ms  {many} rows {many_time:frac=2} ms  per row {per_row:frac=2} us")
+    println("loss cross_entropy forward+backward {few} rows {few_time:.2} ms  {many} rows {many_time:.2} ms  per row {per_row:.2} us")
 
 string[] selected := args.sizes.split(",")
 for size := selected[]
