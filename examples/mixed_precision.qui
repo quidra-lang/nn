@@ -1,7 +1,6 @@
 // Explicit low-precision training: real32 Parameters are the weight originals.
 // Requires differentiable floating tensor casts.
 import nn
-import math
 
 cli args
     bool bfloat = flag()
@@ -44,7 +43,7 @@ void train16(int64 device, string checkpoint)
     for: 0 <= nat iteration < 8
         // Each forward casts the current original, including the last update.
         tensor<real16> residual := .model.forward(samples) - targets
-        tensor<real16> loss := math.sum(residual * residual)
+        tensor<real16> loss := (residual * residual).sum()
         loss.backward(&model)
         // Cast backward widens contributions; this Parameter accumulates in real32.
         .optimizer.update()
@@ -62,7 +61,7 @@ void train16b(int64 device, string checkpoint)
         targets = targets.gpu(nat(device))
     for: 0 <= nat iteration < 8
         tensor<real16b> residual := .model.forward(samples) - targets
-        tensor<real16b> loss := math.sum(residual * residual)
+        tensor<real16b> loss := (residual * residual).sum()
         loss.backward(&model)
         .optimizer.update()
     println(model.weight.raw().cpu()[0].item())

@@ -101,8 +101,7 @@ tensor<real32> mean_all(tensor<real32> value)
     if count == 0
         error("nn internal mean is undefined for an empty tensor", code = "NN_SHAPE")
 
-    // Numerical reduction semantics belong to Math; NN owns only the
-    // surrounding model/loss meaning.
+    // Preserve Math's native whole-tensor path for training workloads.
     return math.mean(value)
 
 class StateChecksum()
