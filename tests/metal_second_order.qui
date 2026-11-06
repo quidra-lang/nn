@@ -133,8 +133,8 @@ tensor<real32> dense_gelu_values()
             if real64(value) <= 6981463048192.0
                 values = values.append(value)
                 values = values.append(-value)
-    tensor<real32> result := tensor.zeros<real32>([len(values)])
-    for: 0 <= nat index < len(values)
+    tensor<real32> result := tensor.zeros<real32>([values.len()])
+    for: 0 <= nat index < values.len()
         result[index] = values[index]
     return result
 

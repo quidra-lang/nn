@@ -49,13 +49,13 @@ tensor<real32> activation_inputs(int random_count, bool non_finite)
         special = special.append(real32(-1) / zero)
         special = special.append(zero / zero)
     tensor<real32> random_values := nn.uniform_weights(random_count, 9.0, 3)
-    int count := int(len(special)) + random_count
+    int count := int(special.len()) + random_count
     tensor<real32> values := tensor.zeros<real32>([nat(count)])
     for: 0 <= int index < count
-        if index < int(len(special))
+        if index < int(special.len())
             values[index] = special[index]
         else
-            values[index] = random_values[index - int(len(special))].item()
+            values[index] = random_values[index - int(special.len())].item()
     return values
 
 // Elementwise equality for valid real values. NaN is rejected before this check.
@@ -312,7 +312,7 @@ bool all_nan(tensor<real32> value)
 // dense inputs, against the composed graph and the float64 derivatives.
 void dense_gelu_checks()
     real32[] values := dense_gelu_values()
-    int count := int(len(values))
+    int count := int(values.len())
     tensor<real32> base := tensor.zeros<real32>([nat(count)])
     for: 0 <= int index < count
         base[index] = values[index]

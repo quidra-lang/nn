@@ -58,7 +58,7 @@ int delta(int[] before, int[] after, int kind)
 bool exactly(int[] before, int[] after, int[] listed, int[] expected)
     for: 1 <= nat kind < 15
         int wanted := 0
-        for: 0 <= nat index < len(listed)
+        for: 0 <= nat index < listed.len()
             if listed[index] == int(kind)
                 wanted = expected[index]
         if delta(before, after, int(kind)) != wanted

@@ -43,7 +43,7 @@ int | error run()
     tensor<real32> activated := nn.relu(.conv.forward(image))
     nat[] activated_shape := activated.shape()
     println(
-        len(activated_shape) == 4
+        activated_shape.len() == 4
         and activated_shape[0] == 1
         and activated_shape[1] == 1
         and activated_shape[2] == 2
@@ -54,7 +54,7 @@ int | error run()
     tensor<real32> normalized := .norm.infer(activated)
     nat[] normalized_shape := normalized.shape()
     println(
-        len(normalized_shape) == 4
+        normalized_shape.len() == 4
         and normalized_shape[0] == 1
         and normalized_shape[1] == 1
         and normalized_shape[2] == 2

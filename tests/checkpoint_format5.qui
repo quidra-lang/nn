@@ -29,7 +29,7 @@ class Leaf<T: floating> instance_self(local int64 device)
         tensor<T> flat := weight.gradient().cpu().reshape([8])
         string result := ""
         for: 0 <= nat index < 8
-            result = result + flat[index].item().string() + ";"
+            result = result + string(flat[index].item()) + ";"
         return result
 
 class FormatModel(local int64 device, local bool host64)
@@ -84,7 +84,7 @@ else
             error problem
                 print(problem.code + NL)
                 print(problem.message + NL)
-        print("gradients unchanged " + (gradients == model.gradient_text()).string() + NL)
+        print("gradients unchanged " + string(gradients == model.gradient_text()) + NL)
     else
         if args.checkpoint
             nn.resume(&model, &optimizer, args.source)

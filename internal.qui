@@ -120,7 +120,7 @@ class StateChecksum()
         second = (second + first) % 65521
 
     string value()
-        return second.string() + ":" + first.string()
+        return string(second) + ":" + string(first)
 
 void | error write_checked_line(
     file.write &output,
@@ -152,7 +152,7 @@ string | error read_checked_line(
     return text
 
 int | error parse_nonnegative_state_int(string text, string context)
-    int | error parsed := int.parse(text)
+    int | error parsed := int(text)
     value := 0
     match parsed
         int number
@@ -178,7 +178,7 @@ void | error write_state_entry<T: floating>(
     try write_checked_line(&output, &checksum, kind)
     try write_checked_line(&output, &checksum, dtype)
     try write_checked_line(&output, &checksum, path)
-    try write_checked_line(&output, &checksum, len(shape).string())
+    try write_checked_line(&output, &checksum, string(shape.len()))
 
     count := 1
     for dimension := shape[]
@@ -187,16 +187,16 @@ void | error write_state_entry<T: floating>(
         extent := int(dimension)
         if extent > 0 and count > 9223372036854775807 / extent
             return error("nn.save tensor element count overflows int", code = "NN_SIZE")
-        try write_checked_line(&output, &checksum, dimension.string())
+        try write_checked_line(&output, &checksum, string(dimension))
         count = count * extent
 
     flat := raw.contiguous().reshape([nat(count)])
-    try write_checked_line(&output, &checksum, count.string())
+    try write_checked_line(&output, &checksum, string(count))
     for: 0 <= int index < count
         try write_checked_line(
             &output,
             &checksum,
-            flat[index].item().string()
+            string(flat[index].item())
         )
     return
 
@@ -243,9 +243,9 @@ void | error write_adam_step(
 )
     try write_checked_line(&output, &checksum, "AdamStep")
     try write_checked_line(&output, &checksum, path)
-    try write_checked_line(&output, &checksum, count.string())
-    try write_checked_line(&output, &checksum, first_correction.string())
-    try write_checked_line(&output, &checksum, second_correction.string())
+    try write_checked_line(&output, &checksum, string(count))
+    try write_checked_line(&output, &checksum, string(first_correction))
+    try write_checked_line(&output, &checksum, string(second_correction))
     return
 
 void | error finish_state_write(
@@ -301,7 +301,7 @@ string shape_text(nat[] shape)
     for: dimension := shape[index]
         if index != 0
             result = result + ", "
-        result = result + dimension.string()
+        result = result + string(dimension)
     return result + "]"
 
 string checkpoint_display_path(string path);
@@ -310,13 +310,13 @@ string schema_text(StateEntrySchema entry)
     return checkpoint_display_path(entry.path) + "  " + entry.kind + "<" + entry.dtype + "> " + shape_text(entry.shape)
 
 string difference_group(string title, string[] lines)
-    if len(lines) == 0
+    if lines.len() == 0
         return ""
-    result := NL + "  " + title + " (" + len(lines).string() + "):"
+    result := NL + "  " + title + " (" + string(lines.len()) + "):"
     for: line := lines[index]
-        if len(lines) > 20 and index >= 10 and index < len(lines) - 10
+        if lines.len() > 20 and index >= 10 and index < lines.len() - 10
             if index == 10
-                result = result + NL + "    … " + (len(lines) - 20).string() + " more …"
+                result = result + NL + "    … " + string(lines.len() - 20) + " more …"
         else
             result = result + NL + "    " + line
     return result
@@ -328,16 +328,16 @@ nat | none schema_index(StateEntrySchema[] entries, string path)
     return none
 
 string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual)
-    if len(expected) == 0 or len(expected) != len(actual)
+    if expected.len() == 0 or expected.len() != actual.len()
         return ""
     first_model := expected[0].path.split(".")
     for first_file := actual[]
         file_parts := first_file.path.split(".")
-        if len(file_parts) != len(first_model)
+        if file_parts.len() != first_model.len()
             continue
         nat changed := 0
         nat position := 0
-        for: 0 <= nat index < len(first_model)
+        for: 0 <= nat index < first_model.len()
             if first_model[index] != file_parts[index]
                 changed += 1
                 position = index
@@ -348,14 +348,14 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
         if old_name == "" or new_name == ""
             continue
         old_is_index := false
-        nat | error old_index := nat.parse(old_name)
+        nat | error old_index := nat(old_name)
         match old_index
             nat
                 old_is_index = true
             error
                 old_is_index = false
         new_is_index := false
-        nat | error new_index := nat.parse(new_name)
+        nat | error new_index := nat(new_name)
         match new_index
             nat
                 new_is_index = true
@@ -369,11 +369,11 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
             found := false
             for file_entry := actual[]
                 parts := file_entry.path.split(".")
-                if len(parts) != len(model_parts) or len(parts) <= position
+                if parts.len() != model_parts.len() or parts.len() <= position
                     continue
                 if parts[position].split("[")[0] != old_name or model_parts[position].split("[")[0] != new_name
                     continue
-                parts[position] = new_name + parts[position][len(old_name):]
+                parts[position] = new_name + parts[position][old_name.len():]
                 if parts == model_parts and file_entry.kind == model_entry.kind and file_entry.dtype == model_entry.dtype and file_entry.shape == model_entry.shape
                     found = true
             if not found
@@ -425,7 +425,7 @@ void | error compare_state_schema(
             none
                 unexpected = unexpected.append(schema_text(file_entry))
                 unexpected_entries = unexpected_entries.append(file_entry)
-    if len(missing) == 0 and len(unexpected) == 0 and len(dtype) == 0 and len(shape) == 0 and file_root == model_root
+    if missing.len() == 0 and unexpected.len() == 0 and dtype.len() == 0 and shape.len() == 0 and file_root == model_root
         return
     message := operation + ": " + DQ + file_path + DQ + " does not match the model; nothing was loaded"
     message = message + difference_group("missing from the file", missing)
@@ -466,7 +466,7 @@ StoredTensor<real32> | error read_stored_tensor32(file.read &input, StateChecksu
     flat := tensor.zeros<real32>([nat(count)])
     for: 0 <= int index < count
         value_text := try read_checked_line(&input, &checksum, "tensor value")
-        flat[index] = try parse_state_real32(value_text, "tensor value at " + path + "[" + index.string() + "]")
+        flat[index] = try parse_state_real32(value_text, "tensor value at " + path + "[" + string(index) + "]")
     schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real32", path_initial = path, shape_initial = shape)
     return StoredTensor<real32>(schema_initial = schema, value_initial = flat.reshape(shape))
 
@@ -496,7 +496,7 @@ StoredTensor<real64> | error read_stored_tensor64(file.read &input, StateChecksu
     flat := tensor.zeros<real64>([nat(count)])
     for: 0 <= int index < count
         value_text := try read_checked_line(&input, &checksum, "tensor value")
-        flat[index] = try parse_state_real64(value_text, "tensor value at " + path + "[" + index.string() + "]")
+        flat[index] = try parse_state_real64(value_text, "tensor value at " + path + "[" + string(index) + "]")
     schema := StateEntrySchema(kind_initial = kind, dtype_initial = "real64", path_initial = path, shape_initial = shape)
     return StoredTensor<real64>(schema_initial = schema, value_initial = flat.reshape(shape))
 
@@ -535,13 +535,13 @@ StateEntrySchema adam_state_schema(StateEntrySchema entry, string component)
 
 string checkpoint_display_path(string path)
     parts := path.split(" (Adam ")
-    if len(parts) > 1
+    if parts.len() > 1
         return parts[0] + " (Adam state)"
     return path
 
 
 real32 | error parse_state_real32(string text, string context)
-    real32 | error parsed := real32.parse(text)
+    real32 | error parsed := real32(text)
     match parsed
         real32 value
             return value
@@ -550,7 +550,7 @@ real32 | error parse_state_real32(string text, string context)
 
 
 real64 | error parse_state_real64(string text, string context)
-    real64 | error parsed := real64.parse(text)
+    real64 | error parsed := real64(text)
     match parsed
         real64 value
             return value
@@ -594,7 +594,7 @@ TensorPayload | error read_tensor_payload(file.read &input, StateChecksum &check
     return TensorPayload(schema_initial = StateEntrySchema(kind_initial = kind, dtype_initial = dtype, path_initial = path, shape_initial = shape), count_initial = count)
 
 real16 | error parse_state_real16(string text, string context)
-    real16 | error parsed := real16.parse(text)
+    real16 | error parsed := real16(text)
     match parsed
         real16 value
             return value
@@ -605,11 +605,11 @@ StoredTensor<real16> | error read_tensor_values16(file.read &input, StateChecksu
     flat := tensor.zeros<real16>([nat(payload.count)])
     for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
-        flat[index] = try parse_state_real16(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
+        flat[index] = try parse_state_real16(text, "tensor value at " + payload.schema.path + "[" + string(index) + "]")
     return StoredTensor<real16>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 real16b | error parse_state_real16b(string text, string context)
-    real16b | error parsed := real16b.parse(text)
+    real16b | error parsed := real16b(text)
     match parsed
         real16b value
             return value
@@ -620,21 +620,21 @@ StoredTensor<real16b> | error read_tensor_values16b(file.read &input, StateCheck
     flat := tensor.zeros<real16b>([nat(payload.count)])
     for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
-        flat[index] = try parse_state_real16b(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
+        flat[index] = try parse_state_real16b(text, "tensor value at " + payload.schema.path + "[" + string(index) + "]")
     return StoredTensor<real16b>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 StoredTensor<real32> | error read_tensor_values32(file.read &input, StateChecksum &checksum, TensorPayload payload)
     flat := tensor.zeros<real32>([nat(payload.count)])
     for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
-        flat[index] = try parse_state_real32(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
+        flat[index] = try parse_state_real32(text, "tensor value at " + payload.schema.path + "[" + string(index) + "]")
     return StoredTensor<real32>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 StoredTensor<real64> | error read_tensor_values64(file.read &input, StateChecksum &checksum, TensorPayload payload)
     flat := tensor.zeros<real64>([nat(payload.count)])
     for: 0 <= int index < payload.count
         text := try read_checked_line(&input, &checksum, "tensor value")
-        flat[index] = try parse_state_real64(text, "tensor value at " + payload.schema.path + "[" + index.string() + "]")
+        flat[index] = try parse_state_real64(text, "tensor value at " + payload.schema.path + "[" + string(index) + "]")
     return StoredTensor<real64>(schema_initial = payload.schema, value_initial = flat.reshape(payload.schema.shape))
 
 class StateTable()

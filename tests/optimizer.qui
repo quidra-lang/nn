@@ -207,11 +207,11 @@ Steps | error steps_of(string[] lines)
     steps.counts = []
     steps.first = []
     steps.second = []
-    for: 0 <= int index < int(len(lines)) - 4
+    for: 0 <= int index < int(lines.len()) - 4
         if lines[index] == "AdamStep"
-            steps.counts = steps.counts.append(try int.parse(lines[index + 2]))
-            steps.first = steps.first.append(try real64.parse(lines[index + 3]))
-            steps.second = steps.second.append(try real64.parse(lines[index + 4]))
+            steps.counts = steps.counts.append(try int(lines[index + 2]))
+            steps.first = steps.first.append(try real64(lines[index + 3]))
+            steps.second = steps.second.append(try real64(lines[index + 4]))
     return steps
 
 // The lines of the `which`-th Parameter's Adam state (its AdamStep,
@@ -234,19 +234,19 @@ real64 correction(real64 decay, int count)
     return value
 
 bool counted(Steps steps, int[] counts)
-    if len(steps.counts) != len(counts)
+    if steps.counts.len() != counts.len()
         return false
     bool same := true
-    for: 0 <= nat index < len(counts)
+    for: 0 <= nat index < counts.len()
         same = same and steps.counts[index] == counts[index]
         same = same and steps.first[index] == correction(0.9, counts[index])
         same = same and steps.second[index] == correction(0.999, counts[index])
     return same
 
 bool same_lines(string[] left, string[] right)
-    if len(left) != len(right)
+    if left.len() != right.len()
         return false
-    for: 0 <= nat index < len(left)
+    for: 0 <= nat index < left.len()
         if left[index] != right[index]
             return false
     return true

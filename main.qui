@@ -69,13 +69,13 @@ void | error all_reduce_sum<T: floating>(
     tensor<T>[] &values,
     int[] devices
 )
-    if len(values) != len(devices)
+    if values.len() != devices.len()
         return error("nn.all_reduce_sum requires one destination device per tensor", code = "NN_SHAPE")
-    if len(values) == 0
+    if values.len() == 0
         return
 
     shape := values[0].shape()
-    for: 0 <= nat index < len(values)
+    for: 0 <= nat index < values.len()
         if values[index].is_tracked()
             return error("nn.all_reduce_sum requires untracked tensors; reduce gradients after backward or call untrack() explicitly", code = "NN_TRACKED")
         if values[index].shape() != shape
@@ -83,7 +83,7 @@ void | error all_reduce_sum<T: floating>(
         if devices[index] < -1
             return error("nn.all_reduce_sum device must be -1 for CPU or a nonnegative GPU index", code = "NN_DEVICE")
 
-    all_gpu_destinations := len(values) > 1
+    all_gpu_destinations := values.len() > 1
     for device := devices[]
         if device < 0
             all_gpu_destinations = false
@@ -91,7 +91,7 @@ void | error all_reduce_sum<T: floating>(
     // A collective can use its existing placement only when every tensor is
     // already on the requested device. Other placements keep the host path.
     if all_gpu_destinations
-        for: 0 <= nat index < len(values)
+        for: 0 <= nat index < values.len()
             if values[index].device() != devices[index]
                 all_gpu_destinations = false
 
@@ -107,7 +107,7 @@ void | error all_reduce_sum<T: floating>(
             return error("nn.all_reduce_sum NCCL collective failed", code = "NN_COLLECTIVE")
 
     total := values[0].cpu()
-    for: 1 <= nat index < len(values)
+    for: 1 <= nat index < values.len()
         total = total + values[index].cpu()
 
     // Build every destination first so an invalid GPU destination cannot leave
@@ -119,7 +119,7 @@ void | error all_reduce_sum<T: floating>(
         else
             reduced = reduced.append(total.gpu(nat(device)))
 
-    for: 0 <= nat index < len(values)
+    for: 0 <= nat index < values.len()
         values[index] = reduced[index]
     return
 
@@ -201,7 +201,7 @@ void | error save<M>(M model, string path)
     try internal.write_checked_line(&output, &checksum, "5")
     try internal.write_checked_line(&output, &checksum, "model")
     try internal.write_checked_line(&output, &checksum, reflect.type_name(model))
-    try internal.write_checked_line(&output, &checksum, len(expected).string())
+    try internal.write_checked_line(&output, &checksum, string(expected.len()))
     try write_model_entries(&output, &checksum, &model)
     try internal.finish_state_write(&output, checksum)
     return
@@ -365,13 +365,13 @@ class FC(
 
     tensor<real32> .forward(tensor<real32> value)
         input_shape := int(value.shape())
-        rank := int(len(input_shape))
+        rank := int(input_shape.len())
         if rank < 1
             error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
         features_in := input_shape[rank - 1]
         weight_shape := int(weight.raw().shape())
         bias_shape := int(bias.raw().shape())
-        if len(weight_shape) != 2 or len(bias_shape) != 1
+        if weight_shape.len() != 2 or bias_shape.len() != 1
             error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
         features_out := weight_shape[0]
         if weight_shape[1] != features_in or bias_shape[0] != features_out
@@ -404,13 +404,13 @@ class FC(
     private tensor<real32> .forward_relu(tensor<real32> value)
         if not value.is_tracked()
             input_shape := int(value.shape())
-            rank := int(len(input_shape))
+            rank := int(input_shape.len())
             if rank < 1
                 error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
             features_in := input_shape[rank - 1]
             weight_shape := int(weight.raw().shape())
             bias_shape := int(bias.raw().shape())
-            if len(weight_shape) != 2 or len(bias_shape) != 1
+            if weight_shape.len() != 2 or bias_shape.len() != 1
                 error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
             features_out := weight_shape[0]
             if weight_shape[1] != features_in or bias_shape[0] != features_out
@@ -448,13 +448,13 @@ class FC(
     private tensor<real32> .forward_gelu(tensor<real32> value)
         if not value.is_tracked()
             input_shape := int(value.shape())
-            rank := int(len(input_shape))
+            rank := int(input_shape.len())
             if rank < 1
                 error("nn.FC requires input rank >= 1", code = "NN_SHAPE")
             features_in := input_shape[rank - 1]
             weight_shape := int(weight.raw().shape())
             bias_shape := int(bias.raw().shape())
-            if len(weight_shape) != 2 or len(bias_shape) != 1
+            if weight_shape.len() != 2 or bias_shape.len() != 1
                 error("nn.FC requires rank-2 weight and rank-1 bias", code = "NN_SHAPE")
             features_out := weight_shape[0]
             if weight_shape[1] != features_in or bias_shape[0] != features_out
@@ -804,9 +804,9 @@ class Conv2D(
         input_shape := int(value.shape())
         weight_shape := int(weight.raw().shape())
         bias_shape := int(bias.raw().shape())
-        if len(input_shape) != 4
+        if input_shape.len() != 4
             error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
-        if len(weight_shape) != 4 or len(bias_shape) != 1
+        if weight_shape.len() != 4 or bias_shape.len() != 1
             error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
         batches := input_shape[0]
@@ -1005,7 +1005,7 @@ class Conv2D(
             return false
         input_shape := int(value.shape())
         weight_shape := int(weight.raw().shape())
-        if len(input_shape) != 4 or len(weight_shape) != 4
+        if input_shape.len() != 4 or weight_shape.len() != 4
             return false
         if step <= 0 or border < 0
             return false
@@ -1067,9 +1067,9 @@ class Conv2D(
             input_shape := int(value.shape())
             weight_shape := int(parameter_weight.shape())
             bias_shape := int(parameter_bias.shape())
-            if len(input_shape) != 4
+            if input_shape.len() != 4
                 error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
-            if len(weight_shape) != 4 or len(bias_shape) != 1
+            if weight_shape.len() != 4 or bias_shape.len() != 1
                 error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
             batches := input_shape[0]
@@ -1152,9 +1152,9 @@ class Conv2D(
             input_shape := int(value.shape())
             weight_shape := int(parameter_weight.shape())
             bias_shape := int(parameter_bias.shape())
-            if len(input_shape) != 4
+            if input_shape.len() != 4
                 error("nn.Conv2D requires NCHW rank-4 input", code = "NN_SHAPE")
-            if len(weight_shape) != 4 or len(bias_shape) != 1
+            if weight_shape.len() != 4 or bias_shape.len() != 1
                 error("nn.Conv2D requires OIHW rank-4 weight and rank-1 bias", code = "NN_SHAPE")
 
             batches := input_shape[0]
@@ -1364,7 +1364,7 @@ tensor<real32> max_pool2d(
     padding := 0
 )
     shape := int(value.shape())
-    if len(shape) != 4
+    if shape.len() != 4
         error("nn.max_pool2d requires NCHW rank-4 input", code = "NN_SHAPE")
     if kernel <= 0 or stride <= 0 or padding < 0
         error("nn.max_pool2d requires kernel/stride > 0 and padding >= 0", code = "NN_ARGUMENT")
@@ -1441,7 +1441,7 @@ tensor<real32> max_pool2d(
 
 tensor<real32> global_average_pool2d(tensor<real32> value)
     shape := int(value.shape())
-    if len(shape) != 4
+    if shape.len() != 4
         error("nn.global_average_pool2d requires NCHW rank-4 input", code = "NN_SHAPE")
     batches := shape[0]
     channels := shape[1]
@@ -1508,7 +1508,7 @@ tensor<real32> local_response_normalization(
     real64 k := 2.0
 )
     shape := int(value.shape())
-    if len(shape) != 4
+    if shape.len() != 4
         error("nn.local_response_normalization requires NCHW rank-4 input", code = "NN_SHAPE")
     if size <= 0 or size % 2 == 0
         error("nn.local_response_normalization size must be positive and odd", code = "NN_ARGUMENT")
@@ -1674,7 +1674,7 @@ class BatchNorm(
         bool training
     )
         shape := int(value.shape())
-        rank := int(len(shape))
+        rank := int(shape.len())
         if rank < 2
             error("nn.BatchNorm requires rank >= 2 with feature/channel axis 1", code = "NN_SHAPE")
 
@@ -1685,9 +1685,9 @@ class BatchNorm(
         bias_shape := int(bias.raw().shape())
         mean_shape := int(running_mean.raw().shape())
         variance_shape := int(running_variance.raw().shape())
-        if len(scale_shape) != 1 or len(bias_shape) != 1
+        if scale_shape.len() != 1 or bias_shape.len() != 1
             error("nn.BatchNorm requires rank-1 scale and bias", code = "NN_SHAPE")
-        if len(mean_shape) != 1 or len(variance_shape) != 1
+        if mean_shape.len() != 1 or variance_shape.len() != 1
             error("nn.BatchNorm requires rank-1 running state", code = "NN_SHAPE")
         if scale_shape[0] != features or bias_shape[0] != features
             error("nn.BatchNorm parameter dimensions do not match input features", code = "NN_SHAPE")
@@ -1839,7 +1839,7 @@ class Dropout(local real64 rate, local seed := 0, local inverted := true) | erro
 
         shape := int(value.shape())
         count := 1
-        for: 0 <= nat axis < len(shape)
+        for: 0 <= nat axis < shape.len()
             if shape[axis] < 0
                 error("nn.Dropout received an invalid tensor shape", code = "NN_INTERNAL")
             if shape[axis] != 0 and count > 9223372036854775807 / shape[axis]
@@ -2045,43 +2045,43 @@ class SGD<M>(local M &model_initial, local real64 rate := 0.01) | error
     private void | error check_binding(string operation)
         nat count16 := 0
         for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
-            if index >= len(shapes16)
+            if index >= shapes16.len()
                 return error("nn.SGD.{operation}: Parameter<real16> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes16[index] or not same_device(raw.device(), devices16[index])
                 return error("nn.SGD.{operation}: Parameter<real16> at index {index}, " + paths16[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16 += 1
-        if count16 != len(shapes16)
+        if count16 != shapes16.len()
             return error("nn.SGD.{operation}: Parameter<real16> count changed at index {count16}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count16b := 0
         for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
-            if index >= len(shapes16b)
+            if index >= shapes16b.len()
                 return error("nn.SGD.{operation}: Parameter<real16b> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes16b[index] or not same_device(raw.device(), devices16b[index])
                 return error("nn.SGD.{operation}: Parameter<real16b> at index {index}, " + paths16b[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16b += 1
-        if count16b != len(shapes16b)
+        if count16b != shapes16b.len()
             return error("nn.SGD.{operation}: Parameter<real16b> count changed at index {count16b}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count32 := 0
         for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
-            if index >= len(shapes32)
+            if index >= shapes32.len()
                 return error("nn.SGD.{operation}: Parameter<real32> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes32[index] or not same_device(raw.device(), devices32[index])
                 return error("nn.SGD.{operation}: Parameter<real32> at index {index}, " + paths32[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count32 += 1
-        if count32 != len(shapes32)
+        if count32 != shapes32.len()
             return error("nn.SGD.{operation}: Parameter<real32> count changed at index {count32}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count64 := 0
         for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
-            if index >= len(shapes64)
+            if index >= shapes64.len()
                 return error("nn.SGD.{operation}: Parameter<real64> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes64[index] or not same_device(raw.device(), devices64[index])
                 return error("nn.SGD.{operation}: Parameter<real64> at index {index}, " + paths64[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count64 += 1
-        if count64 != len(shapes64)
+        if count64 != shapes64.len()
             return error("nn.SGD.{operation}: Parameter<real64> count changed at index {count64}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         return
 
@@ -2276,7 +2276,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
     second_decay = beta2
     stability = epsilon
     .record_binding()
-    local nat slots := len(shapes16) + len(shapes16b) + len(shapes32) + len(shapes64)
+    local nat slots := shapes16.len() + shapes16b.len() + shapes32.len() + shapes64.len()
     coefficient_used = 0
     coefficient_steps = array(slots, fill = nat(0))
     coefficient_first = array(slots, fill = 0.0)
@@ -2389,43 +2389,43 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
     private void | error check_binding(string operation)
         nat count16 := 0
         for: Parameter<real16> &parameter := &reflect.each<Parameter<real16>>(&model)[index]
-            if index >= len(shapes16)
+            if index >= shapes16.len()
                 return error("nn.Adam.{operation}: Parameter<real16> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes16[index] or not same_device(raw.device(), devices16[index])
                 return error("nn.Adam.{operation}: Parameter<real16> at index {index}, " + paths16[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16 += 1
-        if count16 != len(shapes16)
+        if count16 != shapes16.len()
             return error("nn.Adam.{operation}: Parameter<real16> count changed at index {count16}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count16b := 0
         for: Parameter<real16b> &parameter := &reflect.each<Parameter<real16b>>(&model)[index]
-            if index >= len(shapes16b)
+            if index >= shapes16b.len()
                 return error("nn.Adam.{operation}: Parameter<real16b> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes16b[index] or not same_device(raw.device(), devices16b[index])
                 return error("nn.Adam.{operation}: Parameter<real16b> at index {index}, " + paths16b[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count16b += 1
-        if count16b != len(shapes16b)
+        if count16b != shapes16b.len()
             return error("nn.Adam.{operation}: Parameter<real16b> count changed at index {count16b}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count32 := 0
         for: Parameter<real32> &parameter := &reflect.each<Parameter<real32>>(&model)[index]
-            if index >= len(shapes32)
+            if index >= shapes32.len()
                 return error("nn.Adam.{operation}: Parameter<real32> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes32[index] or not same_device(raw.device(), devices32[index])
                 return error("nn.Adam.{operation}: Parameter<real32> at index {index}, " + paths32[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count32 += 1
-        if count32 != len(shapes32)
+        if count32 != shapes32.len()
             return error("nn.Adam.{operation}: Parameter<real32> count changed at index {count32}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         nat count64 := 0
         for: Parameter<real64> &parameter := &reflect.each<Parameter<real64>>(&model)[index]
-            if index >= len(shapes64)
+            if index >= shapes64.len()
                 return error("nn.Adam.{operation}: Parameter<real64> count changed at index {index}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             raw := parameter.raw()
             if raw.shape() != shapes64[index] or not same_device(raw.device(), devices64[index])
                 return error("nn.Adam.{operation}: Parameter<real64> at index {index}, " + paths64[index] + ", changed shape or device; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
             count64 += 1
-        if count64 != len(shapes64)
+        if count64 != shapes64.len()
             return error("nn.Adam.{operation}: Parameter<real64> count changed at index {count64}; create a new optimizer; nothing changed", code = "NN_STRUCTURE")
         return
 
@@ -2467,14 +2467,14 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
         try internal.write_checked_line(&output, &checksum, "5")
         try internal.write_checked_line(&output, &checksum, "model+Adam")
         try internal.write_checked_line(&output, &checksum, reflect.type_name(model_argument))
-        try internal.write_checked_line(&output, &checksum, len(expected).string())
+        try internal.write_checked_line(&output, &checksum, string(expected.len()))
         try write_model_entries(&output, &checksum, &model_argument)
         try internal.write_checked_line(&output, &checksum, "Adam")
-        try internal.write_checked_line(&output, &checksum, learning_rate.string())
-        try internal.write_checked_line(&output, &checksum, first_decay.string())
-        try internal.write_checked_line(&output, &checksum, second_decay.string())
-        try internal.write_checked_line(&output, &checksum, stability.string())
-        try internal.write_checked_line(&output, &checksum, (len(paths16) + len(paths16b) + len(paths32) + len(paths64)).string())
+        try internal.write_checked_line(&output, &checksum, string(learning_rate))
+        try internal.write_checked_line(&output, &checksum, string(first_decay))
+        try internal.write_checked_line(&output, &checksum, string(second_decay))
+        try internal.write_checked_line(&output, &checksum, string(stability))
+        try internal.write_checked_line(&output, &checksum, string(paths16.len() + paths16b.len() + paths32.len() + paths64.len()))
         for: entry_path := paths16[index]
             try internal.write_adam_step(&output, &checksum, entry_path, steps16[index], first_corrections16[index], second_corrections16[index])
             try internal.write_state_entry(&output, &checksum, "AdamFirst", "real32", entry_path, first16[index])
@@ -2594,7 +2594,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             // Reconstruct only after the schema and hyperparameters are valid.
             loaded_first_correction = 1.0 - math.pow(loaded_first_decay, real64(loaded_iteration))
             loaded_second_correction = 1.0 - math.pow(loaded_second_decay, real64(loaded_iteration))
-            for: 0 <= nat index < len(stored_steps)
+            for: 0 <= nat index < stored_steps.len()
                 stored_steps[index].step = internal.adam_step(loaded_iteration, loaded_first_correction, loaded_second_correction)
         for step := stored_steps[]
             try internal.check_adam_step(step.step.count, step.step.first_correction, step.step.second_correction)
@@ -2772,7 +2772,7 @@ class Adam<M>(local M &model_initial, local real64 rate := 0.001, local real64 b
             if coefficient_steps[index] == count and coefficient_first[index] == first and coefficient_second[index] == second
                 return index
         index := coefficient_used
-        if index >= len(coefficient_steps)
+        if index >= coefficient_steps.len()
             error("nn.Adam coefficient cache exceeds the recorded Parameter count", code = "NN_INTERNAL")
         first_correction := advanced(first, first_decay)
         second_correction := advanced(second, second_decay)

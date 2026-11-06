@@ -100,7 +100,7 @@ int test_device()
     string | none index := environment.get("QUIDRA_REAL_GPU_INDEX")
     match index
         string
-            return int.parse(index)
+            return int(index)
         none
             return 0
 
@@ -195,7 +195,7 @@ void replica_step(Replica &replica, tensor<real32>[] gradients, real64 rate, int
     real32 one_minus_beta2_32 := real32(1.0 - second_decay)
     real32 adjusted_epsilon32 := real32(adjusted_epsilon)
     real32 step_scale32 := real32(step_scale)
-    for: 0 <= nat index < len(replica.parameters)
+    for: 0 <= nat index < replica.parameters.len()
         tensor<real32> gradient := place(gradients[index], device)
         if index == 3
             gradient = gradient.transpose(0, 1)
@@ -228,12 +228,12 @@ class AdamState()
 
 tensor<real32> | error read_block(string[] lines, int start)
     // Format 5: kind, dtype name, path, rank, extents..., count, values...
-    int rank := try int.parse(lines[start + 3])
-    int count := try int.parse(lines[start + 4 + rank])
+    int rank := try int(lines[start + 3])
+    int count := try int(lines[start + 4 + rank])
     tensor<real32> samples := tensor.zeros<real32>([nat(count)])
     int first_value := start + 5 + rank
     for: 0 <= int index < count
-        samples[index] = real32(try real64.parse(lines[first_value + index]))
+        samples[index] = real32(try real64(lines[first_value + index]))
     return samples
 
 AdamState | error read_state(string path)
@@ -252,7 +252,7 @@ AdamState | error read_state(string path)
     state.steps = []
     state.first_corrections = []
     state.second_corrections = []
-    for: 0 <= int index < int(len(lines)) - 1
+    for: 0 <= int index < int(lines.len()) - 1
         string kind := lines[index]
         string dtype := lines[index + 1]
         if kind == "Parameter" and dtype == "real32"
@@ -261,11 +261,11 @@ AdamState | error read_state(string path)
             state.first = state.first.append(try read_block(lines, index))
         elif kind == "AdamSecond" and dtype == "real32"
             state.second = state.second.append(try read_block(lines, index))
-        elif kind == "AdamStep" and index + 4 < int(len(lines))
+        elif kind == "AdamStep" and index + 4 < int(lines.len())
             // AdamStep, path, step count, beta1 and beta2 corrections.
-            state.steps = state.steps.append(try int.parse(lines[index + 2]))
-            state.first_corrections = state.first_corrections.append(try real64.parse(lines[index + 3]))
-            state.second_corrections = state.second_corrections.append(try real64.parse(lines[index + 4]))
+            state.steps = state.steps.append(try int(lines[index + 2]))
+            state.first_corrections = state.first_corrections.append(try real64(lines[index + 3]))
+            state.second_corrections = state.second_corrections.append(try real64(lines[index + 4]))
     return state
 
 AdamState | error saved_state(Model &model, nn.Adam<Model> optimizer, string path)
@@ -326,7 +326,7 @@ bool within(tensor<real32> value, tensor<real32> reference, real64 atol, real64 
 
 void add(Tally &tally, tensor<real32>[] parameters, tensor<real32>[] first, tensor<real32>[] second, AdamState reference)
     bool bitwise_step := true
-    for: 0 <= nat index < len(parameters)
+    for: 0 <= nat index < parameters.len()
         tally.parameter_abs = math.max(tally.parameter_abs, max_abs(parameters[index], reference.parameters[index]))
         tally.first_abs = math.max(tally.first_abs, max_abs(first[index], reference.first[index]))
         tally.second_abs = math.max(tally.second_abs, max_abs(second[index], reference.second[index]))
@@ -368,7 +368,7 @@ void | error state_checks(int device, int steps, string scratch)
         // Step counts and bias corrections are host float64 values: exact.
         // Every Parameter has a gradient at every step, so each one's count
         // and corrections are the replica's global ones.
-        bool counters := len(metal_state.steps) == 4 and len(host_state.steps) == 4
+        bool counters := metal_state.steps.len() == 4 and host_state.steps.len() == 4
         if counters
             for: 0 <= nat index < 4
                 counters = (
@@ -380,7 +380,7 @@ void | error state_checks(int device, int steps, string scratch)
                     and host_state.first_corrections[index] == replica.first_correction
                     and host_state.second_corrections[index] == replica.second_correction
                 )
-        bookkeeping = bookkeeping and counters and len(metal_state.parameters) == 4 and len(metal_state.first) == 4 and len(metal_state.second) == 4 and len(host_state.parameters) == 4
+        bookkeeping = bookkeeping and counters and metal_state.parameters.len() == 4 and metal_state.first.len() == 4 and metal_state.second.len() == 4 and host_state.parameters.len() == 4
 
         add(&versus_elementwise, replica.parameters, replica.first, replica.second, metal_state)
         add(&versus_cpu, host_state.parameters, host_state.first, host_state.second, metal_state)
