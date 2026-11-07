@@ -78,6 +78,8 @@ type at storage; Adam's moments stay real32. Model operations and gradients
 retain their own element type. Real32 and real64 updates retain their existing
 operation order.
 
+On `develop`, `#value` is the ordinary zero-argument `value.len()` call. It also works automatically for custom classes and visible extensions that provide `len`; return types, errors and access/effect checks are unchanged. Standard array, string and binary lengths remain `nat`.
+
 ## Explicit mixed precision
 
 Ordinary training defaults to real32. For explicitly chosen low-precision

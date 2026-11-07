@@ -178,7 +178,7 @@ void | error write_state_entry<T: floating>(
     try write_checked_line(&output, &checksum, kind)
     try write_checked_line(&output, &checksum, dtype)
     try write_checked_line(&output, &checksum, path)
-    try write_checked_line(&output, &checksum, string(shape.len()))
+    try write_checked_line(&output, &checksum, string(#shape))
 
     count := 1
     for dimension := shape[]
@@ -310,13 +310,13 @@ string schema_text(StateEntrySchema entry)
     return checkpoint_display_path(entry.path) + "  " + entry.kind + "<" + entry.dtype + "> " + shape_text(entry.shape)
 
 string difference_group(string title, string[] lines)
-    if lines.len() == 0
+    if #lines == 0
         return ""
-    result := NL + "  " + title + " (" + string(lines.len()) + "):"
+    result := NL + "  " + title + " (" + string(#lines) + "):"
     for: line := lines[index]
-        if lines.len() > 20 and index >= 10 and index < lines.len() - 10
+        if #lines > 20 and index >= 10 and index < #lines - 10
             if index == 10
-                result = result + NL + "    … " + string(lines.len() - 20) + " more …"
+                result = result + NL + "    … " + string(#lines - 20) + " more …"
         else
             result = result + NL + "    " + line
     return result
@@ -328,16 +328,16 @@ nat | none schema_index(StateEntrySchema[] entries, string path)
     return none
 
 string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual)
-    if expected.len() == 0 or expected.len() != actual.len()
+    if #expected == 0 or #expected != #actual
         return ""
     first_model := expected[0].path.split(".")
     for first_file := actual[]
         file_parts := first_file.path.split(".")
-        if file_parts.len() != first_model.len()
+        if #file_parts != #first_model
             continue
         nat changed := 0
         nat position := 0
-        for: 0 <= nat index < first_model.len()
+        for: 0 <= nat index < #first_model
             if first_model[index] != file_parts[index]
                 changed += 1
                 position = index
@@ -369,11 +369,11 @@ string schema_rename_hint(StateEntrySchema[] expected, StateEntrySchema[] actual
             found := false
             for file_entry := actual[]
                 parts := file_entry.path.split(".")
-                if parts.len() != model_parts.len() or parts.len() <= position
+                if #parts != #model_parts or #parts <= position
                     continue
                 if parts[position].split("[")[0] != old_name or model_parts[position].split("[")[0] != new_name
                     continue
-                parts[position] = new_name + parts[position][old_name.len():]
+                parts[position] = new_name + parts[position][#old_name:]
                 if parts == model_parts and file_entry.kind == model_entry.kind and file_entry.dtype == model_entry.dtype and file_entry.shape == model_entry.shape
                     found = true
             if not found
@@ -425,7 +425,7 @@ void | error compare_state_schema(
             none
                 unexpected = unexpected.append(schema_text(file_entry))
                 unexpected_entries = unexpected_entries.append(file_entry)
-    if missing.len() == 0 and unexpected.len() == 0 and dtype.len() == 0 and shape.len() == 0 and file_root == model_root
+    if #missing == 0 and #unexpected == 0 and #dtype == 0 and #shape == 0 and file_root == model_root
         return
     message := operation + ": " + DQ + file_path + DQ + " does not match the model; nothing was loaded"
     message = message + difference_group("missing from the file", missing)
@@ -535,7 +535,7 @@ StateEntrySchema adam_state_schema(StateEntrySchema entry, string component)
 
 string checkpoint_display_path(string path)
     parts := path.split(" (Adam ")
-    if parts.len() > 1
+    if #parts > 1
         return parts[0] + " (Adam state)"
     return path
 
